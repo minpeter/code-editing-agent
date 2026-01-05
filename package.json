@@ -1,0 +1,40 @@
+{
+  "name": "code-editing-agent",
+  "version": "1.0.0",
+  "description": "A code-editing agent using Vercel AI SDK and FriendliAI",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "check": "ultracite check",
+    "lint": "ultracite fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "code-editing",
+    "friendliai",
+    "vercel-ai-sdk"
+  ],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@friendliai/ai-provider": "^1.0.3",
+    "ai": "^6.0.7",
+    "ignore": "^7.0.5",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "ultracite": "^7.0.8"
+  }
+}
