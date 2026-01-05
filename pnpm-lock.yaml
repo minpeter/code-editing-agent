@@ -21,6 +21,9 @@ importers:
         specifier: ^4.3.5
         version: 4.3.5
     devDependencies:
+      '@ai-sdk/provider':
+        specifier: ^3.0.1
+        version: 3.0.1
       '@types/node':
         specifier: ^25.0.3
         version: 25.0.3

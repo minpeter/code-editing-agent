@@ -3,16 +3,17 @@ import { createFriendli } from "@friendliai/ai-provider";
 import type { LanguageModel } from "ai";
 import { Agent } from "./agent";
 import { handleCommand } from "./commands";
+import { wrapModel } from "./model/create-model";
 import { printYou } from "./utils/colors";
 
-const DEFAULT_MODEL_ID = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8";
+const DEFAULT_MODEL_ID = "LGAI-EXAONE/K-EXAONE-236B-A23B";
 
 const friendli = createFriendli({
   apiKey: process.env.FRIENDLI_TOKEN,
 });
 
 let currentModelId = DEFAULT_MODEL_ID;
-const agent = new Agent(friendli(currentModelId));
+const agent = new Agent(wrapModel(friendli(currentModelId)));
 let currentConversationId: string | undefined;
 
 const rl = createInterface({
@@ -38,7 +39,7 @@ function exitProgram(): void {
 }
 
 function setModel(model: LanguageModel, modelId: string): void {
-  agent.setModel(model);
+  agent.setModel(wrapModel(model));
   currentModelId = modelId;
 }
 
