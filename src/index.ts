@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline";
 import { createFriendli } from "@friendliai/ai-provider";
 import { Agent } from "./agent";
+import { handleCommand } from "./commands";
 import { printYou } from "./utils/colors";
 
 const friendli = createFriendli({
@@ -9,7 +10,8 @@ const friendli = createFriendli({
 
 const model = friendli("LGAI-EXAONE/K-EXAONE-236B-A23B");
 
-const agent = new Agent(model, 10);
+const agent = new Agent(model);
+let currentConversationId: string | undefined;
 
 const rl = createInterface({
   input: process.stdin,
@@ -28,8 +30,13 @@ function getUserInput(): Promise<string | null> {
   });
 }
 
+function exitProgram(): void {
+  rl.close();
+  process.exit(0);
+}
+
 async function main(): Promise<void> {
-  console.log("Chat with Claude (use 'ctrl-c' to quit)");
+  console.log("Chat with Claude (use '/help' for commands, 'ctrl-c' to quit)");
   console.log();
 
   while (true) {
@@ -39,7 +46,19 @@ async function main(): Promise<void> {
       break;
     }
 
-    if (userInput.trim() === "") {
+    const trimmed = userInput.trim();
+    if (trimmed === "") {
+      continue;
+    }
+
+    if (trimmed.startsWith("/")) {
+      const result = await handleCommand(trimmed, {
+        agent,
+        currentConversationId,
+        exit: exitProgram,
+      });
+      currentConversationId = result.conversationId;
+      console.log();
       continue;
     }
 

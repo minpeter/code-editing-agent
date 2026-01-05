@@ -3,6 +3,7 @@ export const colors = {
   yellow: "\u001b[93m",
   green: "\u001b[92m",
   cyan: "\u001b[96m",
+  red: "\u001b[91m",
   dim: "\u001b[2m",
   reset: "\u001b[0m",
 } as const;
@@ -43,4 +44,8 @@ export function printTool(name: string, input: unknown): void {
   console.log(
     `${colorize("green", "tool")}: ${name}(${JSON.stringify(input)})`
   );
+}
+
+export function printError(message: string): void {
+  console.error(`${colorize("red", "error")}: ${message}`);
 }

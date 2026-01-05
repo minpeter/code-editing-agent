@@ -4,6 +4,7 @@ import {
   stepCountIs,
   streamText,
 } from "ai";
+import { SYSTEM_PROMPT } from "./prompts/system";
 import { tools } from "./tools/index";
 import {
   printChunk,
@@ -14,6 +15,7 @@ import {
   printReasoningPrefix,
   printTool,
 } from "./utils/colors";
+import { withRetry } from "./utils/retry";
 
 interface StreamState {
   hasStartedText: boolean;
@@ -34,14 +36,28 @@ function endTextIfNeeded(state: StreamState): void {
   }
 }
 
+const DEFAULT_MAX_STEPS = 10;
+
 export class Agent {
   private readonly model: LanguageModel;
-  private readonly conversation: ModelMessage[] = [];
+  private conversation: ModelMessage[] = [];
   private readonly maxSteps: number;
 
-  constructor(model: LanguageModel, maxSteps = 10) {
+  constructor(model: LanguageModel, maxSteps = DEFAULT_MAX_STEPS) {
     this.model = model;
     this.maxSteps = maxSteps;
+  }
+
+  getConversation(): ModelMessage[] {
+    return [...this.conversation];
+  }
+
+  loadConversation(messages: ModelMessage[]): void {
+    this.conversation = [...messages];
+  }
+
+  clearConversation(): void {
+    this.conversation = [];
   }
 
   async chat(userInput: string): Promise<void> {
@@ -50,8 +66,15 @@ export class Agent {
       content: userInput,
     });
 
+    await withRetry(async () => {
+      await this.executeStreamingChat();
+    });
+  }
+
+  private async executeStreamingChat(): Promise<void> {
     const result = streamText({
       model: this.model,
+      system: SYSTEM_PROMPT,
       messages: this.conversation,
       tools,
       stopWhen: stepCountIs(this.maxSteps),

@@ -143,3 +143,38 @@ export async function shouldIgnorePath(path: string): Promise<boolean> {
 export function clearIgnoreCache(): void {
   cachedIgnore = null;
 }
+
+const WHITESPACE_REGEX = /\s+/;
+
+const ALLOWED_COMMANDS = new Set([
+  "node",
+  "npm",
+  "pnpm",
+  "yarn",
+  "git",
+  "ls",
+  "pwd",
+  "echo",
+  "cat",
+  "head",
+  "tail",
+  "wc",
+  "which",
+  "find",
+  "type",
+  "dir",
+  "ps",
+  "df",
+  "du",
+  "free",
+  "uname",
+  "uptime",
+  "date",
+  "cal",
+]);
+
+export function isSafeCommand(command: string): boolean {
+  const tokens = command.trim().split(WHITESPACE_REGEX);
+  const commandName = tokens[0];
+  return ALLOWED_COMMANDS.has(commandName.toLowerCase());
+}
