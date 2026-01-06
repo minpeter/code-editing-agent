@@ -1,21 +1,26 @@
-import { deleteFileTool } from "./delete-file";
-import { editFileTool } from "./edit-file";
-import { globTool } from "./glob";
-import { grepTool } from "./grep";
-import { readFileTool } from "./read-file";
-import { runCommandTool } from "./run-command";
-import { writeFileTool } from "./write-file";
+// File manipulation tools
+import { deleteFileTool } from "./file/delete-file";
+import { editFileTool } from "./file/edit-file";
+import { readFileTool } from "./file/read-file";
+import { writeFileTool } from "./file/write-file";
+
+// File search tools
+import { globTool } from "./search/glob";
+import { grepTool } from "./search/grep";
+
+// Command execution tool
+import { runCommandTool } from "./command/run-command";
 
 export const tools = {
-  // File reading and searching
-  read_file: readFileTool,
-  glob: globTool,
-  grep: grepTool,
-
   // File manipulation
   write_file: writeFileTool,
   edit_file: editFileTool,
+  read_file: readFileTool,
   delete_file: deleteFileTool,
+
+  // File search
+  glob: globTool,
+  grep: grepTool,
 
   // Command execution
   run_command: runCommandTool,

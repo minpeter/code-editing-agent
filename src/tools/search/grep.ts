@@ -177,7 +177,9 @@ export const grepTool = tool({
 
       let output = result.matches;
       if (result.truncated) {
-        output += `\n\n[Output truncated: showing ${MAX_MATCHES} of ${result.matchCount}+ matches]`;
+        output += `
+
+[Output truncated: showing ${MAX_MATCHES} of ${result.matchCount}+ matches]`;
       }
 
       return output;

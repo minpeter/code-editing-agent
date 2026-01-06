@@ -32,7 +32,9 @@ export const readFileTool = tool({
 
     let output = result.content;
     if (result.truncated || result.startLine > 0) {
-      output += `\n\n[Lines ${result.startLine + 1}-${result.endLine} of ${result.totalLines} total]`;
+      output += `
+
+[Lines ${result.startLine + 1}-${result.endLine} of ${result.totalLines} total]`;
     }
 
     return output;
