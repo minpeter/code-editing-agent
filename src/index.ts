@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { createInterface } from "node:readline";
 import { createFriendli } from "@friendliai/ai-provider";
 import type { LanguageModel } from "ai";

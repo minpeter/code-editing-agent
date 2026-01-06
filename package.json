@@ -4,10 +4,13 @@
   "description": "A code-editing agent using Vercel AI SDK and FriendliAI",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "code-editing-agent": "./src/index.ts"
+  },
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "bun run src/index.ts",
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
+    "dev": "bun run --watch src/index.ts",
     "check": "ultracite check",
     "lint": "ultracite fix",
     "typecheck": "tsc --noEmit"
@@ -21,7 +24,7 @@
   ],
   "author": "",
   "license": "MIT",
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "bun@1.3.1",
   "engines": {
     "node": ">=18"
   },
