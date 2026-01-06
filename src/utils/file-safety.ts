@@ -118,7 +118,23 @@ export async function checkFileReadable(
   return { allowed: true };
 }
 
-export async function safeReadFile(path: string): Promise<string> {
+export interface ReadFileOptions {
+  offset?: number;
+  limit?: number;
+}
+
+export interface ReadFileResult {
+  content: string;
+  totalLines: number;
+  startLine: number;
+  endLine: number;
+  truncated: boolean;
+}
+
+export async function safeReadFile(
+  path: string,
+  options?: ReadFileOptions
+): Promise<ReadFileResult> {
   const check = await checkFileReadable(path);
   if (!check.allowed) {
     throw new Error(check.reason);
@@ -126,13 +142,23 @@ export async function safeReadFile(path: string): Promise<string> {
 
   const content = await readFile(path, "utf-8");
   const lines = content.split("\n");
+  const totalLines = lines.length;
 
-  if (lines.length > MAX_LINES) {
-    const truncated = lines.slice(0, MAX_LINES).join("\n");
-    return `${truncated}\n\n[... truncated: showing ${MAX_LINES} of ${lines.length} lines]`;
-  }
+  const offset = options?.offset ?? 0;
+  const limit = options?.limit ?? MAX_LINES;
 
-  return content;
+  const startLine = Math.min(offset, totalLines);
+  const endLine = Math.min(startLine + limit, totalLines);
+  const selectedLines = lines.slice(startLine, endLine);
+  const truncated = endLine < totalLines;
+
+  return {
+    content: selectedLines.join("\n"),
+    totalLines,
+    startLine,
+    endLine,
+    truncated,
+  };
 }
 
 export async function shouldIgnorePath(path: string): Promise<boolean> {
