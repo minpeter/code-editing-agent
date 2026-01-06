@@ -142,6 +142,14 @@ export class Agent {
       messages: this.conversation,
       tools: agentTools,
       stopWhen: stepCountIs(this.maxSteps),
+      providerOptions: {
+        friendliai: {
+          // enable_thinking for hybrid reasoning models
+          chat_template_kwargs: {
+            enable_thinking: true,
+          },
+        },
+      },
     });
 
     const state: StreamState = {
