@@ -3,13 +3,14 @@ import { createFriendli } from "@friendliai/ai-provider";
 import type { LanguageModel } from "ai";
 import { Agent } from "./agent";
 import { handleCommand } from "./commands";
+import { env } from "./env";
 import { wrapModel } from "./model/create-model";
 import { printYou } from "./utils/colors";
 
 const DEFAULT_MODEL_ID = "LGAI-EXAONE/K-EXAONE-236B-A23B";
 
 const friendli = createFriendli({
-  apiKey: process.env.FRIENDLI_TOKEN,
+  apiKey: env.FRIENDLI_TOKEN,
 });
 
 let currentModelId = DEFAULT_MODEL_ID;

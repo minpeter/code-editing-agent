@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@friendliai/ai-provider": "^1.0.3",
+    "@t3-oss/env-core": "^0.13.10",
     "ai": "^6.0.7",
     "ignore": "^7.0.5",
     "zod": "^4.3.5"

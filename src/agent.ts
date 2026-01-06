@@ -1,11 +1,14 @@
+import type { TextStreamPart } from "ai";
 import {
   type LanguageModel,
   type ModelMessage,
   stepCountIs,
   streamText,
 } from "ai";
+import { env } from "./env";
 import { SYSTEM_PROMPT } from "./prompts/system";
-import { tools } from "./tools/index";
+import type { tools } from "./tools/index";
+import { tools as agentTools } from "./tools/index";
 import {
   printAIPrefix,
   printChunk,
@@ -16,6 +19,8 @@ import {
   printTool,
 } from "./utils/colors";
 import { withRetry } from "./utils/retry";
+
+type StreamChunk = TextStreamPart<typeof tools>;
 
 interface StreamState {
   hasStartedText: boolean;
@@ -36,7 +41,58 @@ function endTextIfNeeded(state: StreamState): void {
   }
 }
 
-const DEFAULT_MAX_STEPS = 10;
+function handleReasoningDelta(chunk: StreamChunk, state: StreamState): void {
+  if (chunk.type !== "reasoning-delta") {
+    return;
+  }
+  if (!state.hasStartedReasoning) {
+    printReasoningPrefix();
+    state.hasStartedReasoning = true;
+  }
+  printReasoningChunk(chunk.text);
+}
+
+function handleTextDelta(chunk: StreamChunk, state: StreamState): void {
+  if (chunk.type !== "text-delta") {
+    return;
+  }
+  endReasoningIfNeeded(state);
+  if (!state.hasStartedText) {
+    printAIPrefix();
+    state.hasStartedText = true;
+  }
+  printChunk(chunk.text);
+}
+
+function handleToolCall(chunk: StreamChunk, state: StreamState): void {
+  if (chunk.type !== "tool-call") {
+    return;
+  }
+  endReasoningIfNeeded(state);
+  endTextIfNeeded(state);
+  printTool(chunk.toolName, chunk.input);
+}
+
+function logDebugChunk(chunk: StreamChunk, chunkCount: number): void {
+  const skipTypes = ["text-delta", "reasoning-delta", "tool-result"];
+  if (!skipTypes.includes(chunk.type)) {
+    console.log(`[DEBUG] #${chunkCount} type: ${chunk.type}`);
+  }
+}
+
+function logDebugError(chunk: StreamChunk): void {
+  if (chunk.type === "error") {
+    console.log("[DEBUG] Error:", chunk.error);
+  }
+}
+
+function logDebugFinish(chunk: StreamChunk): void {
+  if (chunk.type === "finish") {
+    console.log(`[DEBUG] Finish reason: ${chunk.finishReason}`);
+  }
+}
+
+const DEFAULT_MAX_STEPS = 255;
 
 export class Agent {
   private model: LanguageModel;
@@ -84,7 +140,7 @@ export class Agent {
       model: this.model,
       system: SYSTEM_PROMPT,
       messages: this.conversation,
-      tools,
+      tools: agentTools,
       stopWhen: stepCountIs(this.maxSteps),
     });
 
@@ -93,31 +149,31 @@ export class Agent {
       hasStartedReasoning: false,
     };
 
+    let chunkCount = 0;
+    const debug = env.DEBUG_CHUNK_LOG;
+
     for await (const chunk of result.fullStream) {
-      if (chunk.type === "reasoning-delta") {
-        if (!state.hasStartedReasoning) {
-          printReasoningPrefix();
-          state.hasStartedReasoning = true;
-        }
-        printReasoningChunk(chunk.text);
-      } else if (chunk.type === "text-delta") {
-        endReasoningIfNeeded(state);
-        if (!state.hasStartedText) {
-          printAIPrefix();
-          state.hasStartedText = true;
-        }
-        printChunk(chunk.text);
-      } else if (chunk.type === "tool-call") {
-        endReasoningIfNeeded(state);
-        endTextIfNeeded(state);
-        printTool(chunk.toolName, chunk.input);
+      chunkCount++;
+
+      if (debug) {
+        logDebugChunk(chunk, chunkCount);
+        logDebugError(chunk);
+        logDebugFinish(chunk);
       }
+
+      handleReasoningDelta(chunk, state);
+      handleTextDelta(chunk, state);
+      handleToolCall(chunk, state);
     }
 
     endReasoningIfNeeded(state);
     endTextIfNeeded(state);
 
     const response = await result.response;
+    if (debug) {
+      console.log(`[DEBUG] Total chunks: ${chunkCount}`);
+      console.log(`[DEBUG] Response messages: ${response.messages.length}`);
+    }
     this.conversation.push(...response.messages);
   }
 }

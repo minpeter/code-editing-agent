@@ -1,6 +1,12 @@
 import type { Interface as ReadlineInterface } from "node:readline";
-import type { LanguageModel, ModelMessage } from "ai";
+import type {
+  LanguageModel,
+  ModelMessage,
+  ToolModelMessage,
+  ToolResultPart,
+} from "ai";
 import type { Agent } from "../agent";
+import { env } from "../env";
 import { SYSTEM_PROMPT } from "../prompts/system";
 import { colorize } from "../utils/colors";
 import {
@@ -23,6 +29,79 @@ interface RenderAPIMessage {
   tool_call_id?: string;
 }
 
+function extractTextContent(
+  parts: Array<{ type: string; text?: string }>
+): string {
+  return parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("");
+}
+
+function determineAssistantContent(
+  textParts: Array<{ type: string; text?: string }>,
+  hasToolCalls: boolean
+): string | null {
+  if (textParts.length > 0) {
+    return extractTextContent(textParts);
+  }
+  if (hasToolCalls) {
+    return null;
+  }
+  return "";
+}
+
+function convertUserMessage(msg: ModelMessage): RenderAPIMessage {
+  const content = Array.isArray(msg.content)
+    ? extractTextContent(msg.content)
+    : msg.content;
+  return { role: "user", content };
+}
+
+function convertAssistantMessage(msg: ModelMessage): RenderAPIMessage {
+  const contentArray = Array.isArray(msg.content) ? msg.content : [];
+  const textParts = contentArray.filter((p) => p.type === "text");
+  const toolCallParts = contentArray.filter((p) => p.type === "tool-call");
+
+  const content = determineAssistantContent(
+    textParts,
+    toolCallParts.length > 0
+  );
+  const assistantMsg: RenderAPIMessage = { role: "assistant", content };
+
+  if (toolCallParts.length > 0) {
+    assistantMsg.tool_calls = toolCallParts.map((tc) => ({
+      id: tc.toolCallId,
+      type: "function" as const,
+      function: {
+        name: tc.toolName,
+        arguments: JSON.stringify(tc.input),
+      },
+    }));
+  }
+
+  return assistantMsg;
+}
+
+function convertToolMessages(msg: ToolModelMessage): RenderAPIMessage[] {
+  const results: RenderAPIMessage[] = [];
+  for (const part of msg.content) {
+    if (part.type === "tool-result") {
+      const resultPart = part as ToolResultPart;
+      const content =
+        typeof resultPart.output === "string"
+          ? resultPart.output
+          : JSON.stringify(resultPart.output);
+      results.push({
+        role: "tool",
+        content,
+        tool_call_id: resultPart.toolCallId,
+      });
+    }
+  }
+  return results;
+}
+
 function convertToRenderAPIMessages(
   messages: ModelMessage[],
   systemPrompt: string
@@ -33,55 +112,11 @@ function convertToRenderAPIMessages(
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      const content = Array.isArray(msg.content)
-        ? msg.content
-            .filter((p) => p.type === "text")
-            .map((p) => p.text)
-            .join("")
-        : msg.content;
-      result.push({ role: "user", content });
+      result.push(convertUserMessage(msg));
     } else if (msg.role === "assistant") {
-      const textParts = Array.isArray(msg.content)
-        ? msg.content.filter((p) => p.type === "text")
-        : [];
-      const toolCallParts = Array.isArray(msg.content)
-        ? msg.content.filter((p) => p.type === "tool-call")
-        : [];
-
-      const content =
-        textParts.length > 0
-          ? textParts.map((p) => p.text).join("")
-          : toolCallParts.length > 0
-            ? null
-            : "";
-
-      const assistantMsg: RenderAPIMessage = { role: "assistant", content };
-
-      if (toolCallParts.length > 0) {
-        assistantMsg.tool_calls = toolCallParts.map((tc) => ({
-          id: tc.toolCallId,
-          type: "function" as const,
-          function: {
-            name: tc.toolName,
-            arguments: JSON.stringify(tc.input),
-          },
-        }));
-      }
-
-      result.push(assistantMsg);
+      result.push(convertAssistantMessage(msg));
     } else if (msg.role === "tool") {
-      for (const part of msg.content) {
-        if (part.type === "tool-result") {
-          result.push({
-            role: "tool",
-            content:
-              typeof part.output === "string"
-                ? part.output
-                : JSON.stringify(part.output),
-            tool_call_id: part.toolCallId,
-          });
-        }
-      }
+      result.push(...convertToolMessages(msg as ToolModelMessage));
     }
   }
 
@@ -249,7 +284,7 @@ async function handleRender(
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.FRIENDLI_TOKEN}`,
+          Authorization: `Bearer ${env.FRIENDLI_TOKEN}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
