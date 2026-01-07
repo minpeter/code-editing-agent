@@ -7,6 +7,7 @@ export interface StreamRenderOptions {
   showReasoning?: boolean;
   showToolInput?: boolean;
   showSteps?: boolean;
+  showFinishReason?: boolean;
   showSources?: boolean;
   showFiles?: boolean;
   useColor?: boolean;
@@ -19,6 +20,7 @@ interface RenderContext {
   showReasoning: boolean;
   showToolInput: boolean;
   showSteps: boolean;
+  showFinishReason: boolean;
   showSources: boolean;
   showFiles: boolean;
   useColor: boolean;
@@ -281,6 +283,18 @@ const handleFile = (
   return "none";
 };
 
+const handleFinish = (
+  ctx: RenderContext,
+  part: Extract<StreamPart, { type: "finish" }>
+): StreamMode => {
+  if (!ctx.showFinishReason) {
+    return "none";
+  }
+  writeLine(ctx);
+  writeLine(ctx, `${renderLabel(ctx, "[finish]")} ${part.finishReason ?? "unknown"}`);
+  return "none";
+};
+
 export const renderFullStream = async <TOOLS extends ToolSet>(
   stream: AsyncIterable<TextStreamPart<TOOLS>>,
   options: StreamRenderOptions = {}
@@ -290,6 +304,7 @@ export const renderFullStream = async <TOOLS extends ToolSet>(
     showReasoning: options.showReasoning ?? true,
     showToolInput: options.showToolInput ?? true,
     showSteps: options.showSteps ?? false,
+    showFinishReason: options.showFinishReason ?? true,
     showSources: options.showSources ?? true,
     showFiles: options.showFiles ?? true,
     useColor: options.useColor ?? Boolean(process.stdout.isTTY),
@@ -355,8 +370,10 @@ export const renderFullStream = async <TOOLS extends ToolSet>(
         mode = handleFile(ctx, part);
         break;
       case "start":
-      case "finish":
         mode = "none";
+        break;
+      case "finish":
+        mode = handleFinish(ctx, part);
         break;
       default:
         writeLine(ctx);

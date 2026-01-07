@@ -7,10 +7,11 @@ import { wrapModel } from "./model/create-model";
 import { SYSTEM_PROMPT } from "./prompts/system";
 import { tools } from "./tools";
 
-const DEFAULT_MODEL_ID = "LGAI-EXAONE/K-EXAONE-236B-A23B";
+const DEFAULT_MODEL_ID = "zai-org/GLM-4.6";
 
 const friendli = createFriendli({
   apiKey: env.FRIENDLI_TOKEN,
+  includeUsage: true,
 });
 
 const agent = new ToolLoopAgent({
@@ -19,6 +20,7 @@ const agent = new ToolLoopAgent({
   tools: {
     ...tools,
   },
+  maxOutputTokens: 10,
   providerOptions: {
     friendli: {
       // enable_thinking for hybrid reasoning models
