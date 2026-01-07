@@ -1,4 +1,4 @@
-import type { ModelMessage, TextPart } from "ai";
+import type { ModelMessage, TextPart, ToolApprovalResponse } from "ai";
 
 const TRAILING_NEWLINES = /\n+$/;
 
@@ -95,6 +95,19 @@ export class MessageHistory {
     }
     this.messages.push(...created);
     return created;
+  }
+
+  addToolApprovalResponses(responses: ToolApprovalResponse[]): Message {
+    const message: Message = {
+      id: createMessageId(),
+      createdAt: new Date(),
+      modelMessage: {
+        role: "tool",
+        content: responses,
+      },
+    };
+    this.messages.push(message);
+    return message;
   }
 
   toModelMessages(): ModelMessage[] {

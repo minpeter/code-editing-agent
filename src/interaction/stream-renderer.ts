@@ -230,7 +230,7 @@ const handleToolApprovalRequest = (
   writeLine(ctx);
   writeLine(
     ctx,
-    `${renderToolLabel(ctx)} approval ${part.toolCall.toolName} (${part.toolCall.toolCallId})`
+    `${applyColor(ctx, "yellow", "⚠ APPROVAL REQUIRED")}: ${part.toolCall.toolName}`
   );
   writeLine(ctx, formatBlock(part.toolCall.input));
   return "none";
@@ -298,10 +298,24 @@ const handleFinish = (
   return "none";
 };
 
+export interface ToolApprovalRequestPart {
+  type: "tool-approval-request";
+  approvalId: string;
+  toolCall: {
+    toolName: string;
+    toolCallId: string;
+    input: unknown;
+  };
+}
+
+export interface StreamRenderResult {
+  approvalRequests: ToolApprovalRequestPart[];
+}
+
 export const renderFullStream = async <TOOLS extends ToolSet>(
   stream: AsyncIterable<TextStreamPart<TOOLS>>,
   options: StreamRenderOptions = {}
-): Promise<void> => {
+): Promise<StreamRenderResult> => {
   const ctx: RenderContext = {
     output: options.output ?? process.stdout,
     showReasoning: options.showReasoning ?? true,
@@ -314,6 +328,7 @@ export const renderFullStream = async <TOOLS extends ToolSet>(
   };
 
   let mode: StreamMode = "none";
+  const approvalRequests: ToolApprovalRequestPart[] = [];
 
   for await (const rawPart of stream) {
     const part = rawPart as StreamPart;
@@ -359,6 +374,7 @@ export const renderFullStream = async <TOOLS extends ToolSet>(
         break;
       case "tool-approval-request":
         mode = handleToolApprovalRequest(ctx, part);
+        approvalRequests.push(part);
         break;
       case "start-step":
         mode = handleStartStep(ctx);
@@ -385,4 +401,6 @@ export const renderFullStream = async <TOOLS extends ToolSet>(
         mode = "none";
     }
   }
+
+  return { approvalRequests };
 };
