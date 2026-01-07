@@ -1,5 +1,7 @@
 import type { ModelMessage, TextPart } from "ai";
 
+const TRAILING_NEWLINES = /\n+$/;
+
 function trimTrailingNewlines(message: ModelMessage): ModelMessage {
   if (message.role !== "assistant") {
     return message;
@@ -8,7 +10,7 @@ function trimTrailingNewlines(message: ModelMessage): ModelMessage {
   const content = message.content;
 
   if (typeof content === "string") {
-    const trimmed = content.replace(/\n+$/, "");
+    const trimmed = content.replace(TRAILING_NEWLINES, "");
     if (trimmed === content) {
       return message;
     }
@@ -19,20 +21,27 @@ function trimTrailingNewlines(message: ModelMessage): ModelMessage {
     return message;
   }
 
-  const lastPart = content[content.length - 1];
-  if (lastPart.type !== "text") {
+  let lastTextIndex = -1;
+  for (let i = content.length - 1; i >= 0; i--) {
+    if (content[i].type === "text") {
+      lastTextIndex = i;
+      break;
+    }
+  }
+
+  if (lastTextIndex === -1) {
     return message;
   }
 
-  const trimmedText = (lastPart as TextPart).text.replace(/\n+$/, "");
-  if (trimmedText === (lastPart as TextPart).text) {
+  const textPart = content[lastTextIndex] as TextPart;
+  const trimmedText = textPart.text.replace(TRAILING_NEWLINES, "");
+
+  if (trimmedText === textPart.text) {
     return message;
   }
 
-  const newContent = [
-    ...content.slice(0, -1),
-    { ...lastPart, text: trimmedText },
-  ];
+  const newContent = [...content];
+  newContent[lastTextIndex] = { ...textPart, text: trimmedText };
   return { ...message, content: newContent };
 }
 
