@@ -1,7 +1,8 @@
 import { createInterface } from "node:readline/promises";
 import { createFriendli } from "@friendliai/ai-provider";
 import { ToolLoopAgent, wrapLanguageModel } from "ai";
-import { executeCommand, isCommand } from "./commands";
+import { executeCommand, isCommand, registerCommand } from "./commands";
+import { createRenderCommand } from "./commands/render";
 import { MessageHistory } from "./context/message-history";
 import { SYSTEM_PROMPT } from "./context/system-prompt";
 import { env } from "./env";
@@ -38,6 +39,15 @@ const agent = new ToolLoopAgent({
 
 const messageHistory = new MessageHistory();
 
+registerCommand(
+  createRenderCommand(() => ({
+    model: DEFAULT_MODEL_ID,
+    instructions: SYSTEM_PROMPT,
+    tools,
+    messages: messageHistory.toModelMessages(),
+  }))
+);
+
 const run = async (): Promise<void> => {
   const rl = createInterface({
     input: process.stdin,
@@ -53,9 +63,15 @@ const run = async (): Promise<void> => {
       }
 
       if (isCommand(trimmed)) {
-        const result = await executeCommand(trimmed);
-        if (result?.message) {
-          console.log(result.message);
+        try {
+          const result = await executeCommand(trimmed);
+          if (result?.message) {
+            console.log(result.message);
+          }
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          console.error(`Command error: ${errorMessage}`);
         }
         continue;
       }

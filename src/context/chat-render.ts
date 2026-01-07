@@ -5,18 +5,26 @@ import { env } from "../env";
 
 const customFetch = Object.assign(
   async (_url: RequestInfo | URL, options?: RequestInit): Promise<Response> => {
+    const parsedBody = options?.body ? JSON.parse(options.body as string) : {};
+    const { tool_choice: _ignored, ...bodyWithoutToolChoice } = parsedBody;
+
     const resp = await fetch(
       "https://api.friendli.ai/serverless/v1/chat/render",
       {
         ...options,
         body: JSON.stringify({
-          ...(options?.body ? JSON.parse(options.body as string) : {}),
+          ...bodyWithoutToolChoice,
           chat_template_kwargs: {
             enable_thinking: true,
           },
         }),
       }
     );
+
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      throw new Error(`API error ${resp.status}: ${errorText}`);
+    }
 
     const data = (await resp.json()) as { text: string };
 
