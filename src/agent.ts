@@ -58,16 +58,30 @@ const getEnvironmentContext = (): string => {
 
   return `
 
-## Current Environment
+## CRITICAL: File Path Rules (READ CAREFULLY)
+
+You are running in: ${cwd}
+
+### ABSOLUTE PATH REQUIREMENT
+When the task mentions a path starting with "/" (like "/app/file.txt"):
+- You MUST use that EXACT absolute path
+- DO NOT convert it to a relative path
+- DO NOT remove the leading "/"
+
+Examples:
+- Task says "create /app/out.html" → use path="/app/out.html" (NOT "out.html")
+- Task says "read /app/filter.py" → use path="/app/filter.py" (NOT "filter.py")
+- Task says "file.txt" (no leading /) → use path="file.txt" (relative is OK)
+
+### Why This Matters
+- Relative paths resolve to ${cwd}/filename
+- Absolute paths like /app/filename go to a completely different location
+- Using the wrong path type will cause the task to fail
+
+Current Environment:
 - Working Directory: ${cwd}
 - User: ${user}
-- Home: ${home}
-
-## File Path Guidelines
-- Use absolute paths when the task specifies them (e.g., if task says "/app/output.txt", use exactly that)
-- The current working directory is "${cwd}"
-- When writing files, prefer absolute paths to avoid ambiguity
-- If you see a path like "${cwd}/file.txt" in task instructions, use that exact path`;
+- Home: ${home}`;
 };
 
 class AgentManager {
