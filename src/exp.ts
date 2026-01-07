@@ -2,6 +2,7 @@ import { createInterface } from "node:readline/promises";
 import { createFriendli } from "@friendliai/ai-provider";
 import { ToolLoopAgent } from "ai";
 import { env } from "./env";
+import { renderFullStream } from "./interaction/stream-renderer";
 import { wrapModel } from "./model/create-model";
 import { SYSTEM_PROMPT } from "./prompts/system";
 import { tools } from "./tools";
@@ -43,10 +44,7 @@ const run = async (): Promise<void> => {
       }
 
       const stream = await agent.stream({ prompt: trimmed });
-      for await (const chunk of stream.textStream) {
-        process.stdout.write(chunk);
-      }
-      process.stdout.write("\n");
+      await renderFullStream(stream.fullStream, { showSteps: false });
     }
   } finally {
     rl.close();
