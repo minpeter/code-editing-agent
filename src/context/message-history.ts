@@ -1,4 +1,5 @@
 import type { ModelMessage, TextPart, ToolApprovalResponse } from "ai";
+import { env } from "../env";
 
 const TRAILING_NEWLINES = /\n+$/;
 
@@ -86,10 +87,13 @@ export class MessageHistory {
   addModelMessages(messages: ModelMessage[]): Message[] {
     const created: Message[] = [];
     for (const modelMessage of messages) {
+      const processedMessage = env.EXPERIMENTAL_TRIM_TRAILING_NEWLINES
+        ? trimTrailingNewlines(modelMessage)
+        : modelMessage;
       const message: Message = {
         id: createMessageId(),
         createdAt: new Date(),
-        modelMessage: trimTrailingNewlines(modelMessage),
+        modelMessage: processedMessage,
       };
       created.push(message);
     }
