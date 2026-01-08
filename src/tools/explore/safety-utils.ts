@@ -93,8 +93,9 @@ export interface FileCheckResult {
 function getPathForIgnoreCheck(filePath: string, cwd: string): string | null {
   if (isAbsolute(filePath)) {
     const relativePath = relative(cwd, filePath);
-    const isInsideProject =
-      !relativePath.startsWith("..") && !isAbsolute(relativePath);
+    const isInsideProject = !(
+      relativePath.startsWith("..") || isAbsolute(relativePath)
+    );
     return isInsideProject ? relativePath : null;
   }
   return filePath;

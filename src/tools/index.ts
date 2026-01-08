@@ -1,5 +1,5 @@
 import { shellExecuteTool } from "./execute/shell-execute";
-import { shellInteractTool } from "./execute/shell-interact/shell-interact";
+import { shellInteractTool } from "./execute/shell-interact";
 import { globTool } from "./explore/glob";
 import { grepTool } from "./explore/grep";
 import { readFileTool } from "./explore/read-file";

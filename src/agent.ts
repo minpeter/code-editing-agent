@@ -6,9 +6,6 @@ import { SYSTEM_PROMPT } from "./context/system-prompt";
 import { env } from "./env";
 import { trimLeadingNewlinesMiddleware } from "./middleware/trim-leading-newlines";
 import { tools } from "./tools";
-import { startBackgroundTmuxCheck } from "./tools/execute/shell-interact/utils";
-
-startBackgroundTmuxCheck();
 
 export const DEFAULT_MODEL_ID = "Qwen/Qwen3-235B-A22B-Instruct-2507";
 const OUTPUT_TOKEN_MAX = 32_000;

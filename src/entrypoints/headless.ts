@@ -2,10 +2,7 @@
 
 import { agentManager, DEFAULT_MODEL_ID } from "../agent";
 import { MessageHistory } from "../context/message-history";
-import {
-  cleanupAllTrackedSessions,
-  setCurrentSessionId,
-} from "../tools/execute/shell-interact/hook";
+import { cleanupSession } from "../tools/execute/shared-tmux-session";
 
 interface BaseEvent {
   timestamp: string;
@@ -54,10 +51,8 @@ type TrajectoryEvent =
   | ErrorEvent;
 
 const sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-setCurrentSessionId(sessionId);
 
-process.on("SIGINT", async () => {
-  await cleanupAllTrackedSessions(sessionId);
+process.on("SIGINT", () => {
   process.exit(0);
 });
 
@@ -265,11 +260,11 @@ const run = async (): Promise<void> => {
       sessionId,
       error: error instanceof Error ? error.message : String(error),
     });
-    await cleanupAllTrackedSessions(sessionId);
+    cleanupSession();
     process.exit(1);
   }
 
-  await cleanupAllTrackedSessions(sessionId);
+  cleanupSession();
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
   console.error(`[headless] Completed in ${elapsed}s`);
 };

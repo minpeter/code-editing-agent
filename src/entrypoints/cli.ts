@@ -10,16 +10,10 @@ import { createRenderCommand } from "../commands/render";
 import { MessageHistory } from "../context/message-history";
 import { renderFullStream } from "../interaction/stream-renderer";
 import { askBatchApproval } from "../interaction/tool-approval";
-import {
-  cleanupAllTrackedSessions,
-  setCurrentSessionId,
-} from "../tools/execute/shell-interact/hook";
+import { cleanupSession } from "../tools/execute/shared-tmux-session";
 
-const sessionId = `cli-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-setCurrentSessionId(sessionId);
-
-process.on("SIGINT", async () => {
-  await cleanupAllTrackedSessions(sessionId);
+process.on("SIGINT", () => {
+  cleanupSession();
   process.exit(0);
 });
 
@@ -84,7 +78,7 @@ const run = async (): Promise<void> => {
       await processAgentResponse(rl);
     }
   } finally {
-    await cleanupAllTrackedSessions(sessionId);
+    cleanupSession();
     rl.close();
   }
 };
