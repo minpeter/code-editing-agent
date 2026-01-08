@@ -142,6 +142,20 @@ const processAgentResponse = async (
         });
         break;
       }
+      case "tool-error":
+        emitEvent({
+          timestamp: new Date().toISOString(),
+          type: "tool_result",
+          sessionId,
+          tool_call_id: part.toolCallId,
+          output: "",
+          error:
+            part.error instanceof Error
+              ? part.error.message
+              : String(part.error),
+          exit_code: 1,
+        });
+        break;
       default:
         break;
     }
