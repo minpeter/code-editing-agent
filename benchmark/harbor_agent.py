@@ -217,7 +217,7 @@ class CodeEditingAgent(BaseInstalledAgent):
 
         env = {
             "FRIENDLI_TOKEN": os.environ.get("FRIENDLI_TOKEN", ""),
-            # Ensure bun is in PATH for all subprocesses
+            "TMUX_CLEANUP_SESSION": "false",
             "BUN_INSTALL": "/root/.bun",
             "PATH": "/root/.bun/bin:/usr/local/bin:/usr/bin:/bin",
         }

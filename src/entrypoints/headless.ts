@@ -2,6 +2,7 @@
 
 import { agentManager, DEFAULT_MODEL_ID } from "../agent";
 import { MessageHistory } from "../context/message-history";
+import { env } from "../env";
 import { cleanupSession } from "../tools/execute/shared-tmux-session";
 
 interface BaseEvent {
@@ -260,11 +261,15 @@ const run = async (): Promise<void> => {
       sessionId,
       error: error instanceof Error ? error.message : String(error),
     });
-    cleanupSession();
+    if (env.TMUX_CLEANUP_SESSION) {
+      cleanupSession();
+    }
     process.exit(1);
   }
 
-  cleanupSession();
+  if (env.TMUX_CLEANUP_SESSION) {
+    cleanupSession();
+  }
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
   console.error(`[headless] Completed in ${elapsed}s`);
 };
