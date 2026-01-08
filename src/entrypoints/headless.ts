@@ -62,23 +62,29 @@ const formatToolOutput = (output: unknown): string => {
   return String(output);
 };
 
-const parseArgs = (): { prompt: string } => {
+const parseArgs = (): { prompt: string; model?: string } => {
   const args = process.argv.slice(2);
   let prompt = "";
+  let model: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "-p" || args[i] === "--prompt") {
       prompt = args[i + 1] || "";
       i++;
+    } else if (args[i] === "-m" || args[i] === "--model") {
+      model = args[i + 1] || undefined;
+      i++;
     }
   }
 
   if (!prompt) {
-    console.error("Usage: bun run src/entrypoints/headless.ts -p <prompt>");
+    console.error(
+      "Usage: bun run src/entrypoints/headless.ts -p <prompt> [-m <model>]"
+    );
     process.exit(1);
   }
 
-  return { prompt };
+  return { prompt, model };
 };
 
 const processAgentResponse = async (
@@ -167,10 +173,10 @@ const processAgentResponse = async (
 };
 
 const run = async (): Promise<void> => {
-  const { prompt } = parseArgs();
+  const { prompt, model } = parseArgs();
 
   agentManager.setHeadlessMode(true);
-  agentManager.setModelId(DEFAULT_MODEL_ID);
+  agentManager.setModelId(model || DEFAULT_MODEL_ID);
 
   const messageHistory = new MessageHistory();
 
