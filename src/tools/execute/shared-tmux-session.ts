@@ -2,13 +2,19 @@ import { type SpawnSyncReturns, spawn, spawnSync } from "node:child_process";
 
 const SESSION_PREFIX = "cea";
 const DEFAULT_TIMEOUT_MS = 180_000;
+const BACKGROUND_STARTUP_WAIT_MS = 3000;
 const PANE_WIDTH = 160;
 const PANE_HEIGHT = 40;
 
 const ENTER_KEYS = new Set(["Enter", "C-m", "KPEnter", "C-j", "^M", "^J"]);
 const NEWLINE_PATTERN = /[\r\n]$/;
 const TRAILING_NEWLINES = /[\r\n]+$/;
-const EXIT_CODE_PATTERN = /__CEA_EXIT_(\d+)__/;
+
+let commandCounter = 0;
+function generateCommandId(): string {
+  const id = `${Date.now()}-${++commandCounter}`;
+  return id;
+}
 
 export interface SendKeysOptions {
   block?: boolean;
@@ -307,7 +313,7 @@ class SharedTmuxSession {
     fullCommand: string,
     timeoutMs: number
   ): Promise<ExecuteResult> {
-    const startupWaitMs = Math.min(timeoutMs, 2000);
+    const startupWaitMs = Math.min(timeoutMs, BACKGROUND_STARTUP_WAIT_MS);
 
     await this.sendKeys([fullCommand, "Enter"], {
       block: false,
@@ -326,6 +332,56 @@ class SharedTmuxSession {
     };
   }
 
+  private async executeWithUniqueMarkers(
+    fullCommand: string,
+    timeoutMs: number
+  ): Promise<ExecuteResult> {
+    const cmdId = generateCommandId();
+    const startMarker = `__CEA_S_${cmdId}__`;
+    const exitMarkerPrefix = `__CEA_E_${cmdId}_`;
+    const waitChannel = `${this.sessionId}-${cmdId}`;
+
+    const wrappedCommand = `echo ${startMarker}; ${fullCommand}; echo ${exitMarkerPrefix}$?__; tmux wait -S ${waitChannel}`;
+
+    const sendCommand = this.buildSendKeysCommand([wrappedCommand, "Enter"]);
+    this.execSync(sendCommand);
+
+    const waitResult = await this.execAsync(
+      `tmux wait ${waitChannel}`,
+      timeoutMs
+    );
+
+    if (waitResult.exitCode !== 0) {
+      const currentScreen = this.capturePane(false);
+      return {
+        exitCode: 124,
+        output:
+          `Command timed out after ${timeoutMs}ms. ` +
+          "The process may still be running in the terminal.\n\n" +
+          `=== Current Terminal Screen ===\n${currentScreen}\n` +
+          "=== End of Screen ===\n\n" +
+          "[SYSTEM REMINDER] Use shell_interact to send keystrokes to this terminal (e.g., '<Ctrl+C>' to interrupt).",
+      };
+    }
+
+    const rawOutput = this.capturePane(true);
+
+    const startIdx = rawOutput.lastIndexOf(startMarker);
+    const exitIdx = rawOutput.lastIndexOf(exitMarkerPrefix);
+
+    if (startIdx === -1 || exitIdx === -1) {
+      return { exitCode: 0, output: rawOutput.trim() };
+    }
+
+    const exitPattern = new RegExp(`${exitMarkerPrefix}(\\d+)__`);
+    const exitMatch = rawOutput.slice(exitIdx).match(exitPattern);
+    const exitCode = exitMatch ? Number.parseInt(exitMatch[1], 10) : 0;
+    const contentStart = startIdx + startMarker.length;
+    const cleanOutput = rawOutput.slice(contentStart, exitIdx).trim();
+
+    return { exitCode, output: cleanOutput };
+  }
+
   async executeCommand(
     command: string,
     options: { workdir?: string; timeoutMs?: number } = {}
@@ -342,47 +398,10 @@ class SharedTmuxSession {
     }
 
     if (this.endsWithBackgroundOperator(fullCommand)) {
-      return this.executeAsBackgroundProcess(fullCommand, timeoutMs);
+      return await this.executeAsBackgroundProcess(fullCommand, timeoutMs);
     }
 
-    const wrappedCommand = `echo __CEA_START__; ${fullCommand}; echo __CEA_EXIT_$?__`;
-
-    try {
-      await this.sendKeys([wrappedCommand, "Enter"], {
-        block: true,
-        maxTimeoutMs: timeoutMs,
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("timed out")) {
-        const currentScreen = this.capturePane(false);
-        return {
-          exitCode: 124,
-          output:
-            `Command timed out after ${timeoutMs}ms. ` +
-            "The process may still be running in the terminal.\n\n" +
-            `=== Current Terminal Screen ===\n${currentScreen}\n` +
-            "=== End of Screen ===\n\n" +
-            "[SYSTEM REMINDER] Use shell_interact to send keystrokes to this terminal (e.g., '<Ctrl+C>' to interrupt).",
-        };
-      }
-      throw error;
-    }
-
-    const rawOutput = this.capturePane(true);
-
-    const startIdx = rawOutput.lastIndexOf("__CEA_START__");
-    const exitIdx = rawOutput.lastIndexOf("__CEA_EXIT_");
-
-    if (startIdx === -1 || exitIdx === -1) {
-      return { exitCode: 0, output: rawOutput.trim() };
-    }
-
-    const exitMatch = rawOutput.slice(exitIdx).match(EXIT_CODE_PATTERN);
-    const exitCode = exitMatch ? Number.parseInt(exitMatch[1], 10) : 0;
-    const contentStart = startIdx + "__CEA_START__".length;
-    const cleanOutput = rawOutput.slice(contentStart, exitIdx).trim();
-
-    return { exitCode, output: cleanOutput };
+    return await this.executeWithUniqueMarkers(fullCommand, timeoutMs);
   }
 
   clearHistory(): void {

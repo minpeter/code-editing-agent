@@ -132,7 +132,7 @@ describe("executeCommand", () => {
     });
 
     it("starts Flask-like server with pure & and stays running", async () => {
-      const port = 18890;
+      const port = 18_890;
       const start = await executeCommand(
         `python3 -m http.server ${port} > /dev/null 2>&1 &`
       );
