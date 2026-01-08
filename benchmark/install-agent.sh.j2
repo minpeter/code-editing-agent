@@ -1,9 +1,12 @@
 #!/bin/bash
 set -e
 
-echo "Installing dependencies..."
-apt-get update -qq
-apt-get install -y -qq curl git unzip ca-certificates
+echo "Installing system dependencies..."
+# Use --no-install-recommends to minimize package size
+# Remove unzip (not needed), keep only essential packages
+apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+  curl git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 echo "Installing bun..."
 curl -fsSL https://bun.sh/install | bash
@@ -11,9 +14,12 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 echo "Cloning code-editing-agent..."
-git clone --depth 1 https://github.com/minpeter/code-editing-agent.git /agent
+git clone --depth 1 --single-branch https://github.com/minpeter/code-editing-agent.git /agent
 cd /agent
-bun install
+
+echo "Installing npm dependencies..."
+# Use frozen lockfile for faster, reproducible installs
+bun install --frozen-lockfile
 
 echo "code-editing-agent installed successfully"
 bun --version
