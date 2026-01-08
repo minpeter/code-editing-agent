@@ -99,6 +99,11 @@ const extractToolOutput = (
   return { stdout: String(output) };
 };
 
+interface PendingToolCall {
+  id: string;
+  arguments: string;
+}
+
 const processAgentResponse = async (
   messageHistory: MessageHistory
 ): Promise<void> => {
@@ -107,6 +112,9 @@ const processAgentResponse = async (
 
   let currentText = "";
   let currentReasoning = "";
+  const pendingToolCalls = new Map<string, PendingToolCall>();
+  const completedToolCallIds = new Set<string>();
+  let lastFinishReason: string | undefined;
 
   for await (const part of stream.fullStream) {
     switch (part.type) {
@@ -116,7 +124,21 @@ const processAgentResponse = async (
       case "reasoning-delta":
         currentReasoning += part.text;
         break;
+      case "tool-input-delta": {
+        const toolCallPart = part as { id: string; delta: string };
+        const existing = pendingToolCalls.get(toolCallPart.id);
+        if (existing) {
+          existing.arguments += toolCallPart.delta;
+        } else {
+          pendingToolCalls.set(toolCallPart.id, {
+            id: toolCallPart.id,
+            arguments: toolCallPart.delta,
+          });
+        }
+        break;
+      }
       case "tool-call":
+        completedToolCallIds.add(part.toolCallId);
         emitEvent({
           timestamp: new Date().toISOString(),
           type: "tool_call",
@@ -156,9 +178,39 @@ const processAgentResponse = async (
           exit_code: 1,
         });
         break;
+      case "finish-step": {
+        const finishPart = part as { finishReason: string };
+        lastFinishReason = finishPart.finishReason;
+        break;
+      }
       default:
         break;
     }
+  }
+
+  for (const [id, pending] of pendingToolCalls) {
+    if (!completedToolCallIds.has(id)) {
+      emitEvent({
+        timestamp: new Date().toISOString(),
+        type: "error",
+        sessionId,
+        error: `Tool call failed: malformed JSON in tool arguments (id: ${id}). Raw arguments: ${pending.arguments.slice(0, 500)}`,
+      });
+    }
+  }
+
+  if (
+    lastFinishReason === "tool-calls" &&
+    pendingToolCalls.size > 0 &&
+    completedToolCallIds.size === 0
+  ) {
+    emitEvent({
+      timestamp: new Date().toISOString(),
+      type: "error",
+      sessionId,
+      error:
+        "Model attempted tool calls but all failed due to malformed JSON. This is likely a model bug with JSON escaping in tool arguments.",
+    });
   }
 
   const response = await stream.response;
