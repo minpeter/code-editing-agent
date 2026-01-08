@@ -232,7 +232,7 @@ class CodeEditingAgent(BaseInstalledAgent):
             ),
             ExecInput(
                 command=(
-                    f"cd /app && /root/.bun/bin/bun /agent/src/entrypoints/headless.ts -p {escaped_instruction} {model_arg} "
+                    f"/root/.bun/bin/bun /agent/src/entrypoints/headless.ts -p {escaped_instruction} {model_arg} "
                     f"2>&1 | tee /logs/agent/output.jsonl"
                 ),
                 env=env,
