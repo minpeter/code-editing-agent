@@ -14,7 +14,8 @@
     "dev": "bun run --watch src/entrypoints/cli.ts",
     "check": "ultracite check",
     "lint": "ultracite fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "keywords": [
     "ai",

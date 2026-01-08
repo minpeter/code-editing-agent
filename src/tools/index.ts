@@ -1,4 +1,4 @@
-import { runShellCommandTool } from "./execute/run_shell_command";
+import { runShellCommandTool } from "./execute/run-shell-command";
 import { globTool } from "./explore/glob";
 import { grepTool } from "./explore/grep";
 import { readFileTool } from "./explore/read-file";
