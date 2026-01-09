@@ -1,6 +1,7 @@
 import { agentManager } from "../agent";
 import { env } from "../env";
 import { colorize } from "../interaction/colors";
+import { Spinner } from "../interaction/spinner";
 import type { Command, CommandResult } from "./types";
 
 interface ModelInfo {
@@ -125,8 +126,12 @@ export const createModelCommand = (): Command => ({
   name: "model",
   description: "List or change the AI model",
   execute: async ({ args }): Promise<CommandResult> => {
+    const spinner = new Spinner("Fetching available models...");
+
     try {
+      spinner.start();
       const models = await fetchAvailableModels();
+      spinner.stop();
 
       if (models.length === 0) {
         return { success: false, message: "No models available." };
@@ -176,6 +181,7 @@ export const createModelCommand = (): Command => ({
         message: colorize("green", `Model changed to: ${selectedModel.id}`),
       };
     } catch (error) {
+      spinner.stop();
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, message: `Error: ${message}` };
     }

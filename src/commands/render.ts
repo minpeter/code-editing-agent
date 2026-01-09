@@ -17,6 +17,7 @@ const customFetch = Object.assign(
           ...bodyWithoutToolChoice,
           chat_template_kwargs: {
             enable_thinking: true,
+            thinking: true,
           },
         }),
       }

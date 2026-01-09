@@ -47,6 +47,7 @@ const createAgent = (modelId: string, options: CreateAgentOptions = {}) =>
       friendli: {
         chat_template_kwargs: {
           enable_thinking: true,
+          thinking: true,
         },
       },
     },
