@@ -12,12 +12,9 @@ import { renderFullStream } from "../interaction/stream-renderer";
 import { askBatchApproval } from "../interaction/tool-approval";
 import { cleanupSession } from "../tools/execute/shared-tmux-session";
 
-process.on("SIGINT", () => {
-  cleanupSession();
-  process.exit(0);
-});
-
 const messageHistory = new MessageHistory();
+
+let rlInstance: Interface | null = null;
 
 registerCommand(
   createRenderCommand(() => ({
@@ -52,6 +49,16 @@ const run = async (): Promise<void> => {
     output: process.stdout,
   });
 
+  rlInstance = rl;
+
+  const handleGracefulShutdown = () => {
+    if (rlInstance) {
+      console.log("\nReceived interrupt signal, cleaning up...");
+      rlInstance.close();
+    }
+  };
+  process.on("SIGINT", handleGracefulShutdown);
+
   try {
     while (true) {
       const input = await rl.question("You: ");
@@ -78,8 +85,10 @@ const run = async (): Promise<void> => {
       await processAgentResponse(rl);
     }
   } finally {
-    cleanupSession();
+    process.off("SIGINT", handleGracefulShutdown);
+    rlInstance = null;
     rl.close();
+    cleanupSession();
   }
 };
 
