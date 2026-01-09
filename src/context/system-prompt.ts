@@ -30,13 +30,31 @@ ${SHELL_TOOLS_CONTEXT}
 - **File discovery**: Use glob (not shell find/ls)
 - **Shell commands**: ONLY for operations that truly require shell (git, npm, build, tests)
 
-### 3. Path Handling
+### 3. Parallel vs Sequential Tool Execution
+- **You can call multiple tools in a single response** for better performance
+- **Call tools in parallel** when they are independent and have no dependencies:
+  - Reading multiple files
+  - Running multiple independent grep/glob searches
+  - Executing independent shell commands (git status + git diff)
+  - Gathering information from different sources
+- **Call tools sequentially** when there are dependencies:
+  - Create file → then read it
+  - Read file → then edit it based on contents
+  - Write file → then run tests on it
+  - Operations that modify the same file or resource
+- **Example (parallel)**: Send a single message with multiple tool calls:
+  - read_file("src/app.ts") + read_file("src/utils.ts") + grep("function.*main")
+- **Example (sequential)**: Chain dependent operations using shell &&:
+  - shell_execute("git add . && git commit -m 'message' && git push")
+- **Performance**: Parallel execution can provide 2-5x efficiency gains for independent operations
+
+### 4. Path Handling
 - **Preserve path format** given in the task:
   - Task says "/app/out.html" → use "/app/out.html" (keep absolute)
   - Task says "file.txt" → use "file.txt" (keep relative)
 - **Never change** between absolute and relative paths unless explicitly requested
 
-### 4. Safety and Correctness
+### 5. Safety and Correctness
 - **Read before write**: Always verify file contents before modifying
 - **Test your changes**: Run tests or verify functionality after modifications
 - **Handle errors gracefully**: Check command outputs and handle failures appropriately

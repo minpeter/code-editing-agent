@@ -69,6 +69,45 @@ const parseCliArgs = (): { thinking: boolean } => {
   return { thinking };
 };
 
+const handleGracefulShutdown = () => {
+  shouldExit = true;
+  console.log("\nShutting down...");
+
+  if (rlInstance) {
+    rlInstance.close();
+  }
+
+  cleanupSession();
+  process.exit(0);
+};
+
+const shouldExitFromInput = (input: string): boolean => {
+  return shouldExit || input.length === 0 || input.toLowerCase() === "exit";
+};
+
+const handleCommandExecution = async (command: string): Promise<void> => {
+  try {
+    const result = await executeCommand(command);
+    if (result?.message) {
+      console.log(result.message);
+    }
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error(`Command error: ${errorMessage}`);
+  }
+};
+
+const handleAgentResponse = async (rl: Interface): Promise<void> => {
+  try {
+    await processAgentResponse(rl);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`\nError: ${errorMessage}`);
+    console.error("Returning to prompt...\n");
+  }
+};
+
 const run = async (): Promise<void> => {
   const { thinking } = parseCliArgs();
   agentManager.setThinkingEnabled(thinking);
@@ -79,19 +118,6 @@ const run = async (): Promise<void> => {
   });
 
   rlInstance = rl;
-
-  const handleGracefulShutdown = () => {
-    shouldExit = true;
-    console.log("\nShutting down...");
-
-    if (rlInstance) {
-      rlInstance.close();
-    }
-
-    cleanupSession();
-    process.exit(0);
-  };
-
   process.on("SIGINT", handleGracefulShutdown);
 
   try {
@@ -100,37 +126,18 @@ const run = async (): Promise<void> => {
         .question(`${colorize("blue", "You")}: `)
         .catch(() => "");
       const trimmed = input.trim();
-      if (
-        shouldExit ||
-        trimmed.length === 0 ||
-        trimmed.toLowerCase() === "exit"
-      ) {
+
+      if (shouldExitFromInput(trimmed)) {
         break;
       }
 
       if (isCommand(trimmed)) {
-        try {
-          const result = await executeCommand(trimmed);
-          if (result?.message) {
-            console.log(result.message);
-          }
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          console.error(`Command error: ${errorMessage}`);
-        }
+        await handleCommandExecution(trimmed);
         continue;
       }
 
       messageHistory.addUserMessage(trimmed);
-      try {
-        await processAgentResponse(rl);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        console.error(`\nError: ${errorMessage}`);
-        console.error("Returning to prompt...\n");
-      }
+      await handleAgentResponse(rl);
     }
   } catch (error) {
     console.error("Error:", error);
