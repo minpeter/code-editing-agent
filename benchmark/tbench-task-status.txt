@@ -12,3 +12,18 @@ configure-git-webserver
 qemu-startup
 cancel-async-tasks
 openssl-selfsigned-cert
+
+
+[COMMAND]
+harbor run -d 'terminal-bench@2.0' \
+  -t 'cancel-async-tasks' \
+  -t 'configure-git-webserver' \
+  -t 'git-leak-recovery' \
+  -t 'multi-source-data-merger' \
+  -t 'openssl-selfsigned-cert' \
+  -t 'prove-plus-comm' \
+  -t 'pypi-server' \
+  -t 'qemu-startup' \
+  --agent-import-path benchmark.harbor_agent:CodeEditingAgent \
+  -m 'Qwen/Qwen3-235B-A22B-Thinking-2507' \
+  --force-build -n 8 -k 1
