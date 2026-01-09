@@ -466,9 +466,9 @@ export async function executeEditFile({
 export const editFileTool = tool({
   description:
     "Replace text in file (surgical edits). " +
-    "old_str must match exactly. " +
-    "Use replace_all: true for multiple replacements. " +
-    "Creates file if it doesn't exist (when old_str is empty).",
+    "old_str must match exactly (including whitespace/indentation) - always copy-paste lines from read_file output. " +
+    "replace_all: false (default) replaces FIRST match only; use replace_all: true for renaming across file. " +
+    "For new files, prefer write_file instead.",
   needsApproval: true,
   inputSchema,
   execute: executeEditFile,

@@ -335,10 +335,16 @@ class SharedTmuxSession {
     }
 
     const screen = this.capturePane(false);
+    const reasonDetail = this.formatInteractiveReason(result.reason);
+    const processInfo = result.currentProcess
+      ? `Current foreground process: ${result.currentProcess}`
+      : "Unable to determine foreground process";
+
     const errorMessage = [
       "[ERROR] Cannot execute command - terminal is in interactive state",
       "",
-      `Current foreground process: ${result.currentProcess}`,
+      processInfo,
+      reasonDetail,
       "",
       "Use shell_interact to send keys to the interactive process.",
       "",
@@ -348,6 +354,19 @@ class SharedTmuxSession {
     ].join("\n");
 
     return { isBlocking: true, message: errorMessage };
+  }
+
+  private formatInteractiveReason(reason?: string): string {
+    switch (reason) {
+      case "tmux_query_failed":
+        return "Reason: Unable to query terminal state";
+      case "pane_dead":
+        return "Reason: Terminal pane has exited";
+      case "pane_in_mode":
+        return "Reason: Terminal is in copy/scroll mode";
+      default:
+        return "";
+    }
   }
 
   private endsWithBackgroundOperator(command: string): boolean {

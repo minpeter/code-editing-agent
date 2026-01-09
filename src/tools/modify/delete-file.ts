@@ -71,7 +71,8 @@ export async function executeDeleteFile({
 
 export const deleteFileTool = tool({
   description:
-    "Delete file or directory (CANNOT BE UNDONE). " +
+    "DANGER: Permanently delete file or directory (NO RECOVERY). " +
+    "Verify path with read_file or glob before deleting. " +
     "Use recursive: true for non-empty directories. " +
     "Use ignore_missing: true to skip if file doesn't exist.",
   needsApproval: true,

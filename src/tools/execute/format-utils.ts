@@ -122,8 +122,11 @@ export function formatTimeoutMessage(
 
 export function formatBackgroundMessage(terminalScreen: string): string {
   const screen = formatTerminalScreen(terminalScreen);
-  const reminder = formatSystemReminder(
-    "The process is running in the background. Use shell_interact to check status or send signals."
-  );
+  const reminder = [
+    "[IMPORTANT] Process started in background.",
+    "• VERIFY the service is running before concluding (e.g., curl endpoint, check logs)",
+    "• Do NOT assume success without verification",
+    "• Use shell_interact to check status or send signals if needed",
+  ].join("\n");
   return `${BACKGROUND_PREFIX}\n\n${screen}\n\n${reminder}`;
 }

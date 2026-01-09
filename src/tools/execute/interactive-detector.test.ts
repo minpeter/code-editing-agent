@@ -13,10 +13,11 @@ describe("interactive-detector", () => {
   });
 
   describe("isInteractiveState", () => {
-    it("returns not interactive for non-existent session", () => {
+    it("returns interactive (fail-closed) for non-existent session", () => {
       const result = isInteractiveState("nonexistent-session");
-      expect(result.isInteractive).toBe(false);
+      expect(result.isInteractive).toBe(true);
       expect(result.currentProcess).toBeNull();
+      expect(result.reason).toBe("tmux_query_failed");
     });
 
     it("returns correct structure", () => {
@@ -24,6 +25,12 @@ describe("interactive-detector", () => {
       expect(result).toHaveProperty("isInteractive");
       expect(result).toHaveProperty("currentProcess");
       expect(typeof result.isInteractive).toBe("boolean");
+    });
+
+    it("rejects invalid session IDs", () => {
+      const result = isInteractiveState("invalid;session");
+      expect(result.isInteractive).toBe(true);
+      expect(result.reason).toBe("tmux_query_failed");
     });
   });
 
@@ -37,6 +44,8 @@ describe("interactive-detector", () => {
       "ksh",
       "tcsh",
       "csh",
+      "ash",
+      "pwsh",
     ];
 
     it("classifies all known shells correctly", () => {
