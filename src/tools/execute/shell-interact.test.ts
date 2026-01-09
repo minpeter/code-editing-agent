@@ -48,6 +48,18 @@ describe("shellInteractTool", () => {
       expect(result.output).toBeDefined();
     });
 
+    it("does not leak internal markers", async () => {
+      const session = getSharedSession();
+      await session.executeCommand("echo marker-leak-test");
+
+      const result = await interact("", 100);
+
+      expect(result.success).toBe(true);
+      expect(result.output).not.toContain("__CEA_S_");
+      expect(result.output).not.toContain("__CEA_E_");
+      expect(result.output).not.toContain("tmux wait -S cea-");
+    });
+
     it("sends text with Enter key", async () => {
       const result = await interact("echo hello<Enter>", 500);
 

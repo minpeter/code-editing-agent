@@ -1,21 +1,69 @@
 import {
   detectInteractivePrompt,
   formatDetectionResults,
-} from "./interactive-detector";
+} from "./interactive-detector.js";
 
 const TERMINAL_SCREEN_PREFIX = "=== Current Terminal Screen ===";
 const TERMINAL_SCREEN_SUFFIX = "=== End of Screen ===";
+
+const CEA_START_MARKER_PATTERN = /__CEA_S_\d+-\d+__/g;
+const CEA_EXIT_MARKER_PATTERN = /__CEA_E_\d+-\d+_\d+__/g;
+
+const CEA_START_MARKER_FRAGMENT_LINE_PATTERN =
+  /^\s*__CEA_S_\d+-\d+_*(?:__)?\s*$/;
+const CEA_EXIT_MARKER_FRAGMENT_LINE_PATTERN =
+  /^\s*__CEA_E_\d+-\d+_\d*_*(?:__)?\s*$/;
+
+const CEA_WRAPPER_COMMAND_LINE_PATTERN = /\becho\s+__CEA_S_\d+-\d+__/;
+const TMUX_WAIT_INTERNAL_SUFFIX_PATTERN =
+  /\s*;?\s*tmux\s+wait\s+-S\s+cea-[0-9a-z-]+\s*$/i;
 
 const SYSTEM_REMINDER_PREFIX = "[SYSTEM REMINDER]";
 const TIMEOUT_PREFIX = "[TIMEOUT]";
 const BACKGROUND_PREFIX = "[Background process started]";
 
+export function stripInternalMarkers(content: string): string {
+  if (!content.includes("__CEA_") && !content.includes("tmux wait")) {
+    return content.trim();
+  }
+
+  const cleanedLines: string[] = [];
+
+  for (const line of content.split("\n")) {
+    const trimmedLine = line.trim();
+
+    if (
+      trimmedLine &&
+      (CEA_START_MARKER_FRAGMENT_LINE_PATTERN.test(trimmedLine) ||
+        CEA_EXIT_MARKER_FRAGMENT_LINE_PATTERN.test(trimmedLine))
+    ) {
+      continue;
+    }
+
+    if (CEA_WRAPPER_COMMAND_LINE_PATTERN.test(line)) {
+      continue;
+    }
+
+    const withoutWait = line.replace(TMUX_WAIT_INTERNAL_SUFFIX_PATTERN, "");
+    const withoutMarkers = withoutWait
+      .replace(CEA_START_MARKER_PATTERN, "")
+      .replace(CEA_EXIT_MARKER_PATTERN, "");
+
+    cleanedLines.push(withoutMarkers);
+  }
+
+  return cleanedLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function formatTerminalScreen(content: string): string {
-  const trimmed = content.trim();
-  if (!trimmed) {
+  const cleaned = stripInternalMarkers(content);
+  if (!cleaned) {
     return "(no visible output)";
   }
-  return `${TERMINAL_SCREEN_PREFIX}\n${trimmed}\n${TERMINAL_SCREEN_SUFFIX}`;
+  return `${TERMINAL_SCREEN_PREFIX}\n${cleaned}\n${TERMINAL_SCREEN_SUFFIX}`;
 }
 
 export function formatSystemReminder(message: string): string {

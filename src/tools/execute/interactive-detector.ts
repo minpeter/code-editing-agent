@@ -223,11 +223,15 @@ function detectByLastLine(content: string): DetectionResult | null {
     return null;
   }
 
-  const lastLine = (lines.at(-1) ?? "").trim();
+  const lastMeaningfulLine = [...lines]
+    .reverse()
+    .find((line) => !(line.includes("__CEA_") || line.includes("tmux wait")));
 
-  if (lastLine.includes("__CEA_") || lastLine.includes("tmux wait")) {
+  if (!lastMeaningfulLine) {
     return null;
   }
+
+  const lastLine = lastMeaningfulLine.trim();
 
   for (const { pattern, description } of LAST_LINE_PROMPT_PATTERNS) {
     if (pattern.test(lastLine)) {
