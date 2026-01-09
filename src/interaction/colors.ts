@@ -5,6 +5,8 @@ export const colors = {
   cyan: "\u001b[96m",
   red: "\u001b[91m",
   dim: "\u001b[2m",
+  italic: "\u001b[3m",
+  gray: "\u001b[90m",
   reset: "\u001b[0m",
 } as const;
 
@@ -21,7 +23,7 @@ export function printAIPrefix(): void {
 }
 
 export function printReasoningPrefix(): void {
-  process.stdout.write(`${colors.dim}${colors.cyan}[thinking] `);
+  process.stdout.write(`${colors.dim}${colors.italic}${colors.gray}│ `);
 }
 
 export function printReasoningChunk(text: string): void {

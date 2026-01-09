@@ -9,6 +9,7 @@ import { createModelCommand } from "../commands/model";
 import { createRenderCommand } from "../commands/render";
 import { MessageHistory } from "../context/message-history";
 import { env } from "../env";
+import { colorize } from "../interaction/colors";
 import { renderFullStream } from "../interaction/stream-renderer";
 import { askBatchApproval } from "../interaction/tool-approval";
 import { cleanupSession } from "../tools/execute/shared-tmux-session";
@@ -76,7 +77,9 @@ const run = async (): Promise<void> => {
 
   try {
     while (!shouldExit) {
-      const input = await rl.question("You: ").catch(() => "");
+      const input = await rl
+        .question(`${colorize("blue", "You")}: `)
+        .catch(() => "");
       const trimmed = input.trim();
       if (
         shouldExit ||

@@ -23,6 +23,8 @@ interface RenderContext {
   showSources: boolean;
   showFiles: boolean;
   useColor: boolean;
+  reasoningLineLength: number;
+  terminalWidth: number;
 }
 
 type StreamPart = TextStreamPart<ToolSet>;
@@ -73,10 +75,10 @@ const renderErrorLabel = (ctx: RenderContext): string => {
 
 const renderReasoningPrefix = (ctx: RenderContext): string => {
   if (!ctx.useColor) {
-    return "[reasoning] ";
+    return "│ ";
   }
 
-  return `${colors.dim}${colors.cyan}[reasoning] `;
+  return `${colors.dim}${colors.italic}${colors.gray}│ `;
 };
 
 const renderReasoningEnd = (ctx: RenderContext): string => {
@@ -111,12 +113,15 @@ const handleTextEnd = (ctx: RenderContext, mode: StreamMode): StreamMode => {
   return "none";
 };
 
+const REASONING_PREFIX_LENGTH = 2;
+
 const handleReasoningStart = (ctx: RenderContext): StreamMode => {
   if (!ctx.showReasoning) {
     return "none";
   }
   writeLine(ctx);
   write(ctx, renderReasoningPrefix(ctx));
+  ctx.reasoningLineLength = REASONING_PREFIX_LENGTH;
   return "reasoning";
 };
 
@@ -127,7 +132,27 @@ const handleReasoningDelta = (
   if (!ctx.showReasoning) {
     return "none";
   }
-  write(ctx, part.text);
+
+  const prefix = renderReasoningPrefix(ctx);
+  const colorSuffix = ctx.useColor
+    ? `${colors.dim}${colors.italic}${colors.gray}`
+    : "";
+  const colorReset = ctx.useColor ? colors.reset : "";
+  const maxWidth = ctx.terminalWidth - 6;
+
+  for (const char of part.text) {
+    if (char === "\n") {
+      write(ctx, `${colorReset}\n${prefix}${colorSuffix}`);
+      ctx.reasoningLineLength = REASONING_PREFIX_LENGTH;
+    } else if (ctx.reasoningLineLength >= maxWidth) {
+      write(ctx, `${colorReset}\n${prefix}${colorSuffix}${char}`);
+      ctx.reasoningLineLength = REASONING_PREFIX_LENGTH + 1;
+    } else {
+      write(ctx, char);
+      ctx.reasoningLineLength++;
+    }
+  }
+
   return "reasoning";
 };
 
@@ -286,6 +311,8 @@ export const renderFullStream = async <TOOLS extends ToolSet>(
     showSources: options.showSources ?? true,
     showFiles: options.showFiles ?? true,
     useColor: options.useColor ?? Boolean(process.stdout.isTTY),
+    reasoningLineLength: 0,
+    terminalWidth: process.stdout.columns || 80,
   };
 
   let mode: StreamMode = "none";
