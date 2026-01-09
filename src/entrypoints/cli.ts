@@ -8,6 +8,7 @@ import { createClearCommand } from "../commands/clear";
 import { createModelCommand } from "../commands/model";
 import { createRenderCommand } from "../commands/render";
 import { createThinkCommand } from "../commands/think";
+import { createToolFallbackCommand } from "../commands/tool-fallback";
 import { MessageHistory } from "../context/message-history";
 import { env } from "../env";
 import { colorize } from "../interaction/colors";
@@ -34,11 +35,13 @@ registerCommand(
     tools: agentManager.getTools(),
     messages: messageHistory.toModelMessages(),
     thinkingEnabled: agentManager.isThinkingEnabled(),
+    toolFallbackEnabled: agentManager.isToolFallbackEnabled(),
   }))
 );
 registerCommand(createModelCommand());
 registerCommand(createClearCommand(messageHistory));
 registerCommand(createThinkCommand());
+registerCommand(createToolFallbackCommand());
 
 const processAgentResponse = async (rl: Interface): Promise<void> => {
   const stream = await agentManager.stream(messageHistory.toModelMessages());
