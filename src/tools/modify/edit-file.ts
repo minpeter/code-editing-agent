@@ -9,6 +9,235 @@ interface EditResult {
   context: string;
 }
 
+interface SimilarStringCandidate {
+  text: string;
+  lineNumber: number;
+  similarity: number;
+  context: string;
+}
+
+interface FileIssues {
+  hasNonAscii: boolean;
+  hasCRLF: boolean;
+  hasReplacementChar: boolean;
+  nonAsciiCount: number;
+}
+
+function escapeUnicode(str: string): string {
+  return str
+    .split("")
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      if (code > 127) {
+        return `\\u${code.toString(16).toUpperCase().padStart(4, "0")}`;
+      }
+      return char;
+    })
+    .join("");
+}
+
+function levenshteinDistance(str1: string, str2: string): number {
+  const len1 = str1.length;
+  const len2 = str2.length;
+
+  if (Math.abs(len1 - len2) > Math.max(len1, len2) * 0.7) {
+    return Math.max(len1, len2);
+  }
+
+  const matrix: number[][] = Array(len1 + 1)
+    .fill(null)
+    .map(() => Array(len2 + 1).fill(0));
+
+  for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[len1][len2];
+}
+
+function calculateSimilarity(str1: string, str2: string): number {
+  if (str1 === str2) return 100;
+  if (str1.length === 0 || str2.length === 0) return 0;
+
+  const distance = levenshteinDistance(str1, str2);
+  const maxLen = Math.max(str1.length, str2.length);
+  const similarity = ((maxLen - distance) / maxLen) * 100;
+
+  return Math.max(0, Math.min(100, similarity));
+}
+
+function extractLineContext(
+  lines: string[],
+  lineIdx: number,
+  contextLines: number
+): string {
+  const start = Math.max(0, lineIdx - contextLines);
+  const end = Math.min(lines.length - 1, lineIdx + contextLines);
+
+  return lines
+    .slice(start, end + 1)
+    .map((line, idx) => {
+      const actualLineNum = start + idx + 1;
+      const marker = actualLineNum === lineIdx + 1 ? ">" : " ";
+      return `${marker} ${actualLineNum.toString().padStart(4)} | ${line}`;
+    })
+    .join("\n");
+}
+
+function findSimilarStrings(
+  content: string,
+  searchStr: string,
+  options: {
+    threshold?: number;
+    maxResults?: number;
+    contextLines?: number;
+  } = {}
+): SimilarStringCandidate[] {
+  const { threshold = 50, maxResults = 3, contextLines = 2 } = options;
+
+  const lines = content.split("\n");
+  const candidates: SimilarStringCandidate[] = [];
+
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
+
+    const lineSimilarity = calculateSimilarity(line, searchStr);
+    if (lineSimilarity >= threshold) {
+      candidates.push({
+        text: line,
+        lineNumber: lineIdx + 1,
+        similarity: Math.round(lineSimilarity),
+        context: extractLineContext(lines, lineIdx, contextLines),
+      });
+    }
+
+    const minLen = Math.max(1, searchStr.length - 5);
+    const maxLen = searchStr.length + 5;
+
+    for (let start = 0; start < line.length; start++) {
+      for (
+        let len = minLen;
+        len <= maxLen && start + len <= line.length;
+        len++
+      ) {
+        const substring = line.slice(start, start + len);
+        const similarity = calculateSimilarity(substring, searchStr);
+
+        if (similarity >= threshold) {
+          candidates.push({
+            text: substring,
+            lineNumber: lineIdx + 1,
+            similarity: Math.round(similarity),
+            context: extractLineContext(lines, lineIdx, contextLines),
+          });
+        }
+      }
+    }
+  }
+
+  return candidates
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, maxResults)
+    .filter(
+      (candidate, index, self) =>
+        index === self.findIndex((c) => c.text === candidate.text)
+    );
+}
+
+function detectFileIssues(content: string): FileIssues {
+  const hasNonAscii = /[^\x00-\x7F]/.test(content);
+  const hasCRLF = content.includes("\r\n");
+  const hasReplacementChar = content.includes("\uFFFD");
+  const nonAsciiCount = (content.match(/[^\x00-\x7F]/g) || []).length;
+
+  return {
+    hasNonAscii,
+    hasCRLF,
+    hasReplacementChar,
+    nonAsciiCount,
+  };
+}
+
+function buildEnhancedErrorMessage(
+  path: string,
+  oldStr: string,
+  content: string
+): string {
+  const issues = detectFileIssues(content);
+  const candidates = findSimilarStrings(content, oldStr, {
+    threshold: 40,
+    maxResults: 3,
+    contextLines: 2,
+  });
+
+  let errorMsg = `old_str not found in file\n\n`;
+  errorMsg += `SEARCH TARGET (escaped):\n`;
+  errorMsg += `  old_str = "${escapeUnicode(oldStr)}"\n`;
+  errorMsg += `  Length: ${oldStr.length} characters\n`;
+
+  if (oldStr.length <= 20) {
+    const bytes = Array.from(oldStr)
+      .map((c) => c.charCodeAt(0).toString(16).padStart(2, "0"))
+      .join(" ");
+    errorMsg += `  Bytes (hex): ${bytes}\n`;
+  }
+
+  errorMsg += `\n❌ This exact string was not found in the file.\n`;
+
+  if (candidates.length > 0) {
+    errorMsg += `\n🔍 SIMILAR STRINGS FOUND (you might be looking for one of these):\n`;
+
+    candidates.forEach((candidate, idx) => {
+      errorMsg += `\n${idx + 1}. Line ${candidate.lineNumber} (${candidate.similarity}% similar):\n`;
+      errorMsg += `   Visual: "${candidate.text}"\n`;
+      errorMsg += `   Escaped: "${escapeUnicode(candidate.text)}"\n`;
+      errorMsg += `\n   Context:\n`;
+      errorMsg += candidate.context
+        .split("\n")
+        .map((line) => `   ${line}`)
+        .join("\n");
+      errorMsg += `\n`;
+    });
+
+    errorMsg += `\n💡 SUGGESTION:\n`;
+    errorMsg += `   Use one of the escaped strings above as your old_str.\n`;
+    errorMsg += `   Example:\n`;
+    errorMsg += `     old_str = "${escapeUnicode(candidates[0].text)}"\n`;
+  }
+
+  if (issues.hasNonAscii || issues.hasCRLF || issues.hasReplacementChar) {
+    errorMsg += `\n⚠️  FILE DIAGNOSTICS:\n`;
+    if (issues.hasNonAscii) {
+      errorMsg += `   • Non-ASCII characters: ${issues.nonAsciiCount} found\n`;
+    }
+    if (issues.hasReplacementChar) {
+      errorMsg += `   • Replacement characters (�): YES (possible encoding corruption)\n`;
+    }
+    if (issues.hasCRLF) {
+      errorMsg += `   • Line endings: CRLF (Windows-style)\n`;
+    } else {
+      errorMsg += `   • Line endings: LF (Unix-style)\n`;
+    }
+  }
+
+  errorMsg += `\n📋 RECOVERY STRATEGIES:\n`;
+  errorMsg += `   1. Re-run read_file to see the exact file content\n`;
+  errorMsg += `   2. Copy the EXACT text from read_file output (don't guess)\n`;
+  errorMsg += `   3. If edit_file keeps failing, use write_file to rewrite the entire file\n`;
+
+  return errorMsg;
+}
+
 function extractEditContext(
   content: string,
   editStartIndex: number,
@@ -110,7 +339,7 @@ export async function executeEditFile({
   }
 
   if (old_str !== "" && !content.includes(old_str)) {
-    throw new Error("old_str not found in file");
+    throw new Error(buildEnhancedErrorMessage(path, old_str, content));
   }
 
   let newContent: string;
@@ -156,7 +385,7 @@ export async function executeEditFile({
   }
 
   if (content === newContent && old_str !== "") {
-    throw new Error("old_str not found in file");
+    throw new Error(buildEnhancedErrorMessage(path, old_str, content));
   }
 
   await writeFile(path, newContent, "utf-8");

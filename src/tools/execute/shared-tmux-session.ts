@@ -424,10 +424,49 @@ class SharedTmuxSession {
     if (!this.initialized) {
       return;
     }
-    this.execSync(`tmux kill-session -t ${this.sessionId} 2>/dev/null`);
-    this.initialized = false;
-    this.previousBuffer = null;
+
+    try {
+      if (this.isSessionAlive()) {
+        const result = this.execSync(`tmux kill-session -t ${this.sessionId}`);
+        if (result.status !== 0) {
+          console.error(
+            `Warning: Failed to kill tmux session ${this.sessionId}: ${result.stderr}`
+          );
+        } else {
+          console.error(`Cleaned up tmux session: ${this.sessionId}`);
+        }
+      }
+    } catch (error) {
+      console.error(`Error during tmux session cleanup: ${error}`);
+    } finally {
+      this.initialized = false;
+      this.previousBuffer = null;
+    }
   }
+
+  try;
+  {
+      if (this.
+  isSessionAlive()
+  ) {
+        const
+  result = this.execSync(`tmux kill-session -t ${this.sessionId}`);
+  if (result.status !== 0) {
+          console.error(
+            `Warning: Failed to kill tmux session ${this.sessionId}: ${result.stderr}`
+          );
+        }
+}
+} catch (error)
+{
+  console.error(`Error during tmux session cleanup: ${error}`);
+}
+finally
+{
+  this.initialized = false;
+  this.previousBuffer = null;
+}
+}
 }
 
 export const sharedSession = SharedTmuxSession.getInstance();

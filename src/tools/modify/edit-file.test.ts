@@ -322,4 +322,101 @@ describe("editFileTool", () => {
       expect(content).toBe('const x = { a: 1, b: "test" };');
     });
   });
+
+  describe("enhanced error messages with Unicode", () => {
+    it("provides helpful suggestions when Unicode characters cause mismatch", async () => {
+      const testFile = join(tempDir, "unicode-corrupt.txt");
+      writeFileSync(testFile, "model = load(model\u0D4D\n");
+
+      try {
+        await executeEditFile({
+          path: testFile,
+          old_str: "modelname",
+          new_str: "model_name",
+          replace_all: false,
+        });
+      } catch (error) {
+        const errorMsg = (error as Error).message;
+        expect(errorMsg).toContain("SEARCH TARGET");
+        expect(errorMsg).toContain("escaped");
+      }
+    });
+
+    it("suggests similar strings when exact match fails", async () => {
+      const testFile = join(tempDir, "unicode-suggest.txt");
+      writeFileSync(
+        testFile,
+        "if probs[1] >= probs[\u6E38\u620F] else negative\n"
+      );
+
+      try {
+        await executeEditFile({
+          path: testFile,
+          old_str: "probs[1] >= probs[0]",
+          new_str: "probs[1] > probs[0]",
+          replace_all: false,
+        });
+      } catch (error) {
+        const errorMsg = (error as Error).message;
+        expect(errorMsg).toContain("SIMILAR STRINGS FOUND");
+        expect(errorMsg).toContain("Escaped:");
+        expect(errorMsg).toContain("SUGGESTION");
+      }
+    });
+
+    it("detects non-ASCII characters in file diagnostics", async () => {
+      const testFile = join(tempDir, "unicode-diagnostic.txt");
+      writeFileSync(testFile, "hello\u{1F600}world\n");
+
+      try {
+        await executeEditFile({
+          path: testFile,
+          old_str: "nonexistent",
+          new_str: "replacement",
+          replace_all: false,
+        });
+      } catch (error) {
+        const errorMsg = (error as Error).message;
+        expect(errorMsg).toContain("FILE DIAGNOSTICS");
+        expect(errorMsg).toContain("Non-ASCII characters");
+      }
+    });
+
+    it("provides recovery strategies in error message", async () => {
+      const testFile = join(tempDir, "unicode-recovery.txt");
+      writeFileSync(testFile, "some content");
+
+      try {
+        await executeEditFile({
+          path: testFile,
+          old_str: "missing",
+          new_str: "replacement",
+          replace_all: false,
+        });
+      } catch (error) {
+        const errorMsg = (error as Error).message;
+        expect(errorMsg).toContain("RECOVERY STRATEGIES");
+        expect(errorMsg).toContain("Re-run read_file");
+        expect(errorMsg).toContain("write_file");
+      }
+    });
+
+    it("escapes Unicode in error messages for copy-paste", async () => {
+      const testFile = join(tempDir, "unicode-escape.txt");
+      const content = "test\u0D4Dstring\nother line";
+      writeFileSync(testFile, content);
+
+      try {
+        await executeEditFile({
+          path: testFile,
+          old_str: "teststring",
+          new_str: "right",
+          replace_all: false,
+        });
+      } catch (error) {
+        const errorMsg = (error as Error).message;
+        expect(errorMsg).toContain("\\u0D4D");
+      }
+    });
+  });
 });

@@ -15,6 +15,7 @@ import { cleanupSession } from "../tools/execute/shared-tmux-session";
 const messageHistory = new MessageHistory();
 
 let rlInstance: Interface | null = null;
+let shouldExit = false;
 
 registerCommand(
   createRenderCommand(() => ({
@@ -52,18 +53,28 @@ const run = async (): Promise<void> => {
   rlInstance = rl;
 
   const handleGracefulShutdown = () => {
+    shouldExit = true;
+    console.log("\nShutting down...");
+
     if (rlInstance) {
-      console.log("\nReceived interrupt signal, cleaning up...");
       rlInstance.close();
     }
+
+    cleanupSession();
+    process.exit(0);
   };
+
   process.on("SIGINT", handleGracefulShutdown);
 
   try {
-    while (true) {
-      const input = await rl.question("You: ");
+    while (!shouldExit) {
+      const input = await rl.question("You: ").catch(() => "");
       const trimmed = input.trim();
-      if (trimmed.length === 0 || trimmed.toLowerCase() === "exit") {
+      if (
+        shouldExit ||
+        trimmed.length === 0 ||
+        trimmed.toLowerCase() === "exit"
+      ) {
         break;
       }
 
@@ -84,6 +95,9 @@ const run = async (): Promise<void> => {
       messageHistory.addUserMessage(trimmed);
       await processAgentResponse(rl);
     }
+  } catch (error) {
+    console.error("Error:", error);
+    throw error;
   } finally {
     process.off("SIGINT", handleGracefulShutdown);
     rlInstance = null;
