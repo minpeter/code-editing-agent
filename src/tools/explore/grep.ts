@@ -41,7 +41,10 @@ function runRipgrep(args: string[], cwd: string): Promise<GrepResult> {
           truncated,
         });
       } else {
-        reject(new Error(`ripgrep failed with code ${code}: ${stderr}`));
+        const errorDetail =
+          stderr ||
+          "Check that regex pattern is valid and you have read permissions.";
+        reject(new Error(`Search failed (exit code ${code}): ${errorDetail}`));
       }
     });
 

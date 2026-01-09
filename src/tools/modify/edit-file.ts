@@ -422,8 +422,14 @@ export async function executeEditFile({
   new_str,
   replace_all = false,
 }: EditFileInput): Promise<string> {
-  if (!path || old_str === new_str) {
-    throw new Error("Invalid input parameters");
+  if (!path) {
+    throw new Error("Missing required parameter: path");
+  }
+  if (old_str === new_str) {
+    throw new Error(
+      "old_str and new_str are identical - no changes to make. " +
+        "If you intended to make a change, verify the content differs."
+    );
   }
 
   let content: string;

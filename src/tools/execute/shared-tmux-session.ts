@@ -141,7 +141,11 @@ class SharedTmuxSession {
 
   private ensureSession(): void {
     if (this.destroyed) {
-      throw new Error("Session has been destroyed and cannot be recreated");
+      throw new Error(
+        "Terminal session has been destroyed. " +
+          "This is an internal error - the session should auto-recover. " +
+          "Try the command again."
+      );
     }
 
     if (this.initialized && this.isSessionAlive()) {
@@ -228,7 +232,11 @@ class SharedTmuxSession {
     );
 
     if (waitResult.exitCode !== 0) {
-      throw new Error(`Command timed out after ${maxTimeoutMs}ms`);
+      throw new Error(
+        `Command timed out after ${maxTimeoutMs}ms. ` +
+          "The process may still be running. " +
+          "Use shell_interact to check output or send <Ctrl+C> to interrupt."
+      );
     }
   }
 

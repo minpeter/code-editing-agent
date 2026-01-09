@@ -234,7 +234,7 @@ describe("editFileTool", () => {
           new_str: "content",
           replace_all: false,
         })
-      ).rejects.toThrow("Invalid input parameters");
+      ).rejects.toThrow("old_str and new_str are identical");
     });
 
     it("throws error for non-existent file (unless creating)", async () => {

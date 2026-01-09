@@ -110,14 +110,14 @@ export async function checkFileReadable(
   if (pathForIgnoreCheck && ig.ignores(pathForIgnoreCheck)) {
     return {
       allowed: false,
-      reason: `File is ignored by .gitignore: ${filePath}`,
+      reason: `File '${filePath}' is excluded by .gitignore. Use glob with respect_git_ignore: false if you need to access it.`,
     };
   }
 
   if (isBinaryFile(filePath)) {
     return {
       allowed: false,
-      reason: `Binary file cannot be read: ${filePath}`,
+      reason: `File '${filePath}' is binary. read_file only supports text files. Use appropriate tools for binary content.`,
     };
   }
 
