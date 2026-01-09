@@ -4,11 +4,15 @@ import {
   formatBackgroundMessage,
   formatTerminalScreen,
   formatTimeoutMessage,
-} from "./format-utils.js";
+} from "./format-utils";
+import {
+  detectInteractivePrompt,
+  formatDetectionResults,
+} from "./interactive-detector";
 import {
   buildEnvPrefix,
   wrapCommandNonInteractive,
-} from "./noninteractive-wrapper.js";
+} from "./noninteractive-wrapper";
 
 const SESSION_PREFIX = "cea";
 const DEFAULT_TIMEOUT_MS = 180_000;
@@ -322,6 +326,42 @@ class SharedTmuxSession {
     return formatTerminalScreen(this.getVisibleScreen());
   }
 
+  checkInteractiveState(): { isBlocking: boolean; message: string | null } {
+    if (!(this.initialized && this.isSessionAlive())) {
+      return { isBlocking: false, message: null };
+    }
+
+    const screen = this.capturePane(false);
+    const results = detectInteractivePrompt({
+      terminalContent: screen,
+      sessionId: this.sessionId,
+    });
+
+    const hasConfirmedInteractivePrompt = results.some(
+      (r) => r.confidence === "high"
+    );
+
+    if (!hasConfirmedInteractivePrompt) {
+      return { isBlocking: false, message: null };
+    }
+
+    const detectionMessage = formatDetectionResults(results);
+    const errorMessage = [
+      "[ERROR] Cannot execute command - terminal is in interactive state",
+      "",
+      detectionMessage,
+      "",
+      "[HOW TO RESOLVE]",
+      "1. Use shell_interact('<Ctrl+C>') to terminate the current process",
+      "2. Then use shell_execute with your command",
+      "",
+      "TIP: For servers/daemons, run in background to avoid blocking:",
+      "  shell_execute('nohup your_command > /tmp/output.log 2>&1 &')",
+    ].join("\n");
+
+    return { isBlocking: true, message: errorMessage };
+  }
+
   private endsWithBackgroundOperator(command: string): boolean {
     const trimmed = command.trim();
     const endsWithAmpersand = trimmed.endsWith("&");
@@ -401,6 +441,14 @@ class SharedTmuxSession {
     options: { workdir?: string; timeoutMs?: number } = {}
   ): Promise<ExecuteResult> {
     this.ensureSession();
+
+    const interactiveCheck = this.checkInteractiveState();
+    if (interactiveCheck.isBlocking) {
+      return {
+        exitCode: 1,
+        output: interactiveCheck.message || "Terminal is in interactive state",
+      };
+    }
 
     const { workdir, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
 

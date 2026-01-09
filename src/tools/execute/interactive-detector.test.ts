@@ -80,6 +80,80 @@ describe("detectInteractivePrompt", () => {
       const regexResult = results.find((r) => r.method === "regex_pattern");
       expect(regexResult).toBeUndefined();
     });
+
+    it("detects less pager at end of file", () => {
+      const context: DetectionContext = {
+        terminalContent: "some content\nmore content\n(END)",
+      };
+
+      const results = detectInteractivePrompt(context);
+
+      const regexResult = results.find((r) => r.method === "regex_pattern");
+      expect(regexResult).toBeDefined();
+      expect(regexResult?.confidence).toBe("high");
+      expect(regexResult?.detail).toContain("Pager");
+    });
+
+    it("detects less pager press RETURN prompt", () => {
+      const context: DetectionContext = {
+        terminalContent:
+          "There is no --invalid option  (press RETURN)\nsome help text",
+      };
+
+      const results = detectInteractivePrompt(context);
+
+      const regexResult = results.find((r) => r.method === "regex_pattern");
+      expect(regexResult).toBeDefined();
+      expect(regexResult?.confidence).toBe("high");
+    });
+
+    it("detects more pager", () => {
+      const context: DetectionContext = {
+        terminalContent: "file content here\n-- More --",
+      };
+
+      const results = detectInteractivePrompt(context);
+
+      const regexResult = results.find((r) => r.method === "regex_pattern");
+      expect(regexResult).toBeDefined();
+      expect(regexResult?.confidence).toBe("high");
+    });
+
+    it("detects pager colon prompt on last line", () => {
+      const context: DetectionContext = {
+        terminalContent: "diff output here\nmore lines\n:",
+      };
+
+      const results = detectInteractivePrompt(context);
+
+      const regexResult = results.find((r) => r.method === "regex_pattern");
+      expect(regexResult).toBeDefined();
+      expect(regexResult?.confidence).toBe("high");
+      expect(regexResult?.detail).toContain("Pager command prompt");
+    });
+
+    it("does not detect pager when already exited to shell prompt", () => {
+      const context: DetectionContext = {
+        terminalContent: "diff output\n(END)\nuser@host:~$",
+      };
+
+      const results = detectInteractivePrompt(context);
+
+      const regexResult = results.find((r) => r.method === "regex_pattern");
+      expect(regexResult).toBeUndefined();
+    });
+
+    it("does not detect pager (END) when shell prompt is present", () => {
+      const context: DetectionContext = {
+        terminalContent:
+          "some content\nmore content\n(END)\nminpeter@mac:~/project$",
+      };
+
+      const results = detectInteractivePrompt(context);
+
+      const regexResult = results.find((r) => r.method === "regex_pattern");
+      expect(regexResult).toBeUndefined();
+    });
   });
 
   describe("last_line_prompt detection (low confidence)", () => {
@@ -218,7 +292,7 @@ describe("formatDetectionResults", () => {
     expect(formatted).toContain("[INTERACTIVE PROMPT DETECTED]");
     expect(formatted).toContain("regex_pattern");
     expect(formatted).toContain("high");
-    expect(formatted).toContain("[REQUIRED ACTIONS]");
+    expect(formatted).toContain("[SUGGESTED ACTIONS]");
     expect(formatted).toContain("Y<Enter>");
   });
 

@@ -1,12 +1,10 @@
 import { spawnSync } from "node:child_process";
-import {
-  detectLinuxProcTtyWait,
-  isLinuxPlatform,
-} from "./linux-proc-detector.js";
-import { detectOutputStallSync } from "./output-stall-detector.js";
+import { detectLinuxProcTtyWait, isLinuxPlatform } from "./linux-proc-detector";
+import { detectOutputStallSync } from "./output-stall-detector";
 
 const WHITESPACE_SPLIT = /\s+/;
 const SHELL_PROMPT_ONLY = /^\s*[$#%]\s*$/;
+const SHELL_PROMPT_END = /[$#%]\s*$/;
 const PROMPT_INDICATOR_1 = /[?:>]\s*$/;
 const PROMPT_INDICATOR_2 = /\]\s*$/;
 
@@ -109,6 +107,31 @@ const INTERACTIVE_PATTERNS: PatternMatch[] = [
     description: "apt-get in progress (not interactive)",
     suggestedResponse: "",
   },
+  {
+    pattern: "\\(END\\)",
+    description: "Pager (less/more) at end of file",
+    suggestedResponse: "q<Enter> to quit pager",
+  },
+  {
+    pattern: "\\(press RETURN\\)",
+    description: "Pager waiting for confirmation",
+    suggestedResponse: "<Enter> to continue, or q<Enter> to quit",
+  },
+  {
+    pattern: "-- More --",
+    description: "More pager waiting",
+    suggestedResponse: "q<Enter> to quit, or <Space> for next page",
+  },
+  {
+    pattern: "HELP -- Press",
+    description: "Pager help screen",
+    suggestedResponse: "q<Enter> to quit help, then q<Enter> to quit pager",
+  },
+  {
+    pattern: "^:\\s*$",
+    description: "Pager command prompt (less/vim)",
+    suggestedResponse: "q<Enter> to quit pager, or :q<Enter> for vim",
+  },
 ];
 
 const LAST_LINE_PROMPT_PATTERNS = [
@@ -125,17 +148,38 @@ const LAST_LINE_PROMPT_PATTERNS = [
   { pattern: /type\s+(your|a|the)/i, description: "Type input prompt" },
 ];
 
+function getLastMeaningfulLine(content: string): string {
+  const lines = content.split("\n").filter((line) => line.trim().length > 0);
+  const lastLine = [...lines]
+    .reverse()
+    .find((line) => !(line.includes("__CEA_") || line.includes("tmux wait")));
+  return lastLine?.trim() || "";
+}
+
+function isShellPromptLine(line: string): boolean {
+  return SHELL_PROMPT_ONLY.test(line) || SHELL_PROMPT_END.test(line);
+}
+
 function detectByRegexPattern(content: string): DetectionResult | null {
   for (const {
     pattern,
     description,
     suggestedResponse,
   } of INTERACTIVE_PATTERNS) {
-    const regex = new RegExp(pattern, "i");
+    const regex = new RegExp(pattern, "im");
     if (regex.test(content)) {
       if (!suggestedResponse) {
         return null;
       }
+
+      const isPagerPattern = description.toLowerCase().includes("pager");
+      if (isPagerPattern) {
+        const lastLine = getLastMeaningfulLine(content);
+        if (isShellPromptLine(lastLine)) {
+          continue;
+        }
+      }
+
       return {
         detected: true,
         method: "regex_pattern",
@@ -406,16 +450,7 @@ export function formatDetectionResults(results: DetectionResult[]): string {
     return "";
   }
 
-  const lines: string[] = [
-    "[INTERACTIVE PROMPT DETECTED]",
-    "",
-    "⚠️  TERMINAL BLOCKED - DO NOT use shell_execute  ⚠️",
-    "",
-    "The terminal is occupied by a running process.",
-    "If you call shell_execute now, your command will be sent AS INPUT to this process,",
-    "NOT executed as a new command. This will cause unexpected behavior.",
-    "",
-  ];
+  const lines: string[] = ["[INTERACTIVE PROMPT DETECTED]", ""];
 
   for (const result of results) {
     lines.push(
@@ -425,7 +460,7 @@ export function formatDetectionResults(results: DetectionResult[]): string {
   }
 
   lines.push("");
-  lines.push("[REQUIRED ACTIONS]");
+  lines.push("[SUGGESTED ACTIONS]");
 
   const highConfidenceResult = results.find((r) => r.confidence === "high");
   if (highConfidenceResult) {
@@ -443,19 +478,6 @@ export function formatDetectionResults(results: DetectionResult[]): string {
       lines.push(`• ${action}`);
     }
   }
-
-  lines.push("");
-  lines.push("[FOR LONG-RUNNING PROCESSES]");
-  lines.push("If you intended to start a server or long-running task:");
-  lines.push(
-    "1. First: shell_interact('<Ctrl+C>') to terminate the current process"
-  );
-  lines.push(
-    "2. Then: shell_execute('nohup your_command > /tmp/output.log 2>&1 &') for background execution"
-  );
-  lines.push(
-    "3. Verify: shell_execute('curl ...') or other commands to test the service"
-  );
 
   return lines.join("\n");
 }

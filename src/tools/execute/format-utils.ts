@@ -1,7 +1,7 @@
 import {
   detectInteractivePrompt,
   formatDetectionResults,
-} from "./interactive-detector.js";
+} from "./interactive-detector";
 
 const TERMINAL_SCREEN_PREFIX = "=== Current Terminal Screen ===";
 const TERMINAL_SCREEN_SUFFIX = "=== End of Screen ===";
