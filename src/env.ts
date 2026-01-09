@@ -6,6 +6,7 @@ export const env = createEnv({
     FRIENDLI_TOKEN: z.string().min(1),
     EXPERIMENTAL_TRIM_TRAILING_NEWLINES: z.stringbool().default(true),
     DEBUG_SHOW_FINISH_REASON: z.stringbool().default(false),
+    DEBUG_TMUX_CLEANUP: z.stringbool().default(false),
     TMUX_CLEANUP_SESSION: z.stringbool().default(true),
   },
   runtimeEnv: process.env,

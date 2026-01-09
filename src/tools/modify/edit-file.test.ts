@@ -10,6 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { executeEditFile } from "./edit-file";
 
+const EDITED_LINE_PATTERN = /^>/;
+const CONTEXT_LINE_PATTERN = /^ /;
+
 describe("editFileTool", () => {
   let tempDir: string;
 
@@ -77,8 +80,8 @@ describe("editFileTool", () => {
       const editedLine = lines.find((l: string) => l.includes("EDITED"));
       const contextLine = lines.find((l: string) => l.includes("keep2"));
 
-      expect(editedLine).toMatch(/^>/);
-      expect(contextLine).toMatch(/^ /);
+      expect(editedLine).toMatch(EDITED_LINE_PATTERN);
+      expect(contextLine).toMatch(CONTEXT_LINE_PATTERN);
     });
   });
 
@@ -296,7 +299,7 @@ describe("editFileTool", () => {
       const testFile = join(tempDir, "delete.txt");
       writeFileSync(testFile, "keep\nremove\nkeep");
 
-      const result = await executeEditFile({
+      const _result = await executeEditFile({
         path: testFile,
         old_str: "remove\n",
         new_str: "",
@@ -311,7 +314,7 @@ describe("editFileTool", () => {
       const testFile = join(tempDir, "special.txt");
       writeFileSync(testFile, "placeholder");
 
-      const result = await executeEditFile({
+      const _result = await executeEditFile({
         path: testFile,
         old_str: "placeholder",
         new_str: 'const x = { a: 1, b: "test" };',

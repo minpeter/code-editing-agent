@@ -1,4 +1,5 @@
 import { type SpawnSyncReturns, spawn, spawnSync } from "node:child_process";
+import { env } from "../../env";
 import {
   formatBackgroundMessage,
   formatTerminalScreen,
@@ -51,6 +52,7 @@ class SharedTmuxSession {
   private readonly sessionId: string;
   private previousBuffer: string | null = null;
   private initialized = false;
+  private destroyed = false;
 
   private constructor() {
     this.sessionId = process.env.CEA_SESSION_ID || generateSessionId();
@@ -64,7 +66,12 @@ class SharedTmuxSession {
   }
 
   static resetInstance(): void {
-    if (SharedTmuxSession.instance?.initialized) {
+    if (env.DEBUG_TMUX_CLEANUP && SharedTmuxSession.instance) {
+      console.error(
+        `[DEBUG] resetInstance called. Instance exists: true, sessionId: ${SharedTmuxSession.instance.sessionId}`
+      );
+    }
+    if (SharedTmuxSession.instance) {
       SharedTmuxSession.instance.cleanup();
     }
     SharedTmuxSession.instance = null;
@@ -132,6 +139,10 @@ class SharedTmuxSession {
   }
 
   private ensureSession(): void {
+    if (this.destroyed) {
+      throw new Error("Session has been destroyed and cannot be recreated");
+    }
+
     if (this.initialized && this.isSessionAlive()) {
       return;
     }
@@ -421,52 +432,47 @@ class SharedTmuxSession {
   }
 
   cleanup(): void {
-    if (!this.initialized) {
+    if (this.destroyed) {
       return;
     }
 
+    if (env.DEBUG_TMUX_CLEANUP) {
+      console.error(
+        `[DEBUG] cleanup() called for session: ${this.sessionId}, initialized: ${this.initialized}`
+      );
+    }
+
     try {
-      if (this.isSessionAlive()) {
+      const isAlive = this.isSessionAlive();
+      if (env.DEBUG_TMUX_CLEANUP) {
+        console.error(`[DEBUG] Session ${this.sessionId} alive: ${isAlive}`);
+      }
+
+      if (isAlive) {
+        if (env.DEBUG_TMUX_CLEANUP) {
+          console.error(`[DEBUG] Killing tmux session: ${this.sessionId}`);
+        }
         const result = this.execSync(`tmux kill-session -t ${this.sessionId}`);
         if (result.status !== 0) {
           console.error(
             `Warning: Failed to kill tmux session ${this.sessionId}: ${result.stderr}`
           );
-        } else {
-          console.error(`Cleaned up tmux session: ${this.sessionId}`);
+        } else if (env.DEBUG_TMUX_CLEANUP) {
+          console.error(`[DEBUG] Cleaned up tmux session: ${this.sessionId}`);
         }
+      } else if (env.DEBUG_TMUX_CLEANUP) {
+        console.error(
+          `[DEBUG] Session ${this.sessionId} already dead, skipping kill`
+        );
       }
     } catch (error) {
       console.error(`Error during tmux session cleanup: ${error}`);
     } finally {
       this.initialized = false;
       this.previousBuffer = null;
+      this.destroyed = true;
     }
   }
-
-  try;
-  {
-      if (this.
-  isSessionAlive()
-  ) {
-        const
-  result = this.execSync(`tmux kill-session -t ${this.sessionId}`);
-  if (result.status !== 0) {
-          console.error(
-            `Warning: Failed to kill tmux session ${this.sessionId}: ${result.stderr}`
-          );
-        }
-}
-} catch (error)
-{
-  console.error(`Error during tmux session cleanup: ${error}`);
-}
-finally
-{
-  this.initialized = false;
-  this.previousBuffer = null;
-}
-}
 }
 
 export const sharedSession = SharedTmuxSession.getInstance();

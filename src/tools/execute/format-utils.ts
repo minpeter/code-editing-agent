@@ -14,16 +14,20 @@ const CEA_START_MARKER_FRAGMENT_LINE_PATTERN =
 const CEA_EXIT_MARKER_FRAGMENT_LINE_PATTERN =
   /^\s*__CEA_E_\d+-\d+_\d*_*(?:__)?\s*$/;
 
-const CEA_WRAPPER_COMMAND_LINE_PATTERN = /\becho\s+__CEA_S_\d+-\d+__/;
+const CEA_WRAPPER_COMMAND_LINE_PATTERN =
+  /\becho\s+__CEA_[SE]_\d+-\d+(?:_\$\?)?__/g;
 const TMUX_WAIT_INTERNAL_SUFFIX_PATTERN =
-  /\s*;?\s*tmux\s+wait\s+-S\s+cea-[0-9a-z-]+\s*$/i;
+  /\s*;?\s*tmux\s+wait\s+(?:-S\s+)?cea-[0-9a-z-]+\s*$/i;
 
 const SYSTEM_REMINDER_PREFIX = "[SYSTEM REMINDER]";
 const TIMEOUT_PREFIX = "[TIMEOUT]";
 const BACKGROUND_PREFIX = "[Background process started]";
 
+const MULTIPLE_NEWLINES_PATTERN = /\n{3,}/g;
+const LEADING_TRAILING_SEMICOLON_PATTERN = /^\s*;\s*|\s*;\s*$/g;
+
 export function stripInternalMarkers(content: string): string {
-  if (!content.includes("__CEA_") && !content.includes("tmux wait")) {
+  if (!(content.includes("__CEA_") || content.includes("tmux wait"))) {
     return content.trim();
   }
 
@@ -40,21 +44,31 @@ export function stripInternalMarkers(content: string): string {
       continue;
     }
 
-    if (CEA_WRAPPER_COMMAND_LINE_PATTERN.test(line)) {
-      continue;
-    }
+    let processedLine = line;
 
-    const withoutWait = line.replace(TMUX_WAIT_INTERNAL_SUFFIX_PATTERN, "");
-    const withoutMarkers = withoutWait
+    processedLine = processedLine.replace(CEA_WRAPPER_COMMAND_LINE_PATTERN, "");
+
+    processedLine = processedLine.replace(
+      TMUX_WAIT_INTERNAL_SUFFIX_PATTERN,
+      ""
+    );
+    processedLine = processedLine
       .replace(CEA_START_MARKER_PATTERN, "")
       .replace(CEA_EXIT_MARKER_PATTERN, "");
 
-    cleanedLines.push(withoutMarkers);
+    processedLine = processedLine.replace(
+      LEADING_TRAILING_SEMICOLON_PATTERN,
+      ""
+    );
+
+    if (processedLine.trim()) {
+      cleanedLines.push(processedLine);
+    }
   }
 
   return cleanedLines
     .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(MULTIPLE_NEWLINES_PATTERN, "\n\n")
     .trim();
 }
 

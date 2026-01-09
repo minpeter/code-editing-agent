@@ -8,6 +8,7 @@ import { createClearCommand } from "../commands/clear";
 import { createModelCommand } from "../commands/model";
 import { createRenderCommand } from "../commands/render";
 import { MessageHistory } from "../context/message-history";
+import { env } from "../env";
 import { renderFullStream } from "../interaction/stream-renderer";
 import { askBatchApproval } from "../interaction/tool-approval";
 import { cleanupSession } from "../tools/execute/shared-tmux-session";
@@ -16,6 +17,13 @@ const messageHistory = new MessageHistory();
 
 let rlInstance: Interface | null = null;
 let shouldExit = false;
+
+process.on("exit", () => {
+  if (env.DEBUG_TMUX_CLEANUP) {
+    console.error("[DEBUG] Process exit handler called");
+  }
+  cleanupSession();
+});
 
 registerCommand(
   createRenderCommand(() => ({
@@ -99,10 +107,16 @@ const run = async (): Promise<void> => {
     console.error("Error:", error);
     throw error;
   } finally {
+    if (env.DEBUG_TMUX_CLEANUP) {
+      console.error("[DEBUG] Performing cleanup...");
+    }
     process.off("SIGINT", handleGracefulShutdown);
     rlInstance = null;
     rl.close();
     cleanupSession();
+    if (env.DEBUG_TMUX_CLEANUP) {
+      console.error("[DEBUG] Cleanup completed.");
+    }
   }
 };
 

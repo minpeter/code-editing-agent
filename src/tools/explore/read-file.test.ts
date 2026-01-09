@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { executeReadFile } from "./read-file";
 
+const ISO_DATE_PATTERN = /\d{4}-\d{2}-\d{2}T/;
+
 describe("executeReadFile", () => {
   let tempDir: string;
 
@@ -43,7 +45,7 @@ describe("executeReadFile", () => {
       const result = await executeReadFile({ path: testFile });
 
       expect(result).toContain("last_modified:");
-      expect(result).toMatch(/\d{4}-\d{2}-\d{2}T/);
+      expect(result).toMatch(ISO_DATE_PATTERN);
     });
   });
 

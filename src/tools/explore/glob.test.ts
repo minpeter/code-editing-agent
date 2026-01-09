@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { executeGlob } from "./glob";
 
+const MTIME_PATTERN = /mtime: \d{4}-\d{2}-\d{2}T/;
+
 describe("executeGlob", () => {
   let tempDir: string;
 
@@ -60,7 +62,7 @@ describe("executeGlob", () => {
     it("includes mtime for each file", async () => {
       const result = await executeGlob({ pattern: "*.ts", path: tempDir });
 
-      expect(result).toMatch(/mtime: \d{4}-\d{2}-\d{2}T/);
+      expect(result).toMatch(MTIME_PATTERN);
     });
 
     it("includes numbered list", async () => {

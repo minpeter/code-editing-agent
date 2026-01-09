@@ -44,12 +44,16 @@ function levenshteinDistance(str1: string, str2: string): number {
     return Math.max(len1, len2);
   }
 
-  const matrix: number[][] = Array(len1 + 1)
+  const matrix: number[][] = new Array(len1 + 1)
     .fill(null)
-    .map(() => Array(len2 + 1).fill(0));
+    .map(() => new Array(len2 + 1).fill(0));
 
-  for (let i = 0; i <= len1; i++) matrix[i][0] = i;
-  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+  for (let i = 0; i <= len1; i++) {
+    matrix[i][0] = i;
+  }
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
 
   for (let i = 1; i <= len1; i++) {
     for (let j = 1; j <= len2; j++) {
@@ -66,8 +70,12 @@ function levenshteinDistance(str1: string, str2: string): number {
 }
 
 function calculateSimilarity(str1: string, str2: string): number {
-  if (str1 === str2) return 100;
-  if (str1.length === 0 || str2.length === 0) return 0;
+  if (str1 === str2) {
+    return 100;
+  }
+  if (str1.length === 0 || str2.length === 0) {
+    return 0;
+  }
 
   const distance = levenshteinDistance(str1, str2);
   const maxLen = Math.max(str1.length, str2.length);
@@ -154,11 +162,32 @@ function findSimilarStrings(
     );
 }
 
+function hasNonAsciiChars(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code > 127) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function countNonAsciiChars(text: string): number {
+  let count = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code > 127) {
+      count++;
+    }
+  }
+  return count;
+}
+
 function detectFileIssues(content: string): FileIssues {
-  const hasNonAscii = /[^\x00-\x7F]/.test(content);
+  const hasNonAscii = hasNonAsciiChars(content);
   const hasCRLF = content.includes("\r\n");
   const hasReplacementChar = content.includes("\uFFFD");
-  const nonAsciiCount = (content.match(/[^\x00-\x7F]/g) || []).length;
+  const nonAsciiCount = countNonAsciiChars(content);
 
   return {
     hasNonAscii,
@@ -169,7 +198,7 @@ function detectFileIssues(content: string): FileIssues {
 }
 
 function buildEnhancedErrorMessage(
-  path: string,
+  _path: string,
   oldStr: string,
   content: string
 ): string {
@@ -180,8 +209,8 @@ function buildEnhancedErrorMessage(
     contextLines: 2,
   });
 
-  let errorMsg = `old_str not found in file\n\n`;
-  errorMsg += `SEARCH TARGET (escaped):\n`;
+  let errorMsg = "old_str not found in file\n\n";
+  errorMsg += "SEARCH TARGET (escaped):\n";
   errorMsg += `  old_str = "${escapeUnicode(oldStr)}"\n`;
   errorMsg += `  Length: ${oldStr.length} characters\n`;
 
@@ -192,48 +221,51 @@ function buildEnhancedErrorMessage(
     errorMsg += `  Bytes (hex): ${bytes}\n`;
   }
 
-  errorMsg += `\n❌ This exact string was not found in the file.\n`;
+  errorMsg += "\n❌ This exact string was not found in the file.\n";
 
   if (candidates.length > 0) {
-    errorMsg += `\n🔍 SIMILAR STRINGS FOUND (you might be looking for one of these):\n`;
+    errorMsg +=
+      "\n🔍 SIMILAR STRINGS FOUND (you might be looking for one of these):\n";
 
     candidates.forEach((candidate, idx) => {
       errorMsg += `\n${idx + 1}. Line ${candidate.lineNumber} (${candidate.similarity}% similar):\n`;
       errorMsg += `   Visual: "${candidate.text}"\n`;
       errorMsg += `   Escaped: "${escapeUnicode(candidate.text)}"\n`;
-      errorMsg += `\n   Context:\n`;
+      errorMsg += "\n   Context:\n";
       errorMsg += candidate.context
         .split("\n")
         .map((line) => `   ${line}`)
         .join("\n");
-      errorMsg += `\n`;
+      errorMsg += "\n";
     });
 
-    errorMsg += `\n💡 SUGGESTION:\n`;
-    errorMsg += `   Use one of the escaped strings above as your old_str.\n`;
-    errorMsg += `   Example:\n`;
+    errorMsg += "\n💡 SUGGESTION:\n";
+    errorMsg += "   Use one of the escaped strings above as your old_str.\n";
+    errorMsg += "   Example:\n";
     errorMsg += `     old_str = "${escapeUnicode(candidates[0].text)}"\n`;
   }
 
   if (issues.hasNonAscii || issues.hasCRLF || issues.hasReplacementChar) {
-    errorMsg += `\n⚠️  FILE DIAGNOSTICS:\n`;
+    errorMsg += "\n⚠️  FILE DIAGNOSTICS:\n";
     if (issues.hasNonAscii) {
       errorMsg += `   • Non-ASCII characters: ${issues.nonAsciiCount} found\n`;
     }
     if (issues.hasReplacementChar) {
-      errorMsg += `   • Replacement characters (�): YES (possible encoding corruption)\n`;
+      errorMsg +=
+        "   • Replacement characters (�): YES (possible encoding corruption)\n";
     }
     if (issues.hasCRLF) {
-      errorMsg += `   • Line endings: CRLF (Windows-style)\n`;
+      errorMsg += "   • Line endings: CRLF (Windows-style)\n";
     } else {
-      errorMsg += `   • Line endings: LF (Unix-style)\n`;
+      errorMsg += "   • Line endings: LF (Unix-style)\n";
     }
   }
 
-  errorMsg += `\n📋 RECOVERY STRATEGIES:\n`;
-  errorMsg += `   1. Re-run read_file to see the exact file content\n`;
+  errorMsg += "\n📋 RECOVERY STRATEGIES:\n";
+  errorMsg += "   1. Re-run read_file to see the exact file content\n";
   errorMsg += `   2. Copy the EXACT text from read_file output (don't guess)\n`;
-  errorMsg += `   3. If edit_file keeps failing, use write_file to rewrite the entire file\n`;
+  errorMsg +=
+    "   3. If edit_file keeps failing, use write_file to rewrite the entire file\n";
 
   return errorMsg;
 }
@@ -307,6 +339,83 @@ const inputSchema = z.object({
 
 export type EditFileInput = z.infer<typeof inputSchema>;
 
+async function handleFileCreation(
+  filePath: string,
+  content: string
+): Promise<string> {
+  const dir = dirname(filePath);
+  if (dir !== ".") {
+    await mkdir(dir, { recursive: true });
+  }
+  await writeFile(filePath, content, "utf-8");
+  return `Successfully created file ${filePath}`;
+}
+
+interface ReplaceResult {
+  newContent: string;
+  replacementCount: number;
+  editResults: EditResult[];
+}
+
+function performReplaceAll(
+  content: string,
+  oldStr: string,
+  newStr: string
+): ReplaceResult {
+  const matchPositions: number[] = [];
+  let pos = content.indexOf(oldStr);
+  while (pos !== -1) {
+    matchPositions.push(pos);
+    pos = content.indexOf(oldStr, pos + 1);
+  }
+
+  let newContent = content;
+  let offset = 0;
+  const editResults: EditResult[] = [];
+
+  for (const originalPos of matchPositions) {
+    const adjustedPos = originalPos + offset;
+    newContent =
+      newContent.slice(0, adjustedPos) +
+      newStr +
+      newContent.slice(adjustedPos + oldStr.length);
+
+    editResults.push(extractEditContext(newContent, adjustedPos, newStr));
+    offset += newStr.length - oldStr.length;
+  }
+
+  return {
+    newContent,
+    replacementCount: matchPositions.length,
+    editResults,
+  };
+}
+
+function performSingleReplace(
+  content: string,
+  oldStr: string,
+  newStr: string
+): ReplaceResult {
+  const matchCount = content.split(oldStr).length - 1;
+  if (matchCount > 1) {
+    throw new Error(
+      `old_str found ${matchCount} times in file. ` +
+        "Use replace_all: true to replace all occurrences, " +
+        "or provide more context to match exactly once."
+    );
+  }
+
+  const editStartIndex = content.indexOf(oldStr);
+  const newContent = content.replace(oldStr, newStr);
+  const editResults = [extractEditContext(newContent, editStartIndex, newStr)];
+
+  return {
+    newContent,
+    replacementCount: 1,
+    editResults,
+  };
+}
+
 export async function executeEditFile({
   path,
   old_str,
@@ -328,12 +437,7 @@ export async function executeEditFile({
       (error as NodeJS.ErrnoException).code === "ENOENT" &&
       old_str === ""
     ) {
-      const dir = dirname(path);
-      if (dir !== ".") {
-        await mkdir(dir, { recursive: true });
-      }
-      await writeFile(path, new_str, "utf-8");
-      return `Successfully created file ${path}`;
+      return await handleFileCreation(path, new_str);
     }
     throw error;
   }
@@ -342,47 +446,9 @@ export async function executeEditFile({
     throw new Error(buildEnhancedErrorMessage(path, old_str, content));
   }
 
-  let newContent: string;
-  let replacementCount = 0;
-
-  const editResults: EditResult[] = [];
-
-  if (replace_all) {
-    const matchPositions: number[] = [];
-    let pos = content.indexOf(old_str);
-    while (pos !== -1) {
-      matchPositions.push(pos);
-      pos = content.indexOf(old_str, pos + 1);
-    }
-    replacementCount = matchPositions.length;
-
-    newContent = content;
-    let offset = 0;
-    for (const originalPos of matchPositions) {
-      const adjustedPos = originalPos + offset;
-      newContent =
-        newContent.slice(0, adjustedPos) +
-        new_str +
-        newContent.slice(adjustedPos + old_str.length);
-
-      editResults.push(extractEditContext(newContent, adjustedPos, new_str));
-      offset += new_str.length - old_str.length;
-    }
-  } else {
-    const matchCount = content.split(old_str).length - 1;
-    if (matchCount > 1) {
-      throw new Error(
-        `old_str found ${matchCount} times in file. ` +
-          "Use replace_all: true to replace all occurrences, " +
-          "or provide more context to match exactly once."
-      );
-    }
-    const editStartIndex = content.indexOf(old_str);
-    newContent = content.replace(old_str, new_str);
-    replacementCount = 1;
-
-    editResults.push(extractEditContext(newContent, editStartIndex, new_str));
-  }
+  const { newContent, replacementCount, editResults } = replace_all
+    ? performReplaceAll(content, old_str, new_str)
+    : performSingleReplace(content, old_str, new_str);
 
   if (content === newContent && old_str !== "") {
     throw new Error(buildEnhancedErrorMessage(path, old_str, content));

@@ -54,7 +54,9 @@ export async function executeGlob({
         path: absolutePath,
         mtime: stats.mtime,
       });
-    } catch {}
+    } catch {
+      // Ignore files that cannot be accessed
+    }
   }
 
   filesWithMtime.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
