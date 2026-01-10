@@ -1,3 +1,20 @@
+---
+name: Git Workflow
+description: Complete git workflow including branch management, commits, and GitHub PR creation using gh CLI. Use when user requests to create PR, push changes, commit code, or perform git operations with GitHub.
+triggers:
+  - create pr
+  - make pull request
+  - commit and push
+  - gh pr create
+  - push changes
+  - create pull request
+  - 올려줘
+  - PR 만들어줘
+  - 커밋해줘
+  - 푸시해줘
+version: 1.0.0
+---
+
 # Git Workflow Skill
 
 ## Overview

@@ -6,6 +6,7 @@ import { readFileTool } from "./explore/read-file";
 import { deleteFileTool } from "./modify/delete-file";
 import { editFileTool } from "./modify/edit-file";
 import { writeFileTool } from "./modify/write-file";
+import { loadSkillTool } from "./planning/load-skill";
 import { todoReadTool } from "./planning/todo-read";
 import { todoWriteTool } from "./planning/todo-write";
 
@@ -18,6 +19,7 @@ export const tools = {
   delete_file: deleteFileTool,
   glob: globTool,
   grep: grepTool,
+  load_skill: loadSkillTool,
   todo_write: todoWriteTool,
   todo_read: todoReadTool,
 } as const;

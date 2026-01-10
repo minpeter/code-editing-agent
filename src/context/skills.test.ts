@@ -1,24 +1,25 @@
 import { describe, expect, it } from "bun:test";
-import { loadSkills } from "./skills";
+import { loadSkillsMetadata } from "./skills";
 
-describe("loadSkills", () => {
-  it("loads git-workflow skill successfully", async () => {
-    const skills = await loadSkills();
+describe("loadSkillsMetadata", () => {
+  it("loads git-workflow skill metadata successfully", async () => {
+    const metadata = await loadSkillsMetadata();
 
-    expect(skills).toContain("# Git Workflow Skill");
-    expect(skills).toContain("gh pr create");
-    expect(skills).toContain("Available Skills");
+    expect(metadata).toContain("Git Workflow");
+    expect(metadata).toContain("git-workflow");
+    expect(metadata).toContain("Available Skills");
   });
 
-  it("includes skill metadata", async () => {
-    const skills = await loadSkills();
+  it("includes skill description", async () => {
+    const metadata = await loadSkillsMetadata();
 
-    expect(skills).toContain("## Skill: git-workflow");
+    expect(metadata).toContain("Complete git workflow");
+    expect(metadata).toContain("load_skill");
   });
 
   it("returns empty string if no skills directory", async () => {
-    const skills = await loadSkills();
+    const metadata = await loadSkillsMetadata();
 
-    expect(typeof skills).toBe("string");
+    expect(typeof metadata).toBe("string");
   });
 });

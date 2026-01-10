@@ -1,0 +1,27 @@
+import { describe, expect, it } from "bun:test";
+import { executeLoadSkill } from "./load-skill";
+
+describe("executeLoadSkill", () => {
+  it("loads git-workflow skill successfully", async () => {
+    const result = await executeLoadSkill({ skillName: "git-workflow" });
+
+    expect(result).toContain("# Skill Loaded: git-workflow");
+    expect(result).toContain("# Git Workflow Skill");
+    expect(result).toContain("gh pr create");
+  });
+
+  it("returns error for non-existent skill", async () => {
+    const result = await executeLoadSkill({ skillName: "non-existent-skill" });
+
+    expect(result).toContain("Error: Skill 'non-existent-skill' not found");
+    expect(result).toContain(".claude/skills/");
+  });
+
+  it("loads skill with frontmatter", async () => {
+    const result = await executeLoadSkill({ skillName: "git-workflow" });
+
+    expect(result).toContain("name: Git Workflow");
+    expect(result).toContain("description:");
+    expect(result).toContain("triggers:");
+  });
+});
