@@ -107,12 +107,12 @@ const extractToolOutput = (
     const result = output as {
       output: string;
       error?: string;
-      exitCode?: number;
+      exit_code?: number;
     };
     return {
       stdout: result.output || "",
       error: result.error,
-      exitCode: result.exitCode,
+      exitCode: result.exit_code,
     };
   }
   return { stdout: String(output) };
