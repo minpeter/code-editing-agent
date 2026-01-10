@@ -10,7 +10,6 @@ const SKILLS_DIR = join(__dirname, "../../skills");
 const inputSchema = z.object({
   skillName: z
     .string()
-    .min(1)
     .describe("Name of the skill to load (e.g., 'git-workflow')"),
 });
 
@@ -19,6 +18,10 @@ export type LoadSkillInput = z.infer<typeof inputSchema>;
 export async function executeLoadSkill({
   skillName,
 }: LoadSkillInput): Promise<string> {
+  if (!skillName || skillName.trim() === "") {
+    throw new Error("skillName must be a non-empty string");
+  }
+
   const skillPath = join(SKILLS_DIR, `${skillName}.md`);
 
   try {
