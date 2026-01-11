@@ -22,6 +22,10 @@ export async function executeLoadSkill({
     throw new Error("skillName must be a non-empty string");
   }
 
+  if (skillName.includes("..") || skillName.includes("/")) {
+    return `Error: Invalid skill name '${skillName}'. Skill names cannot contain '..' or '/'.`;
+  }
+
   const skillPath = join(SKILLS_DIR, `${skillName}.md`);
 
   try {

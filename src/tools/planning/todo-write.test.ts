@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { initializeSession } from "../../context/session";
 import { executeTodoWrite } from "./todo-write";
 
-const testDir = join(process.cwd(), ".sisyphus");
+const testDir = join(process.cwd(), ".cea");
 
 describe("executeTodoWrite", () => {
   beforeEach(async () => {

@@ -1,8 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { TODO_DIR } from "../context/paths";
 import { getSessionId, hasActiveSession } from "../context/session";
-
-const TODO_DIR = ".cea/todos";
 
 export interface TodoItem {
   id: string;

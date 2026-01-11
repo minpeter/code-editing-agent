@@ -2,9 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
+import { TODO_DIR } from "../../context/paths";
 import { getSessionId } from "../../context/session";
-
-const TODO_DIR = ".cea/todos";
 
 const todoItemSchema = z.object({
   id: z.string().describe("Unique identifier for the todo item"),

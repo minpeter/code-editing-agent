@@ -24,4 +24,18 @@ describe("executeLoadSkill", () => {
     expect(result).toContain("description:");
     expect(result).toContain("triggers:");
   });
+
+  it("rejects path traversal attempts with ..", async () => {
+    const result = await executeLoadSkill({ skillName: "../../../etc/passwd" });
+
+    expect(result).toContain("Error: Invalid skill name");
+    expect(result).toContain("cannot contain '..' or '/'");
+  });
+
+  it("rejects path traversal attempts with /", async () => {
+    const result = await executeLoadSkill({ skillName: "foo/bar" });
+
+    expect(result).toContain("Error: Invalid skill name");
+    expect(result).toContain("cannot contain '..' or '/'");
+  });
 });
