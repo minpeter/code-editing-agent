@@ -20,6 +20,8 @@ const PANE_HEIGHT = 40;
 const ENTER_KEYS = new Set(["Enter", "C-m", "KPEnter", "C-j", "^M", "^J"]);
 const NEWLINE_PATTERN = /[\r\n]$/;
 const TRAILING_NEWLINES = /[\r\n]+$/;
+const COMPOUND_COMMAND_PATTERN =
+  /^\s*(\(|\{|if\b|for\b|while\b|until\b|case\b|select\b|function\b|\[\[)/;
 
 let commandCounter = 0;
 function generateCommandId(): string {
@@ -48,12 +50,17 @@ function escapeShellArg(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
+function startsWithCompoundCommand(command: string): boolean {
+  return COMPOUND_COMMAND_PATTERN.test(command);
+}
+
 class SharedTmuxSession {
   private static instance: SharedTmuxSession | null = null;
   private readonly sessionId: string;
   private previousBuffer: string | null = null;
   private initialized = false;
   private destroyed = false;
+  private commandQueue: Promise<void> = Promise.resolve();
 
   private constructor() {
     this.sessionId = process.env.CEA_SESSION_ID || generateSessionId();
@@ -217,6 +224,15 @@ class SharedTmuxSession {
   private buildSendKeysCommand(keys: string[]): string {
     const escapedKeys = keys.map(escapeShellArg).join(" ");
     return `tmux send-keys -t ${this.sessionId} ${escapedKeys}`;
+  }
+
+  private async runExclusive<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.commandQueue.then(task, task);
+    this.commandQueue = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
   }
 
   private async sendBlockingKeys(
@@ -390,7 +406,7 @@ class SharedTmuxSession {
   ): Promise<ExecuteResult> {
     const startupWaitMs = Math.min(timeoutMs, BACKGROUND_STARTUP_WAIT_MS);
 
-    await this.sendKeys([fullCommand, "Enter"], {
+    await this.sendKeys(["C-u", fullCommand, "Enter"], {
       block: false,
       minTimeoutMs: startupWaitMs,
     });
@@ -411,9 +427,17 @@ class SharedTmuxSession {
     const exitMarkerPrefix = `__CEA_E_${cmdId}_`;
     const waitChannel = `${this.sessionId}-${cmdId}`;
 
-    const wrappedCommand = `echo ${startMarker}; ${fullCommand}; echo ${exitMarkerPrefix}$?__; tmux wait -S ${waitChannel}`;
+    const wrappedCommand = [
+      `echo ${startMarker};`,
+      `( trap 'echo ${exitMarkerPrefix}$?__' EXIT; ${fullCommand}; ) || true;`,
+      `tmux wait -S ${waitChannel}`,
+    ].join(" ");
 
-    const sendCommand = this.buildSendKeysCommand([wrappedCommand, "Enter"]);
+    const sendCommand = this.buildSendKeysCommand([
+      "C-u",
+      wrappedCommand,
+      "Enter",
+    ]);
     this.execSync(sendCommand);
 
     const waitResult = await this.execAsync(
@@ -475,35 +499,45 @@ class SharedTmuxSession {
     command: string,
     options: { workdir?: string; timeoutMs?: number } = {}
   ): Promise<ExecuteResult> {
-    this.ensureSession();
+    return await this.runExclusive(async () => {
+      this.ensureSession();
 
-    const interactiveCheck = this.checkInteractiveState();
-    if (interactiveCheck.isBlocking) {
-      return {
-        exitCode: 1,
-        output: interactiveCheck.message || "Terminal is in interactive state",
-      };
-    }
+      const interactiveCheck = this.checkInteractiveState();
+      if (interactiveCheck.isBlocking) {
+        return {
+          exitCode: 1,
+          output: interactiveCheck.message || "Terminal is in interactive state",
+        };
+      }
 
-    const { workdir, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+      const { workdir, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
 
-    this.previousBuffer = this.capturePane(true);
+      this.previousBuffer = this.capturePane(true);
 
-    const wrapperResult = wrapCommandNonInteractive(command);
-    const wrappedCommand = wrapperResult.wrapped
-      ? `${buildEnvPrefix(wrapperResult.env)}${wrapperResult.command}`
-      : command;
+      const wrapperResult = wrapCommandNonInteractive(command);
+      let wrappedCommand = command;
+      if (wrapperResult.wrapped) {
+        const envPrefix = buildEnvPrefix(wrapperResult.env);
+        if (startsWithCompoundCommand(wrapperResult.command)) {
+          wrappedCommand = `${envPrefix}bash -lc ${escapeShellArg(
+            wrapperResult.command
+          )}`;
+        } else {
+          wrappedCommand = `${envPrefix}${wrapperResult.command}`;
+        }
+      }
 
-    let fullCommand = wrappedCommand;
-    if (workdir) {
-      fullCommand = `cd ${escapeShellArg(workdir)} && ${wrappedCommand}`;
-    }
+      let fullCommand = wrappedCommand;
+      if (workdir) {
+        fullCommand = `cd ${escapeShellArg(workdir)} && ${wrappedCommand}`;
+      }
 
-    if (this.endsWithBackgroundOperator(fullCommand)) {
-      return await this.executeAsBackgroundProcess(fullCommand, timeoutMs);
-    }
+      if (this.endsWithBackgroundOperator(fullCommand)) {
+        return await this.executeAsBackgroundProcess(fullCommand, timeoutMs);
+      }
 
-    return await this.executeWithUniqueMarkers(fullCommand, timeoutMs);
+      return await this.executeWithUniqueMarkers(fullCommand, timeoutMs);
+    });
   }
 
   clearHistory(): void {
