@@ -76,13 +76,19 @@ describe("wrapCommandNonInteractive", () => {
     it("does not wrap git status", () => {
       const result = wrapCommandNonInteractive("git status");
 
-      expect(result.wrapped).toBe(false);
+      expect(result.wrapped).toBe(true);
+      expect(result.tool).toBeNull();
+      expect(result.command).toBe("git status");
+      expect(result.env.CI).toBe("true");
     });
 
     it("does not wrap git log", () => {
       const result = wrapCommandNonInteractive("git log --oneline");
 
-      expect(result.wrapped).toBe(false);
+      expect(result.wrapped).toBe(true);
+      expect(result.tool).toBeNull();
+      expect(result.command).toBe("git log --oneline");
+      expect(result.env.CI).toBe("true");
     });
   });
 
@@ -212,7 +218,10 @@ describe("wrapCommandNonInteractive", () => {
     it("does not wrap terraform plan", () => {
       const result = wrapCommandNonInteractive("terraform plan");
 
-      expect(result.wrapped).toBe(false);
+      expect(result.wrapped).toBe(true);
+      expect(result.tool).toBeNull();
+      expect(result.command).toBe("terraform plan");
+      expect(result.env.CI).toBe("true");
     });
   });
 
@@ -220,15 +229,19 @@ describe("wrapCommandNonInteractive", () => {
     it("does not wrap unknown commands", () => {
       const result = wrapCommandNonInteractive("echo hello");
 
-      expect(result.wrapped).toBe(false);
+      expect(result.wrapped).toBe(true);
       expect(result.tool).toBeNull();
       expect(result.command).toBe("echo hello");
+      expect(result.env.CI).toBe("true");
     });
 
     it("does not wrap ls command", () => {
       const result = wrapCommandNonInteractive("ls -la");
 
-      expect(result.wrapped).toBe(false);
+      expect(result.wrapped).toBe(true);
+      expect(result.tool).toBeNull();
+      expect(result.command).toBe("ls -la");
+      expect(result.env.CI).toBe("true");
     });
   });
 });
@@ -270,6 +283,7 @@ describe("getFullWrappedCommand", () => {
   it("returns original command for unrecognized commands", () => {
     const result = getFullWrappedCommand("echo hello");
 
-    expect(result).toBe("echo hello");
+    expect(result).toContain("CI='true'");
+    expect(result).toContain("echo hello");
   });
 });

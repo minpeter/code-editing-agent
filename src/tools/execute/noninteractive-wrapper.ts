@@ -227,13 +227,38 @@ function appendArgs(command: string, args: string[]): string {
   return `${command} ${argsToAdd.join(" ")}`;
 }
 
+function getBaseEnv(): Record<string, string> {
+  const baseEnv: Record<string, string> = {
+    ...process.env,
+    CI: "true",
+    NONINTERACTIVE: "1",
+    NO_TTY: "1",
+    NO_COLOR: "1",
+  };
+
+  if (isWindows()) {
+    baseEnv["GIT_PAGER"] = "more";
+    baseEnv["PAGER"] = "more";
+  } else {
+    baseEnv["TERM"] = "dumb";
+    baseEnv["DEBIAN_FRONTEND"] = "noninteractive";
+    baseEnv["GIT_PAGER"] = "cat";
+    baseEnv["PAGER"] = "cat";
+    baseEnv["LESS"] = "-FX";
+    baseEnv["LC_ALL"] = "en_US.UTF-8";
+  }
+
+  return baseEnv;
+}
+
 export function wrapCommandNonInteractive(command: string): WrapperResult {
   const trimmedCommand = command.trim();
 
   for (const tool of TOOL_PATTERNS) {
     if (tool.pattern.test(trimmedCommand)) {
       let wrappedCommand = trimmedCommand;
-      const env: Record<string, string> = { ...tool.env };
+      const baseEnv = getBaseEnv();
+      const env: Record<string, string> = { ...baseEnv, ...tool.env };
 
       if (tool.prefixArgs && tool.prefixArgs.length > 0) {
         wrappedCommand = insertArgsAfterCommand(
@@ -262,10 +287,10 @@ export function wrapCommandNonInteractive(command: string): WrapperResult {
 
   return {
     command: trimmedCommand,
-    env: {},
-    wrapped: false,
+    env: getBaseEnv(),
+    wrapped: true,
     tool: null,
-    description: null,
+    description: "Base environment variables applied",
   };
 }
 
@@ -295,4 +320,8 @@ export function isLinux(): boolean {
 
 export function isDarwin(): boolean {
   return platform() === "darwin";
+}
+
+function isWindows(): boolean {
+  return platform() === "win32";
 }
