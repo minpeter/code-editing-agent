@@ -77,8 +77,8 @@ const getModel = (modelId: string, provider: ProviderType) => {
   return friendli(modelId);
 };
 
-const ANTHROPIC_THINKING_BUDGET_TOKENS = 10000;
-const ANTHROPIC_MAX_OUTPUT_TOKENS = 64000;
+const ANTHROPIC_THINKING_BUDGET_TOKENS = 10_000;
+const ANTHROPIC_MAX_OUTPUT_TOKENS = 64_000;
 
 const createAgent = (modelId: string, options: CreateAgentOptions = {}) => {
   const provider = options.provider ?? "friendli";
@@ -86,7 +86,9 @@ const createAgent = (modelId: string, options: CreateAgentOptions = {}) => {
   const thinkingEnabled = options.enableThinking ?? false;
 
   const getAnthropicProviderOptions = () => {
-    if (!thinkingEnabled) return undefined;
+    if (!thinkingEnabled) {
+      return undefined;
+    }
 
     // Opus 4.5: use effort parameter
     // Sonnet 4.5: use thinking with budgetTokens
@@ -96,7 +98,10 @@ const createAgent = (modelId: string, options: CreateAgentOptions = {}) => {
     }
     return {
       anthropic: {
-        thinking: { type: "enabled", budgetTokens: ANTHROPIC_THINKING_BUDGET_TOKENS },
+        thinking: {
+          type: "enabled",
+          budgetTokens: ANTHROPIC_THINKING_BUDGET_TOKENS,
+        },
       },
     };
   };
@@ -130,8 +135,7 @@ const createAgent = (modelId: string, options: CreateAgentOptions = {}) => {
     instructions: options.instructions || SYSTEM_PROMPT,
     tools: options.disableApproval ? disableApprovalForTools(tools) : tools,
     maxOutputTokens,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    providerOptions: providerOptions as any,
+    providerOptions,
   });
 };
 
