@@ -24,7 +24,8 @@ function trimTrailingNewlines(message: ModelMessage): ModelMessage {
 
   let lastTextIndex = -1;
   for (let i = content.length - 1; i >= 0; i--) {
-    if (content[i].type === "text") {
+    const part = content[i];
+    if (part && typeof part === "object" && part.type === "text") {
       lastTextIndex = i;
       break;
     }
@@ -41,8 +42,14 @@ function trimTrailingNewlines(message: ModelMessage): ModelMessage {
     return message;
   }
 
-  const newContent = [...content];
-  newContent[lastTextIndex] = { ...textPart, text: trimmedText };
+  // Create a new array with proper type preservation
+  const newContent = content.map((part, idx) => {
+    if (idx === lastTextIndex) {
+      return { type: "text" as const, text: trimmedText };
+    }
+    return part;
+  });
+
   return { ...message, content: newContent };
 }
 
