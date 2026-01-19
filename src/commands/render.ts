@@ -62,6 +62,11 @@ async function renderChatPrompt({
 
       const resp = await fetch(endpoint, {
         ...options,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
         body: JSON.stringify({
           ...bodyWithoutToolChoice,
           chat_template_kwargs: {

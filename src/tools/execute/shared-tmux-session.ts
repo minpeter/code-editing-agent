@@ -99,9 +99,20 @@ class SharedTmuxSession {
   }
 
   private execSync(command: string): SpawnSyncReturns<string> {
+    // Clean environment for tests
+    const cleanEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (
+        !key.startsWith("npm_") &&
+        key !== "NODE_ENV" &&
+        value !== undefined
+      ) {
+        cleanEnv[key] = value;
+      }
+    }
     return spawnSync("/bin/bash", ["-c", command], {
       encoding: "utf-8",
-      env: { ...process.env, LANG: "en_US.UTF-8", TERM: "xterm-256color" },
+      env: { ...cleanEnv, LANG: "en_US.UTF-8", TERM: "xterm-256color" },
     });
   }
 
@@ -110,9 +121,20 @@ class SharedTmuxSession {
     timeoutMs: number
   ): Promise<{ exitCode: number; stdout: string }> {
     return new Promise((resolve) => {
+      // Clean environment for tests
+      const cleanEnv: Record<string, string> = {};
+      for (const [key, value] of Object.entries(process.env)) {
+        if (
+          !key.startsWith("npm_") &&
+          key !== "NODE_ENV" &&
+          value !== undefined
+        ) {
+          cleanEnv[key] = value;
+        }
+      }
       const child = spawn("/bin/bash", ["-c", command], {
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, LANG: "en_US.UTF-8", TERM: "xterm-256color" },
+        env: { ...cleanEnv, LANG: "en_US.UTF-8", TERM: "xterm-256color" },
       });
 
       let stdout = "";
@@ -171,6 +193,8 @@ class SharedTmuxSession {
     const startCommand = [
       "export TERM=xterm-256color",
       "export SHELL=/bin/bash",
+      // Clean npm environment variables to avoid shell errors
+      "unset $(env | grep '^npm_' | cut -d= -f1)",
       `${this.tmuxPath} new-session -x ${PANE_WIDTH} -y ${PANE_HEIGHT} -d -s ${this.sessionId} 'bash --login'`,
       `${this.tmuxPath} set-option -t ${this.sessionId} history-limit 50000`,
     ].join(" && ");
