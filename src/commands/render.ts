@@ -47,10 +47,7 @@ async function renderChatPrompt({
   let capturedText = "";
 
   const customFetch = Object.assign(
-    async (
-      _url: RequestInfo | URL,
-      options?: RequestInit
-    ): Promise<Response> => {
+    async (options?: RequestInit): Promise<Response> => {
       const parsedBody = options?.body
         ? JSON.parse(options.body as string)
         : {};

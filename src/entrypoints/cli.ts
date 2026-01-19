@@ -49,7 +49,6 @@ const ANSI_RESET = "\x1b[0m";
 const ANSI_CURSOR_UP = (n: number) => `\x1b[${n}A`;
 const ANSI_CURSOR_FORWARD = (n: number) => `\x1b[${n}C`;
 const ANSI_CLEAR_TO_END = "\x1b[J";
-const ANSI_CLEAR_LINE = "\x1b[2K"; // Clear entire line
 
 const messageHistory = new MessageHistory();
 
@@ -57,7 +56,6 @@ let rlInstance: ReadlineInterface | null = null;
 let shouldExit = false;
 let cachedSkills: SkillInfo[] = [];
 const commandHistory: string[] = []; // Store command history
-const historyIndex = -1; // Current position in history (-1 = not browsing)
 
 const TODO_CONTINUATION_MAX_LOOPS = 5;
 
@@ -384,62 +382,6 @@ const findLineEnd = (graphemes: string[], cursor: number): number => {
     }
   }
   return graphemes.length;
-};
-
-const advancePosition = (
-  text: string,
-  start: { row: number; col: number },
-  columns: number
-): { row: number; col: number } => {
-  let row = start.row;
-  let col = start.col;
-  const safeColumns = columns > 0 ? columns : 80;
-
-  for (const segment of splitGraphemes(text)) {
-    if (segment === "\n") {
-      row += 1;
-      col = 0;
-      continue;
-    }
-
-    const width = getStringWidth(segment);
-    if (width === 0) {
-      continue;
-    }
-
-    if (col + width > safeColumns) {
-      row += 1;
-      col = 0;
-    }
-
-    col += width;
-    if (col >= safeColumns) {
-      row += 1;
-      col = 0;
-    }
-  }
-
-  return { row, col };
-};
-
-const calculateDisplayMetrics = (
-  promptPlain: string,
-  buffer: string,
-  cursor: number,
-  columns: number
-): {
-  totalRows: number;
-  cursorPos: { row: number; col: number };
-  endPos: { row: number; col: number };
-} => {
-  const promptPos = advancePosition(promptPlain, { row: 0, col: 0 }, columns);
-  const graphemes = splitGraphemes(buffer);
-  const beforeCursor = graphemes.slice(0, cursor).join("");
-  const cursorPos = advancePosition(beforeCursor, promptPos, columns);
-  const endPos = advancePosition(buffer, promptPos, columns);
-  const totalRows = Math.max(1, endPos.row + 1);
-
-  return { totalRows, cursorPos, endPos };
 };
 
 const MAX_VISIBLE_SUGGESTIONS = 8;
@@ -1149,6 +1091,50 @@ const collectMultilineInput = (
       return null;
     };
 
+    const navigateSuggestionsUp = (): void => {
+      state.suggestionIndex =
+        state.suggestionIndex > 0
+          ? state.suggestionIndex - 1
+          : state.suggestions.length - 1;
+    };
+
+    const navigateHistoryUp = (): void => {
+      if (commandHistory.length === 0) {
+        return;
+      }
+
+      if (state.historyIndex === -1) {
+        // Start browsing history - save current input
+        state.originalBuffer = state.buffer;
+        state.historyIndex = commandHistory.length - 1;
+      } else if (state.historyIndex > 0) {
+        state.historyIndex--;
+      }
+
+      // Load history entry
+      if (state.historyIndex >= 0) {
+        state.buffer = commandHistory[state.historyIndex];
+        state.cursor = splitGraphemes(state.buffer).length;
+      }
+    };
+
+    const navigateSuggestionsDown = (): void => {
+      state.suggestionIndex =
+        (state.suggestionIndex + 1) % state.suggestions.length;
+    };
+
+    const navigateHistoryDown = (): void => {
+      if (state.historyIndex < commandHistory.length - 1) {
+        state.historyIndex++;
+        state.buffer = commandHistory[state.historyIndex];
+      } else {
+        // Reached end of history - restore original input
+        state.historyIndex = -1;
+        state.buffer = state.originalBuffer;
+      }
+      state.cursor = splitGraphemes(state.buffer).length;
+    };
+
     const applyEscapeAction = (action: EscapeAction): void => {
       switch (action) {
         case "left":
@@ -1159,43 +1145,16 @@ const collectMultilineInput = (
           break;
         case "up":
           if (state.suggestions.length > 0) {
-            // Navigate suggestions if available
-            state.suggestionIndex =
-              state.suggestionIndex > 0
-                ? state.suggestionIndex - 1
-                : state.suggestions.length - 1;
-          } else if (commandHistory.length > 0) {
-            // Navigate command history
-            if (state.historyIndex === -1) {
-              // Start browsing history - save current input
-              state.originalBuffer = state.buffer;
-              state.historyIndex = commandHistory.length - 1;
-            } else if (state.historyIndex > 0) {
-              state.historyIndex--;
-            }
-            // Load history entry
-            if (state.historyIndex >= 0) {
-              state.buffer = commandHistory[state.historyIndex];
-              state.cursor = splitGraphemes(state.buffer).length;
-            }
+            navigateSuggestionsUp();
+          } else {
+            navigateHistoryUp();
           }
           break;
         case "down":
           if (state.suggestions.length > 0) {
-            // Navigate suggestions if available
-            state.suggestionIndex =
-              (state.suggestionIndex + 1) % state.suggestions.length;
+            navigateSuggestionsDown();
           } else if (state.historyIndex !== -1) {
-            // Navigate command history
-            if (state.historyIndex < commandHistory.length - 1) {
-              state.historyIndex++;
-              state.buffer = commandHistory[state.historyIndex];
-            } else {
-              // Reached end of history - restore original input
-              state.historyIndex = -1;
-              state.buffer = state.originalBuffer;
-            }
-            state.cursor = splitGraphemes(state.buffer).length;
+            navigateHistoryDown();
           }
           break;
         case "word-left":
@@ -1385,6 +1344,80 @@ const collectMultilineInput = (
   });
 };
 
+const setupAgent = (): void => {
+  const { thinking, toolFallback, model, provider } = parseCliArgs();
+  agentManager.setThinkingEnabled(thinking);
+  agentManager.setToolFallbackEnabled(toolFallback);
+  if (provider) {
+    agentManager.setProvider(provider);
+  }
+  if (model) {
+    agentManager.setModelId(model);
+  }
+};
+
+const addToHistory = (trimmed: string): void => {
+  if (
+    trimmed.length > 0 &&
+    (commandHistory.length === 0 || commandHistory.at(-1) !== trimmed)
+  ) {
+    commandHistory.push(trimmed);
+  }
+};
+
+const _handleCommand = async (
+  rl: ReadlineInterface,
+  trimmed: string
+): Promise<boolean> => {
+  const result = await executeCommand(trimmed);
+  if (isSkillCommandResult(result)) {
+    // Inject skill content into conversation
+    const skillMessage = `<command-name>/${result.skillId}</command-name>\n\n${result.skillContent}`;
+    messageHistory.addUserMessage(skillMessage);
+    await handleAgentResponse(rl);
+    return true;
+  }
+  if (result?.message) {
+    console.log(result.message);
+    return true;
+  }
+  return false;
+};
+
+const processInput = async (
+  rl: ReadlineInterface,
+  input: string
+): Promise<boolean> => {
+  const trimmed = input.trim();
+  addToHistory(trimmed);
+
+  if (shouldExitFromInput(trimmed)) {
+    return false; // Signal to exit
+  }
+
+  if (isCommand(trimmed)) {
+    const shouldContinue = await _handleCommand(rl, trimmed);
+    return shouldContinue;
+  }
+
+  messageHistory.addUserMessage(trimmed);
+  await handleAgentResponse(rl);
+  return true;
+};
+
+const cleanup = (rl: ReadlineInterface): void => {
+  if (env.DEBUG_TMUX_CLEANUP) {
+    console.error("[DEBUG] Performing cleanup...");
+  }
+  process.off("SIGINT", handleGracefulShutdown);
+  rlInstance = null;
+  rl.close();
+  cleanupSession();
+  if (env.DEBUG_TMUX_CLEANUP) {
+    console.error("[DEBUG] Cleanup completed.");
+  }
+};
+
 const run = async (): Promise<void> => {
   // Initialize required tools (ripgrep, tmux)
   await initializeTools();
@@ -1395,15 +1428,7 @@ const run = async (): Promise<void> => {
   const sessionId = initializeSession();
   console.log(colorize("dim", `Session: ${sessionId}\n`));
 
-  const { thinking, toolFallback, model, provider } = parseCliArgs();
-  agentManager.setThinkingEnabled(thinking);
-  agentManager.setToolFallbackEnabled(toolFallback);
-  if (provider) {
-    agentManager.setProvider(provider);
-  }
-  if (model) {
-    agentManager.setModelId(model);
-  }
+  setupAgent();
 
   const rl = createInterface({
     input: process.stdin,
@@ -1424,51 +1449,13 @@ const run = async (): Promise<void> => {
         break;
       }
 
-      const trimmed = input.trim();
-
-      // Add to history (all inputs, not just commands)
-      if (
-        trimmed.length > 0 &&
-        (commandHistory.length === 0 ||
-          commandHistory[commandHistory.length - 1] !== trimmed)
-      ) {
-        commandHistory.push(trimmed);
-      }
-
-      if (shouldExitFromInput(trimmed)) {
-        break;
-      }
-
-      if (isCommand(trimmed)) {
-        const result = await executeCommand(trimmed);
-        if (isSkillCommandResult(result)) {
-          // Inject skill content into conversation
-          const skillMessage = `<command-name>/${result.skillId}</command-name>\n\n${result.skillContent}`;
-          messageHistory.addUserMessage(skillMessage);
-          await handleAgentResponse(rl);
-        } else if (result?.message) {
-          console.log(result.message);
-        }
-        continue;
-      }
-
-      messageHistory.addUserMessage(trimmed);
-      await handleAgentResponse(rl);
+      await processInput(rl, input);
     }
   } catch (error) {
     console.error("Error:", error);
     throw error;
   } finally {
-    if (env.DEBUG_TMUX_CLEANUP) {
-      console.error("[DEBUG] Performing cleanup...");
-    }
-    process.off("SIGINT", handleGracefulShutdown);
-    rlInstance = null;
-    rl.close();
-    cleanupSession();
-    if (env.DEBUG_TMUX_CLEANUP) {
-      console.error("[DEBUG] Cleanup completed.");
-    }
+    cleanup(rl);
   }
 };
 

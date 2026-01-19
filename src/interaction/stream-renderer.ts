@@ -255,10 +255,7 @@ const handleToolOutputDenied = (
   return "none";
 };
 
-const handleToolApprovalRequest = (
-  _ctx: RenderContext,
-  _part: Extract<StreamPart, { type: "tool-approval-request" }>
-): StreamMode => {
+const handleToolApprovalRequest = (): StreamMode => {
   return "none";
 };
 
