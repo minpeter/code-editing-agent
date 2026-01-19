@@ -197,11 +197,7 @@ function detectFileIssues(content: string): FileIssues {
   };
 }
 
-function buildEnhancedErrorMessage(
-  _path: string,
-  oldStr: string,
-  content: string
-): string {
+function buildEnhancedErrorMessage(oldStr: string, content: string): string {
   const issues = detectFileIssues(content);
   const candidates = findSimilarStrings(content, oldStr, {
     threshold: 40,
@@ -449,7 +445,7 @@ export async function executeEditFile({
   }
 
   if (old_str !== "" && !content.includes(old_str)) {
-    throw new Error(buildEnhancedErrorMessage(path, old_str, content));
+    throw new Error(buildEnhancedErrorMessage(old_str, content));
   }
 
   const { newContent, replacementCount, editResults } = replace_all
@@ -457,7 +453,7 @@ export async function executeEditFile({
     : performSingleReplace(content, old_str, new_str);
 
   if (content === newContent && old_str !== "") {
-    throw new Error(buildEnhancedErrorMessage(path, old_str, content));
+    throw new Error(buildEnhancedErrorMessage(old_str, content));
   }
 
   await writeFile(path, newContent, "utf-8");

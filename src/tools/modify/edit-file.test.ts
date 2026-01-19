@@ -299,7 +299,7 @@ describe("editFileTool", () => {
       const testFile = join(tempDir, "delete.txt");
       writeFileSync(testFile, "keep\nremove\nkeep");
 
-      const _result = await executeEditFile({
+      await executeEditFile({
         path: testFile,
         old_str: "remove\n",
         new_str: "",
@@ -314,7 +314,7 @@ describe("editFileTool", () => {
       const testFile = join(tempDir, "special.txt");
       writeFileSync(testFile, "placeholder");
 
-      const _result = await executeEditFile({
+      await executeEditFile({
         path: testFile,
         old_str: "placeholder",
         new_str: 'const x = { a: 1, b: "test" };',

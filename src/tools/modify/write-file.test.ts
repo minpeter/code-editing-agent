@@ -157,7 +157,7 @@ describe("executeWriteFile", () => {
       const testFile = join(tempDir, "special.txt");
       const content = `const x = { a: 1, b: "test" };\nconst y = \`template \${x}\`;`;
 
-      const _result = await executeWriteFile({ path: testFile, content });
+      await executeWriteFile({ path: testFile, content });
 
       const written = readFileSync(testFile, "utf-8");
       expect(written).toBe(content);

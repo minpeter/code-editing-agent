@@ -3,6 +3,7 @@
 import type { Interface as ReadlineInterface } from "node:readline";
 import { createInterface } from "node:readline";
 import { stripVTControlCharacters } from "node:util";
+import type { ProviderType } from "../agent";
 import { agentManager } from "../agent";
 import {
   executeCommand,
@@ -54,6 +55,7 @@ const messageHistory = new MessageHistory();
 let rlInstance: ReadlineInterface | null = null;
 let shouldExit = false;
 let cachedSkills: SkillInfo[] = [];
+const commandHistory: string[] = []; // Store command history
 
 const TODO_CONTINUATION_MAX_LOOPS = 5;
 
@@ -100,11 +102,13 @@ const parseCliArgs = (): {
   thinking: boolean;
   toolFallback: boolean;
   model: string | null;
+  provider: ProviderType | null;
 } => {
   const args = process.argv.slice(2);
   let thinking = false;
   let toolFallback = false;
   let model: string | null = null;
+  let provider: ProviderType | null = null;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -115,10 +119,16 @@ const parseCliArgs = (): {
     } else if (arg === "--model" && i + 1 < args.length) {
       model = args[i + 1];
       i++;
+    } else if (arg === "--provider" && i + 1 < args.length) {
+      const providerArg = args[i + 1];
+      if (providerArg === "anthropic" || providerArg === "friendli") {
+        provider = providerArg;
+      }
+      i++;
     }
   }
 
-  return { thinking, toolFallback, model };
+  return { thinking, toolFallback, model, provider };
 };
 
 const handleGracefulShutdown = () => {
@@ -219,9 +229,11 @@ interface Suggestion {
 interface InputState {
   buffer: string;
   cursor: number;
-  renderedRows: number;
   suggestions: Suggestion[];
   suggestionIndex: number;
+  lastSuggestionRows: number; // Track suggestion area for clean repainting
+  historyIndex: number; // Current position in command history (-1 = not browsing)
+  originalBuffer: string; // Save current input when browsing history
 }
 
 type InputAction = "submit" | "cancel" | "continue";
@@ -370,62 +382,6 @@ const findLineEnd = (graphemes: string[], cursor: number): number => {
     }
   }
   return graphemes.length;
-};
-
-const advancePosition = (
-  text: string,
-  start: { row: number; col: number },
-  columns: number
-): { row: number; col: number } => {
-  let row = start.row;
-  let col = start.col;
-  const safeColumns = columns > 0 ? columns : 80;
-
-  for (const segment of splitGraphemes(text)) {
-    if (segment === "\n") {
-      row += 1;
-      col = 0;
-      continue;
-    }
-
-    const width = getStringWidth(segment);
-    if (width === 0) {
-      continue;
-    }
-
-    if (col + width > safeColumns) {
-      row += 1;
-      col = 0;
-    }
-
-    col += width;
-    if (col >= safeColumns) {
-      row += 1;
-      col = 0;
-    }
-  }
-
-  return { row, col };
-};
-
-const calculateDisplayMetrics = (
-  promptPlain: string,
-  buffer: string,
-  cursor: number,
-  columns: number
-): {
-  totalRows: number;
-  cursorPos: { row: number; col: number };
-  endPos: { row: number; col: number };
-} => {
-  const promptPos = advancePosition(promptPlain, { row: 0, col: 0 }, columns);
-  const graphemes = splitGraphemes(buffer);
-  const beforeCursor = graphemes.slice(0, cursor).join("");
-  const cursorPos = advancePosition(beforeCursor, promptPos, columns);
-  const endPos = advancePosition(buffer, promptPos, columns);
-  const totalRows = Math.max(1, endPos.row + 1);
-
-  return { totalRows, cursorPos, endPos };
 };
 
 const MAX_VISIBLE_SUGGESTIONS = 8;
@@ -593,25 +549,11 @@ const renderInput = (
     }
   }
 
-  const metrics = calculateDisplayMetrics(
-    promptPlain,
-    state.buffer,
-    state.cursor,
-    columns
-  );
+  // Clear current line and rewrite (like spinner.ts does)
+  process.stdout.write("\r\x1B[K");
 
-  // Clear previous output
-  if (state.renderedRows > 0) {
-    const rowsUp = state.renderedRows - 1;
-    if (rowsUp > 0) {
-      process.stdout.write(ANSI_CURSOR_UP(rowsUp));
-    }
-    process.stdout.write("\r");
-    process.stdout.write(ANSI_CLEAR_TO_END);
-  }
-
-  // Write prompt and buffer
-  const displayBuffer = state.buffer.replace(LINE_ENDING_REGEX, "\r\n");
+  // Write prompt and buffer (single line only - no multiline rendering)
+  const displayBuffer = state.buffer.replace(/\n/g, " "); // Replace newlines with spaces for single-line display
   process.stdout.write(`${prompt}${displayBuffer}`);
 
   // Write inline suggestion in gray
@@ -619,23 +561,37 @@ const renderInput = (
     process.stdout.write(`${ANSI_DIM}${suggestionText}${ANSI_RESET}`);
   }
 
-  // Render suggestion list below input
-  const shouldShowList = shouldDisplaySuggestionList(state, cursorAtEnd);
-  const suggestionRows = shouldShowList
-    ? renderSuggestionList(state, columns)
-    : 0;
-
-  state.renderedRows = metrics.totalRows + suggestionRows;
-
-  // Move cursor back to correct position
-  const totalRowsUp =
-    metrics.endPos.row - metrics.cursorPos.row + suggestionRows;
-  if (totalRowsUp > 0) {
-    process.stdout.write(ANSI_CURSOR_UP(totalRowsUp));
+  // Clear old suggestion area if it exists (move down and clear)
+  if (state.lastSuggestionRows > 0) {
+    for (let i = 0; i < state.lastSuggestionRows; i++) {
+      process.stdout.write("\n\r\x1B[K"); // Move down one line and clear it
+    }
+    // Move back to input line
+    process.stdout.write(ANSI_CURSOR_UP(state.lastSuggestionRows));
+    process.stdout.write("\r");
   }
+
+  // Render new suggestion list (renderSuggestionList will handle \n and positioning)
+  const shouldShowList = shouldDisplaySuggestionList(state, cursorAtEnd);
+  if (shouldShowList) {
+    const suggestionRows = renderSuggestionList(state, columns);
+    state.lastSuggestionRows = suggestionRows;
+    // renderSuggestionList already moved us down, move back to input line
+    process.stdout.write(ANSI_CURSOR_UP(suggestionRows));
+    process.stdout.write("\r");
+  } else {
+    state.lastSuggestionRows = 0;
+  }
+
+  // Calculate cursor position within the line
+  const graphemes = splitGraphemes(displayBuffer);
+  const beforeCursor = graphemes.slice(0, state.cursor).join("");
+  const cursorCol = getStringWidth(promptPlain) + getStringWidth(beforeCursor);
+
+  // Move cursor to correct position using absolute positioning
   process.stdout.write("\r");
-  if (metrics.cursorPos.col > 0) {
-    process.stdout.write(ANSI_CURSOR_FORWARD(metrics.cursorPos.col));
+  if (cursorCol > 0) {
+    process.stdout.write(ANSI_CURSOR_FORWARD(cursorCol));
   }
 };
 
@@ -1069,9 +1025,11 @@ const collectMultilineInput = (
     const state: InputState = {
       buffer: "",
       cursor: 0,
-      renderedRows: 0,
       suggestions: [],
       suggestionIndex: 0,
+      lastSuggestionRows: 0,
+      historyIndex: -1,
+      originalBuffer: "",
     };
     const utf8Decoder = new TextDecoder("utf-8");
     const promptPlain = stripAnsi(prompt);
@@ -1115,6 +1073,9 @@ const collectMultilineInput = (
     const finalize = (result: string | null) => {
       cleanup();
       rl.resume(); // Resume readline for tool approval prompts
+      // Clear inline suggestion and suggestion list, but keep the actual input
+      // ANSI_CLEAR_TO_END clears from cursor to end of screen (removes inline hint + suggestion list)
+      process.stdout.write(ANSI_CLEAR_TO_END);
       process.stdout.write("\n");
       resolve(result);
     };
@@ -1130,6 +1091,50 @@ const collectMultilineInput = (
       return null;
     };
 
+    const navigateSuggestionsUp = (): void => {
+      state.suggestionIndex =
+        state.suggestionIndex > 0
+          ? state.suggestionIndex - 1
+          : state.suggestions.length - 1;
+    };
+
+    const navigateHistoryUp = (): void => {
+      if (commandHistory.length === 0) {
+        return;
+      }
+
+      if (state.historyIndex === -1) {
+        // Start browsing history - save current input
+        state.originalBuffer = state.buffer;
+        state.historyIndex = commandHistory.length - 1;
+      } else if (state.historyIndex > 0) {
+        state.historyIndex--;
+      }
+
+      // Load history entry
+      if (state.historyIndex >= 0) {
+        state.buffer = commandHistory[state.historyIndex];
+        state.cursor = splitGraphemes(state.buffer).length;
+      }
+    };
+
+    const navigateSuggestionsDown = (): void => {
+      state.suggestionIndex =
+        (state.suggestionIndex + 1) % state.suggestions.length;
+    };
+
+    const navigateHistoryDown = (): void => {
+      if (state.historyIndex < commandHistory.length - 1) {
+        state.historyIndex++;
+        state.buffer = commandHistory[state.historyIndex];
+      } else {
+        // Reached end of history - restore original input
+        state.historyIndex = -1;
+        state.buffer = state.originalBuffer;
+      }
+      state.cursor = splitGraphemes(state.buffer).length;
+    };
+
     const applyEscapeAction = (action: EscapeAction): void => {
       switch (action) {
         case "left":
@@ -1140,16 +1145,16 @@ const collectMultilineInput = (
           break;
         case "up":
           if (state.suggestions.length > 0) {
-            state.suggestionIndex =
-              state.suggestionIndex > 0
-                ? state.suggestionIndex - 1
-                : state.suggestions.length - 1;
+            navigateSuggestionsUp();
+          } else {
+            navigateHistoryUp();
           }
           break;
         case "down":
           if (state.suggestions.length > 0) {
-            state.suggestionIndex =
-              (state.suggestionIndex + 1) % state.suggestions.length;
+            navigateSuggestionsDown();
+          } else if (state.historyIndex !== -1) {
+            navigateHistoryDown();
           }
           break;
         case "word-left":
@@ -1272,6 +1277,12 @@ const collectMultilineInput = (
         return null;
       }
 
+      // Cancel history browsing when typing
+      if (state.historyIndex !== -1) {
+        state.historyIndex = -1;
+        state.originalBuffer = "";
+      }
+
       insertText(state, normalizeLineEndings(value));
       updateSuggestions(state);
       render();
@@ -1333,6 +1344,80 @@ const collectMultilineInput = (
   });
 };
 
+const setupAgent = (): void => {
+  const { thinking, toolFallback, model, provider } = parseCliArgs();
+  agentManager.setThinkingEnabled(thinking);
+  agentManager.setToolFallbackEnabled(toolFallback);
+  if (provider) {
+    agentManager.setProvider(provider);
+  }
+  if (model) {
+    agentManager.setModelId(model);
+  }
+};
+
+const addToHistory = (trimmed: string): void => {
+  if (
+    trimmed.length > 0 &&
+    (commandHistory.length === 0 || commandHistory.at(-1) !== trimmed)
+  ) {
+    commandHistory.push(trimmed);
+  }
+};
+
+const _handleCommand = async (
+  rl: ReadlineInterface,
+  trimmed: string
+): Promise<boolean> => {
+  const result = await executeCommand(trimmed);
+  if (isSkillCommandResult(result)) {
+    // Inject skill content into conversation
+    const skillMessage = `<command-name>/${result.skillId}</command-name>\n\n${result.skillContent}`;
+    messageHistory.addUserMessage(skillMessage);
+    await handleAgentResponse(rl);
+    return true;
+  }
+  if (result?.message) {
+    console.log(result.message);
+    return true;
+  }
+  return false;
+};
+
+const processInput = async (
+  rl: ReadlineInterface,
+  input: string
+): Promise<boolean> => {
+  const trimmed = input.trim();
+  addToHistory(trimmed);
+
+  if (shouldExitFromInput(trimmed)) {
+    return false; // Signal to exit
+  }
+
+  if (isCommand(trimmed)) {
+    const shouldContinue = await _handleCommand(rl, trimmed);
+    return shouldContinue;
+  }
+
+  messageHistory.addUserMessage(trimmed);
+  await handleAgentResponse(rl);
+  return true;
+};
+
+const cleanup = (rl: ReadlineInterface): void => {
+  if (env.DEBUG_TMUX_CLEANUP) {
+    console.error("[DEBUG] Performing cleanup...");
+  }
+  process.off("SIGINT", handleGracefulShutdown);
+  rlInstance = null;
+  rl.close();
+  cleanupSession();
+  if (env.DEBUG_TMUX_CLEANUP) {
+    console.error("[DEBUG] Cleanup completed.");
+  }
+};
+
 const run = async (): Promise<void> => {
   // Initialize required tools (ripgrep, tmux)
   await initializeTools();
@@ -1343,12 +1428,7 @@ const run = async (): Promise<void> => {
   const sessionId = initializeSession();
   console.log(colorize("dim", `Session: ${sessionId}\n`));
 
-  const { thinking, toolFallback, model } = parseCliArgs();
-  agentManager.setThinkingEnabled(thinking);
-  agentManager.setToolFallbackEnabled(toolFallback);
-  if (model) {
-    agentManager.setModelId(model);
-  }
+  setupAgent();
 
   const rl = createInterface({
     input: process.stdin,
@@ -1369,42 +1449,13 @@ const run = async (): Promise<void> => {
         break;
       }
 
-      const trimmed = input.trim();
-
-      if (shouldExitFromInput(trimmed)) {
-        break;
-      }
-
-      if (isCommand(trimmed)) {
-        const result = await executeCommand(trimmed);
-        if (isSkillCommandResult(result)) {
-          // Inject skill content into conversation
-          const skillMessage = `<command-name>/${result.skillId}</command-name>\n\n${result.skillContent}`;
-          messageHistory.addUserMessage(skillMessage);
-          await handleAgentResponse(rl);
-        } else if (result?.message) {
-          console.log(result.message);
-        }
-        continue;
-      }
-
-      messageHistory.addUserMessage(trimmed);
-      await handleAgentResponse(rl);
+      await processInput(rl, input);
     }
   } catch (error) {
     console.error("Error:", error);
     throw error;
   } finally {
-    if (env.DEBUG_TMUX_CLEANUP) {
-      console.error("[DEBUG] Performing cleanup...");
-    }
-    process.off("SIGINT", handleGracefulShutdown);
-    rlInstance = null;
-    rl.close();
-    cleanupSession();
-    if (env.DEBUG_TMUX_CLEANUP) {
-      console.error("[DEBUG] Cleanup completed.");
-    }
+    cleanup(rl);
   }
 };
 
