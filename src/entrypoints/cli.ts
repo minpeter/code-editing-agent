@@ -49,6 +49,7 @@ const ANSI_RESET = "\x1b[0m";
 const ANSI_CURSOR_UP = (n: number) => `\x1b[${n}A`;
 const ANSI_CURSOR_FORWARD = (n: number) => `\x1b[${n}C`;
 const ANSI_CLEAR_TO_END = "\x1b[J";
+const ANSI_CLEAR_LINE = "\x1b[2K"; // Clear entire line
 
 const messageHistory = new MessageHistory();
 
@@ -609,14 +610,27 @@ const renderInput = (
     columns
   );
 
-  // Clear previous output
+  // Clear previous output - only clear the lines we rendered, not the entire screen
   if (state.renderedRows > 0) {
     const rowsUp = state.renderedRows - 1;
     if (rowsUp > 0) {
       process.stdout.write(ANSI_CURSOR_UP(rowsUp));
     }
     process.stdout.write("\r");
-    process.stdout.write(ANSI_CLEAR_TO_END);
+    
+    // Clear each line individually instead of clearing to end of screen
+    for (let i = 0; i < state.renderedRows; i++) {
+      process.stdout.write(ANSI_CLEAR_LINE);
+      if (i < state.renderedRows - 1) {
+        process.stdout.write("\n");
+      }
+    }
+    
+    // Move back to start position
+    if (state.renderedRows > 1) {
+      process.stdout.write(ANSI_CURSOR_UP(state.renderedRows - 1));
+    }
+    process.stdout.write("\r");
   }
 
   // Write prompt and buffer
