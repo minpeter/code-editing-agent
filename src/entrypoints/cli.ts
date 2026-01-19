@@ -56,6 +56,8 @@ const messageHistory = new MessageHistory();
 let rlInstance: ReadlineInterface | null = null;
 let shouldExit = false;
 let cachedSkills: SkillInfo[] = [];
+const commandHistory: string[] = []; // Store command history
+let historyIndex = -1; // Current position in history (-1 = not browsing)
 
 const TODO_CONTINUATION_MAX_LOOPS = 5;
 
@@ -232,6 +234,8 @@ interface InputState {
   suggestions: Suggestion[];
   suggestionIndex: number;
   lastSuggestionRows: number; // Track suggestion area for clean repainting
+  historyIndex: number; // Current position in command history (-1 = not browsing)
+  originalBuffer: string; // Save current input when browsing history
 }
 
 type InputAction = "submit" | "cancel" | "continue";
@@ -1082,6 +1086,8 @@ const collectMultilineInput = (
       suggestions: [],
       suggestionIndex: 0,
       lastSuggestionRows: 0,
+      historyIndex: -1,
+      originalBuffer: "",
     };
     const utf8Decoder = new TextDecoder("utf-8");
     const promptPlain = stripAnsi(prompt);
@@ -1280,6 +1286,12 @@ const collectMultilineInput = (
 
       if (code < 32) {
         return null;
+      }
+
+      // Cancel history browsing when typing
+      if (state.historyIndex !== -1) {
+        state.historyIndex = -1;
+        state.originalBuffer = "";
       }
 
       insertText(state, normalizeLineEndings(value));
