@@ -1,5 +1,5 @@
 import type { ProviderType } from "../agent";
-import { ANTHROPIC_MODELS, agentManager } from "../agent";
+import { ANTHROPIC_MODELS, agentManager, GEMINI_MODELS } from "../agent";
 import { env } from "../env";
 import { colorize } from "../interaction/colors";
 import { Spinner } from "../interaction/spinner";
@@ -36,6 +36,14 @@ function getAnthropicModels(): ModelInfo[] {
     id: m.id,
     name: m.name,
     provider: "anthropic" as const,
+  }));
+}
+
+function getGeminiModels(): ModelInfo[] {
+  return GEMINI_MODELS.map((m) => ({
+    id: m.id,
+    name: m.name,
+    provider: "gemini" as const,
   }));
 }
 
@@ -122,6 +130,7 @@ async function fetchAvailableModels(): Promise<ModelInfo[]> {
   }
 
   const anthropicModels = env.ANTHROPIC_API_KEY ? getAnthropicModels() : [];
+  const geminiModels = getGeminiModels();
 
   const [serverlessModels, dedicatedEndpoints] = await Promise.all([
     fetchServerlessModels(),
@@ -130,6 +139,7 @@ async function fetchAvailableModels(): Promise<ModelInfo[]> {
 
   cachedModels = [
     ...anthropicModels,
+    ...geminiModels,
     ...serverlessModels,
     ...dedicatedEndpoints,
   ];
@@ -148,6 +158,8 @@ function formatModelList(
     let providerLabel: string;
     if (model.provider === "anthropic") {
       providerLabel = colorize("magenta", " [Anthropic]");
+    } else if (model.provider === "gemini") {
+      providerLabel = colorize("yellow", " [Gemini]");
     } else if (model.type === "dedicated") {
       providerLabel = colorize("cyan", " [FDE]");
     } else {
@@ -230,8 +242,12 @@ export const createModelCommand = (): Command => ({
         agentManager.setModelType(selectedModel.type);
       }
 
-      const providerLabel =
-        selectedModel.provider === "anthropic" ? "Anthropic" : "FriendliAI";
+      const providerLabels: Record<ProviderType, string> = {
+        anthropic: "Anthropic",
+        gemini: "Gemini",
+        friendli: "FriendliAI",
+      };
+      const providerLabel = providerLabels[selectedModel.provider];
       return {
         success: true,
         message: colorize(
