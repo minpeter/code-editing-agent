@@ -8,6 +8,7 @@ export interface StreamRenderOptions {
   showReasoning?: boolean;
   showSteps?: boolean;
   showFinishReason?: boolean;
+  showToolResults?: boolean;
   showSources?: boolean;
   showFiles?: boolean;
   useColor?: boolean;
@@ -20,6 +21,7 @@ interface RenderContext {
   showReasoning: boolean;
   showSteps: boolean;
   showFinishReason: boolean;
+  showToolResults: boolean;
   showSources: boolean;
   showFiles: boolean;
   useColor: boolean;
@@ -200,6 +202,9 @@ const handleToolResult = (
   ctx: RenderContext,
   part: Extract<StreamPart, { type: "tool-result" }>
 ): StreamMode => {
+  if (!ctx.showToolResults) {
+    return "none";
+  }
   writeLine(ctx);
   const toolName = ctx.useColor
     ? `${colors.bold}${colors.brightYellow}${part.toolName}${colors.reset}`
@@ -347,6 +352,7 @@ export const renderFullStream = async <TOOLS extends ToolSet>(
     showReasoning: options.showReasoning ?? true,
     showSteps: options.showSteps ?? false,
     showFinishReason: options.showFinishReason ?? env.DEBUG_SHOW_FINISH_REASON,
+    showToolResults: options.showToolResults ?? env.DEBUG_SHOW_TOOL_RESULTS,
     showSources: options.showSources ?? true,
     showFiles: options.showFiles ?? true,
     useColor: options.useColor ?? Boolean(process.stdout.isTTY),
