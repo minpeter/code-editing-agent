@@ -6,12 +6,13 @@ import { stripVTControlCharacters } from "node:util";
 import { agentManager } from "../agent";
 import {
   executeCommand,
-  getAvailableSkillIds,
   getCommands,
   isCommand,
   isSkillCommandResult,
   registerCommand,
 } from "../commands";
+import type { SkillInfo } from "../context/skills";
+import { loadAllSkills } from "../context/skills";
 import { createClearCommand } from "../commands/clear";
 import { createModelCommand } from "../commands/model";
 import { createRenderCommand } from "../commands/render";
@@ -44,7 +45,7 @@ const messageHistory = new MessageHistory();
 
 let rlInstance: ReadlineInterface | null = null;
 let shouldExit = false;
-let cachedSkillIds: string[] = [];
+let cachedSkills: SkillInfo[] = [];
 
 const TODO_CONTINUATION_MAX_LOOPS = 5;
 
@@ -193,11 +194,16 @@ const graphemeSegmenter =
     ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
     : null;
 
+interface Suggestion {
+  value: string;
+  description: string;
+}
+
 interface InputState {
   buffer: string;
   cursor: number;
   renderedRows: number;
-  suggestions: string[];
+  suggestions: Suggestion[];
   suggestionIndex: number;
 }
 
@@ -405,6 +411,8 @@ const calculateDisplayMetrics = (
   return { totalRows, cursorPos, endPos };
 };
 
+const MAX_VISIBLE_SUGGESTIONS = 8;
+
 const renderInput = (
   state: InputState,
   prompt: string,
@@ -412,17 +420,18 @@ const renderInput = (
 ): void => {
   const columns = process.stdout.columns || 80;
 
-  // Get suggestion if available
+  // Get inline suggestion hint if available
   let suggestionText = "";
+  const cursorAtEnd = state.cursor === splitGraphemes(state.buffer).length;
 
   if (
     state.suggestions.length > 0 &&
     state.suggestionIndex < state.suggestions.length &&
-    state.cursor === splitGraphemes(state.buffer).length // Cursor at end
+    cursorAtEnd
   ) {
     const suggestion = state.suggestions[state.suggestionIndex];
-    if (suggestion.toLowerCase().startsWith(state.buffer.toLowerCase())) {
-      suggestionText = suggestion.slice(state.buffer.length);
+    if (suggestion.value.toLowerCase().startsWith(state.buffer.toLowerCase())) {
+      suggestionText = suggestion.value.slice(state.buffer.length);
     }
   }
 
@@ -433,6 +442,7 @@ const renderInput = (
     columns
   );
 
+  // Clear previous output
   if (state.renderedRows > 0) {
     const rowsUp = state.renderedRows - 1;
     if (rowsUp > 0) {
@@ -442,19 +452,83 @@ const renderInput = (
     process.stdout.write("\x1b[J");
   }
 
+  // Write prompt and buffer
   const displayBuffer = state.buffer.replace(LINE_ENDING_REGEX, "\r\n");
   process.stdout.write(`${prompt}${displayBuffer}`);
 
-  // Write suggestion in gray
+  // Write inline suggestion in gray
   if (suggestionText.length > 0) {
     process.stdout.write(`\x1b[90m${suggestionText}\x1b[0m`);
   }
 
-  state.renderedRows = metrics.totalRows;
+  // Render suggestion list below input
+  // Show when: has suggestions, cursor at end, buffer not empty, and not fully typed
+  let suggestionRows = 0;
+  const isFullyTyped =
+    state.suggestions.length === 1 &&
+    state.suggestions[0].value === state.buffer;
+  const shouldShowList =
+    state.suggestions.length > 0 &&
+    cursorAtEnd &&
+    state.buffer.length > 0 &&
+    !isFullyTyped;
 
-  const rowsUp = metrics.endPos.row - metrics.cursorPos.row;
-  if (rowsUp > 0) {
-    process.stdout.write(`\x1b[${rowsUp}A`);
+  if (shouldShowList) {
+    const total = state.suggestions.length;
+    const maxVisible = Math.min(MAX_VISIBLE_SUGGESTIONS, total);
+
+    // Calculate scroll window to keep selected item visible
+    let startIndex = 0;
+    if (total > maxVisible) {
+      // Keep selected item in view with some context
+      const scrollPadding = Math.floor(maxVisible / 2);
+      startIndex = Math.max(0, state.suggestionIndex - scrollPadding);
+      startIndex = Math.min(startIndex, total - maxVisible);
+    }
+    const endIndex = startIndex + maxVisible;
+
+    process.stdout.write("\n");
+    suggestionRows = 1;
+
+    // Show scroll indicator at top if not at beginning
+    if (startIndex > 0) {
+      process.stdout.write(`\x1b[90m  ↑ ${startIndex} more above\x1b[0m\n`);
+      suggestionRows++;
+    }
+
+    for (let i = startIndex; i < endIndex; i++) {
+      const s = state.suggestions[i];
+      const isSelected = i === state.suggestionIndex;
+      const prefix = isSelected ? "\x1b[36m› " : "  ";
+      const reset = isSelected ? "\x1b[0m" : "";
+
+      // Truncate description to fit in terminal
+      const maxDescLen = Math.max(20, columns - s.value.length - 10);
+      const desc =
+        s.description.length > maxDescLen
+          ? `${s.description.slice(0, maxDescLen - 3)}...`
+          : s.description;
+
+      process.stdout.write(
+        `${prefix}${s.value}\x1b[90m - ${desc}\x1b[0m${reset}\n`
+      );
+      suggestionRows++;
+    }
+
+    // Show scroll indicator at bottom if not at end
+    if (endIndex < total) {
+      const remaining = total - endIndex;
+      process.stdout.write(`\x1b[90m  ↓ ${remaining} more below\x1b[0m\n`);
+      suggestionRows++;
+    }
+  }
+
+  state.renderedRows = metrics.totalRows + suggestionRows;
+
+  // Move cursor back to correct position
+  const totalRowsUp = metrics.endPos.row - metrics.cursorPos.row + suggestionRows;
+  if (totalRowsUp > 0) {
+    process.stdout.write(`\x1b[${totalRowsUp}A`);
   }
   process.stdout.write("\r");
   if (metrics.cursorPos.col > 0) {
@@ -767,10 +841,10 @@ const readEscapeTokenFromSequence = (sequence: string): InputToken | null => {
 
 /**
  * Get command suggestions based on the current input buffer.
- * Returns an array of matching command names (with "/" prefix) or arguments.
+ * Returns an array of Suggestion objects with value and description.
  * Also includes available skills.
  */
-const getCommandSuggestions = (buffer: string): string[] => {
+const getCommandSuggestions = (buffer: string): Suggestion[] => {
   if (!buffer.startsWith("/")) {
     return [];
   }
@@ -782,28 +856,43 @@ const getCommandSuggestions = (buffer: string): string[] => {
 
   if (spaceIndex === -1) {
     // No space: suggest command names and skills
-    const commandNames = Array.from(commandMap.keys()).map(
-      (name) => `/${name}`
-    );
-    const skillNames = cachedSkillIds.map((id) => `/${id}`);
-    const allNames = [...new Set([...commandNames, ...skillNames])];
+    const suggestions: Suggestion[] = [];
 
-    // If the buffer is exactly "/", return all commands and skills
-    if (buffer === "/") {
-      return allNames.sort();
+    // Add built-in commands
+    for (const [name, cmd] of commandMap) {
+      suggestions.push({
+        value: `/${name}`,
+        description: cmd.description,
+      });
     }
 
-    // Filter commands/skills that start with the current buffer
-    const matches = allNames.filter((cmd) =>
-      cmd.toLowerCase().startsWith(buffer.toLowerCase())
+    // Add skills (avoid duplicates)
+    const commandNames = new Set(commandMap.keys());
+    for (const skill of cachedSkills) {
+      if (!commandNames.has(skill.id)) {
+        suggestions.push({
+          value: `/${skill.id}`,
+          description: skill.description,
+        });
+      }
+    }
+
+    // If the buffer is exactly "/", return all
+    if (buffer === "/") {
+      return suggestions.sort((a, b) => a.value.localeCompare(b.value));
+    }
+
+    // Filter by prefix match
+    const matches = suggestions.filter((s) =>
+      s.value.toLowerCase().startsWith(buffer.toLowerCase())
     );
 
-    return matches.sort();
+    return matches.sort((a, b) => a.value.localeCompare(b.value));
   }
 
   // Space found: suggest arguments
-  const commandName = buffer.slice(1, spaceIndex); // Remove "/" and get command name
-  const argPart = buffer.slice(spaceIndex + 1); // Get argument part
+  const commandName = buffer.slice(1, spaceIndex);
+  const argPart = buffer.slice(spaceIndex + 1);
 
   const command = commandMap.get(commandName);
   if (!command?.argumentSuggestions) {
@@ -812,7 +901,10 @@ const getCommandSuggestions = (buffer: string): string[] => {
 
   // If no argument typed yet, return all suggestions with full command prefix
   if (argPart === "") {
-    return command.argumentSuggestions.map((arg) => `/${commandName} ${arg}`);
+    return command.argumentSuggestions.map((arg) => ({
+      value: `/${commandName} ${arg}`,
+      description: `Argument: ${arg}`,
+    }));
   }
 
   // Check if argPart exactly matches one of the suggestions
@@ -822,7 +914,10 @@ const getCommandSuggestions = (buffer: string): string[] => {
 
   // If exact match, return all suggestions for cycling
   if (exactMatch) {
-    return command.argumentSuggestions.map((arg) => `/${commandName} ${arg}`);
+    return command.argumentSuggestions.map((arg) => ({
+      value: `/${commandName} ${arg}`,
+      description: `Argument: ${arg}`,
+    }));
   }
 
   // Filter argument suggestions that start with the typed argument
@@ -830,7 +925,10 @@ const getCommandSuggestions = (buffer: string): string[] => {
     arg.toLowerCase().startsWith(argPart.toLowerCase())
   );
 
-  return matches.map((arg) => `/${commandName} ${arg}`);
+  return matches.map((arg) => ({
+    value: `/${commandName} ${arg}`,
+    description: `Argument: ${arg}`,
+  }));
 };
 
 /**
@@ -1012,7 +1110,9 @@ const collectMultilineInput = (
         return;
       }
 
-      const currentMatchIndex = state.suggestions.indexOf(state.buffer);
+      const currentMatchIndex = state.suggestions.findIndex(
+        (s) => s.value === state.buffer
+      );
       const isExactMatch = currentMatchIndex !== -1;
       const hasMultipleSuggestions = state.suggestions.length > 1;
       const cursorAtEnd = state.cursor === splitGraphemes(state.buffer).length;
@@ -1022,15 +1122,15 @@ const collectMultilineInput = (
         state.suggestionIndex =
           (currentMatchIndex + 1) % state.suggestions.length;
         const nextSuggestion = state.suggestions[state.suggestionIndex];
-        state.buffer = nextSuggestion;
-        state.cursor = splitGraphemes(nextSuggestion).length;
+        state.buffer = nextSuggestion.value;
+        state.cursor = splitGraphemes(nextSuggestion.value).length;
         updateSuggestions(state);
         render();
       } else if (state.suggestionIndex < state.suggestions.length) {
         // Complete with the current suggestion
         const suggestion = state.suggestions[state.suggestionIndex];
-        state.buffer = suggestion;
-        state.cursor = splitGraphemes(suggestion).length;
+        state.buffer = suggestion.value;
+        state.cursor = splitGraphemes(suggestion.value).length;
         updateSuggestions(state);
         render();
       }
@@ -1122,8 +1222,8 @@ const run = async (): Promise<void> => {
   // Initialize required tools (ripgrep, tmux)
   await initializeTools();
 
-  // Load skill IDs for autocomplete
-  cachedSkillIds = await getAvailableSkillIds();
+  // Load skills for autocomplete
+  cachedSkills = await loadAllSkills();
 
   const sessionId = initializeSession();
   console.log(colorize("dim", `Session: ${sessionId}\n`));
