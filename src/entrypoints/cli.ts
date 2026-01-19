@@ -231,6 +231,7 @@ interface InputState {
   cursor: number;
   suggestions: Suggestion[];
   suggestionIndex: number;
+  lastSuggestionRows: number; // Track suggestion area for clean repainting
 }
 
 type InputAction = "submit" | "cancel" | "continue";
@@ -614,16 +615,29 @@ const renderInput = (
     process.stdout.write(`${ANSI_DIM}${suggestionText}${ANSI_RESET}`);
   }
 
-  // Render suggestion list BELOW input (never above - preserves AI output)
+  // Clear previous suggestion area if it exists
+  if (state.lastSuggestionRows > 0) {
+    // Move down to suggestion area and clear each line
+    for (let i = 0; i < state.lastSuggestionRows; i++) {
+      process.stdout.write("\n\r\x1B[K"); // Move down and clear line
+    }
+    // Move back up to input line
+    process.stdout.write(ANSI_CURSOR_UP(state.lastSuggestionRows));
+  }
+
+  // Render new suggestion list BELOW input (never above - preserves AI output)
   const shouldShowList = shouldDisplaySuggestionList(state, cursorAtEnd);
   let suggestionRows = 0;
   if (shouldShowList) {
     process.stdout.write("\n"); // Move to next line
     suggestionRows = renderSuggestionList(state, columns);
+    state.lastSuggestionRows = suggestionRows;
     // Move cursor back UP to input line (only moves within suggestion area)
     if (suggestionRows > 0) {
       process.stdout.write(ANSI_CURSOR_UP(suggestionRows));
     }
+  } else {
+    state.lastSuggestionRows = 0;
   }
 
   // Calculate cursor position within the line
@@ -1070,6 +1084,7 @@ const collectMultilineInput = (
       cursor: 0,
       suggestions: [],
       suggestionIndex: 0,
+      lastSuggestionRows: 0,
     };
     const utf8Decoder = new TextDecoder("utf-8");
     const promptPlain = stripAnsi(prompt);
