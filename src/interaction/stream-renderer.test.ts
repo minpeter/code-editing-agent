@@ -125,4 +125,29 @@ describe("renderFullStream tool input streaming", () => {
     expect(output).toContain("tool bash (call_2)");
     expect(output).toContain('"command": "ls -la"');
   });
+
+  it("renders tool-call input when tool-input stream has no deltas", async () => {
+    const output = await renderParts([
+      {
+        type: "tool-input-start",
+        id: "call_4",
+        toolName: "bash",
+      },
+      {
+        type: "tool-input-end",
+        id: "call_4",
+      },
+      {
+        type: "tool-call",
+        toolCallId: "call_4",
+        toolName: "bash",
+        input: {
+          command: "ls -la",
+        },
+      },
+    ]);
+
+    expect(output).toContain("tool bash (call_4)");
+    expect(output).toContain('"command": "ls -la"');
+  });
 });

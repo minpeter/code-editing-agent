@@ -274,13 +274,17 @@ const handleToolCall = (
     writeLine(ctx);
   }
 
-  if (ctx.streamedToolCallIds.has(part.toolCallId)) {
-    ctx.activeToolInputs.delete(part.toolCallId);
-    ctx.streamedToolCallIds.delete(part.toolCallId);
-    return "none";
-  }
+  const inputState = ctx.activeToolInputs.get(part.toolCallId);
+  const shouldSkipToolCallRender =
+    ctx.streamedToolCallIds.has(part.toolCallId) &&
+    inputState?.hasContent === true;
 
   ctx.activeToolInputs.delete(part.toolCallId);
+  ctx.streamedToolCallIds.delete(part.toolCallId);
+
+  if (shouldSkipToolCallRender) {
+    return "none";
+  }
 
   const toolName = ctx.useColor
     ? `${colors.bold}${colors.brightYellow}${part.toolName}${colors.reset}`
@@ -380,8 +384,6 @@ const handleToolInputEnd = (
   if (mode === "tool-input") {
     writeLine(ctx);
   }
-
-  ctx.activeToolInputs.delete(toolCallId);
   return "none";
 };
 
