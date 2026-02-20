@@ -14,7 +14,7 @@ import {
 } from "./middleware/todo-continuation";
 import { tools } from "./tools";
 
-export const DEFAULT_MODEL_ID = "MiniMaxAI/MiniMax-M2.1";
+export const DEFAULT_MODEL_ID = "MiniMaxAI/MiniMax-M2.5";
 export const DEFAULT_ANTHROPIC_MODEL_ID = "claude-sonnet-4-5-20250929";
 export const DEFAULT_GEMINI_MODEL_ID = "gemini-2.5-pro";
 const OUTPUT_TOKEN_MAX = 64_000;
@@ -80,9 +80,9 @@ function getGeminiThinkingConfig(
 }
 
 interface CreateAgentOptions {
-  instructions?: string;
   enableThinking?: boolean;
   enableToolFallback?: boolean;
+  instructions?: string;
   provider?: ProviderType;
 }
 
