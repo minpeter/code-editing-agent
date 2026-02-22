@@ -80,7 +80,7 @@ export async function getIgnoreFilter(): Promise<Ignore> {
   return ig;
 }
 
-export function isBinaryFile(path: string): boolean {
+function isBinaryFile(path: string): boolean {
   const ext = path.toLowerCase().slice(path.lastIndexOf("."));
   return BINARY_EXTENSIONS.has(ext);
 }
@@ -101,9 +101,7 @@ function getPathForIgnoreCheck(filePath: string, cwd: string): string | null {
   return filePath;
 }
 
-export async function checkFileReadable(
-  filePath: string
-): Promise<FileCheckResult> {
+async function checkFileReadable(filePath: string): Promise<FileCheckResult> {
   const ig = await getIgnoreFilter();
   const pathForIgnoreCheck = getPathForIgnoreCheck(filePath, process.cwd());
 
