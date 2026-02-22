@@ -769,8 +769,6 @@ class SharedTmuxSession {
   }
 }
 
-export const sharedSession = SharedTmuxSession.getInstance();
-
 export function getSharedSession(): SharedTmuxSession {
   return SharedTmuxSession.getInstance();
 }
