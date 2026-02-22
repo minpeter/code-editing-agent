@@ -10,9 +10,7 @@ export type ToolFallbackMode = (typeof TOOL_FALLBACK_MODES)[number];
 export const DEFAULT_TOOL_FALLBACK_MODE: ToolFallbackMode = "disable";
 export const LEGACY_ENABLED_TOOL_FALLBACK_MODE: ToolFallbackMode = "morphxml";
 
-export const isToolFallbackMode = (
-  value: string
-): value is ToolFallbackMode => {
+const isToolFallbackMode = (value: string): value is ToolFallbackMode => {
   return TOOL_FALLBACK_MODES.includes(value as ToolFallbackMode);
 };
 
