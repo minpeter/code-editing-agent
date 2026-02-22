@@ -1,6 +1,6 @@
 import { platform } from "node:os";
 
-export interface WrapperResult {
+interface WrapperResult {
   command: string;
   description: string | null;
   env: Record<string, string>;
