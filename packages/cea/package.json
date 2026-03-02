@@ -4,11 +4,21 @@
   "description": "A code-editing agent using Vercel AI SDK and FriendliAI",
   "type": "module",
   "main": "dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "files": [
     "cli.js",
     "src",
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "plugsuits": "cli.js",
     "pss": "cli.js"
