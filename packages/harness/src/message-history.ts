@@ -125,15 +125,15 @@ export interface Message {
  * Summary entry representing a compacted batch of messages.
  */
 export interface CompactionSummary {
-  id: string;
   createdAt: Date;
-  summary: string;
   /** ID of the first message that was kept after this summary */
   firstKeptMessageId: string;
-  /** Estimated tokens before compaction */
-  tokensBefore: number;
+  id: string;
+  summary: string;
   /** Estimated tokens in the summary */
   summaryTokens: number;
+  /** Estimated tokens before compaction */
+  tokensBefore: number;
 }
 
 /**
@@ -148,18 +148,18 @@ export interface CompactionConfig {
   enabled?: boolean;
 
   /**
-   * Maximum total tokens before triggering compaction.
-   * When exceeded, older messages will be summarized.
-   * @default 8000
-   */
-  maxTokens?: number;
-
-  /**
    * Number of recent tokens to preserve from compaction.
    * These messages are always kept in full form.
    * @default 2000
    */
   keepRecentTokens?: number;
+
+  /**
+   * Maximum total tokens before triggering compaction.
+   * When exceeded, older messages will be summarized.
+   * @default 8000
+   */
+  maxTokens?: number;
 
   /**
    * Reserve tokens for the response. Compaction triggers when
@@ -177,18 +177,17 @@ export interface CompactionConfig {
 
 export interface MessageHistoryOptions {
   /**
-   * Maximum number of messages to retain. When exceeded, older messages
-   * are trimmed from the front while preserving the initial user message
-   * for context continuity. Defaults to 1000.
-   */
-  maxMessages?: number;
-
-  /**
    * Incremental compaction configuration for managing long contexts.
    * When enabled, older messages are summarized to reduce token usage
    * while preserving important context.
    */
   compaction?: CompactionConfig;
+  /**
+   * Maximum number of messages to retain. When exceeded, older messages
+   * are trimmed from the front while preserving the initial user message
+   * for context continuity. Defaults to 1000.
+   */
+  maxMessages?: number;
 }
 
 const createMessageId = (() => {
@@ -242,7 +241,8 @@ export class MessageHistory {
 
     this.compaction = {
       enabled: options?.compaction?.enabled ?? false,
-      maxTokens: options?.compaction?.maxTokens ?? DEFAULT_COMPACTION_MAX_TOKENS,
+      maxTokens:
+        options?.compaction?.maxTokens ?? DEFAULT_COMPACTION_MAX_TOKENS,
       keepRecentTokens:
         options?.compaction?.keepRecentTokens ?? DEFAULT_COMPACTION_KEEP_RECENT,
       reserveTokens:
@@ -344,7 +344,7 @@ export class MessageHistory {
    * Get messages with compaction summaries prepended as system context.
    * This is the recommended way to get messages for LLM calls when
    * compaction is enabled.
-   * 
+   *
    * Security: Summary content is sanitized to prevent prompt injection.
    * User content cannot escalate to system privileges through this method.
    */
@@ -405,8 +405,8 @@ export class MessageHistory {
       const keepRecentTokens =
         this.compaction.keepRecentTokens ?? DEFAULT_COMPACTION_KEEP_RECENT;
 
-      let keptTokens = 0;  // 뒤에서부터 누적된 보존 대상 토큰 수
-      let splitIndex = this.messages.length;  // 분할 지점 (기본값: 모두 보존)
+      let keptTokens = 0; // 뒤에서부터 누적된 보존 대상 토큰 수
+      let splitIndex = this.messages.length; // 분할 지점 (기본값: 모두 보존)
 
       // Walk backwards to find where to split
       // Logic: 뒤에서부터 순회하며 keepRecentTokens를 초과하지 않는 범위를 찾음
@@ -420,7 +420,7 @@ export class MessageHistory {
         // 현재 메시지까지 포함하면 keepRecentTokens를 초과하는 경우
         // 현재 메시지(i)는 요약 대상, i+1부터는 보존 대상
         if (keptTokens + msgTokens > keepRecentTokens) {
-          splitIndex = i + 1;  // i+1부터 끝까지 보존
+          splitIndex = i + 1; // i+1부터 끝까지 보존
           break;
         }
 
@@ -429,7 +429,7 @@ export class MessageHistory {
 
         // Always keep at least the last turn (처음까지 도달하면 모두 보존)
         if (i === 0) {
-          splitIndex = 0;  // 모든 메시지 보존, 요약 없음
+          splitIndex = 0; // 모든 메시지 보존, 요약 없음
         }
       }
 

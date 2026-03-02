@@ -1,3 +1,4 @@
+import type { ProviderType } from "./agent";
 import {
   DEFAULT_REASONING_MODE,
   parseReasoningMode,
@@ -9,7 +10,6 @@ import {
   parseToolFallbackMode,
   type ToolFallbackMode,
 } from "./tool-fallback-mode";
-import type { ProviderType } from "./agent";
 
 export type { ProviderType } from "./agent";
 

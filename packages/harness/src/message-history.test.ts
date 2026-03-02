@@ -233,8 +233,14 @@ describe("MessageHistory enforceLimit", () => {
     history.addUserMessage("two");
 
     expect(history.toModelMessages()).toHaveLength(2);
-    expect(history.toModelMessages()[0]).toEqual({ role: "user", content: "one" });
-    expect(history.toModelMessages()[1]).toEqual({ role: "user", content: "two" });
+    expect(history.toModelMessages()[0]).toEqual({
+      role: "user",
+      content: "one",
+    });
+    expect(history.toModelMessages()[1]).toEqual({
+      role: "user",
+      content: "two",
+    });
   });
 
   it("handles maxMessages = 1 by keeping only the last message", () => {
@@ -295,7 +301,9 @@ describe("MessageHistory enforceLimit", () => {
   });
 
   it("throws RangeError for NaN maxMessages", () => {
-    expect(() => new MessageHistory({ maxMessages: NaN })).toThrow(RangeError);
+    expect(() => new MessageHistory({ maxMessages: Number.NaN })).toThrow(
+      RangeError
+    );
   });
 
   it("throws RangeError for non-integer maxMessages", () => {
@@ -303,7 +311,9 @@ describe("MessageHistory enforceLimit", () => {
   });
 
   it("throws RangeError for Infinity maxMessages", () => {
-    expect(() => new MessageHistory({ maxMessages: Infinity })).toThrow(RangeError);
+    expect(
+      () => new MessageHistory({ maxMessages: Number.POSITIVE_INFINITY })
+    ).toThrow(RangeError);
   });
 });
 
@@ -375,15 +385,19 @@ describe("MessageHistory compaction", () => {
 
     // Add enough messages to potentially trigger compaction
     for (let i = 0; i < 10; i++) {
-      history.addUserMessage(`This is a long message ${i} with enough content to trigger token limits`);
-      history.addModelMessages([{
-        role: "assistant",
-        content: `This is a long assistant response ${i} with sufficient content to contribute to token count`,
-      }]);
+      history.addUserMessage(
+        `This is a long message ${i} with enough content to trigger token limits`
+      );
+      history.addModelMessages([
+        {
+          role: "assistant",
+          content: `This is a long assistant response ${i} with sufficient content to contribute to token count`,
+        },
+      ]);
     }
 
     // Wait for async compaction
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const result = await history.compact();
     // Result depends on whether thresholds were exceeded
@@ -403,17 +417,23 @@ describe("MessageHistory compaction", () => {
 
     // Add messages
     history.addUserMessage("First message that should be summarized");
-    history.addModelMessages([{ role: "assistant", content: "First response" }]);
+    history.addModelMessages([
+      { role: "assistant", content: "First response" },
+    ]);
     history.addUserMessage("Recent message to keep");
-    history.addModelMessages([{ role: "assistant", content: "Recent response" }]);
+    history.addModelMessages([
+      { role: "assistant", content: "Recent response" },
+    ]);
 
     // Manual compaction
     await history.compact();
 
     // Recent messages should still be accessible
     const messages = history.getAll();
-    const contents = messages.map(m => m.modelMessage.content);
-    expect(contents.some(c => typeof c === "string" && c.includes("Recent"))).toBe(true);
+    const contents = messages.map((m) => m.modelMessage.content);
+    expect(
+      contents.some((c) => typeof c === "string" && c.includes("Recent"))
+    ).toBe(true);
   });
 
   it("getEstimatedTokens returns 0 for empty history", () => {
@@ -446,10 +466,24 @@ describe("MessageHistory compaction", () => {
     });
 
     // Add long messages to ensure they exceed keepRecentTokens and trigger compaction
-    history.addUserMessage("Message one with enough text to count and exceed token limits");
-    history.addModelMessages([{ role: "assistant", content: "Response one with content that is long enough" }]);
-    history.addUserMessage("Message two with enough text to count and exceed token limits");
-    history.addModelMessages([{ role: "assistant", content: "Response two with content that is long enough" }]);
+    history.addUserMessage(
+      "Message one with enough text to count and exceed token limits"
+    );
+    history.addModelMessages([
+      {
+        role: "assistant",
+        content: "Response one with content that is long enough",
+      },
+    ]);
+    history.addUserMessage(
+      "Message two with enough text to count and exceed token limits"
+    );
+    history.addModelMessages([
+      {
+        role: "assistant",
+        content: "Response two with content that is long enough",
+      },
+    ]);
 
     await history.compact();
 
@@ -472,8 +506,15 @@ describe("MessageHistory compaction", () => {
     });
 
     // Add long messages to ensure compaction actually happens
-    history.addUserMessage("Old message to be summarized with sufficient length to trigger");
-    history.addModelMessages([{ role: "assistant", content: "Old response with enough content to count" }]);
+    history.addUserMessage(
+      "Old message to be summarized with sufficient length to trigger"
+    );
+    history.addModelMessages([
+      {
+        role: "assistant",
+        content: "Old response with enough content to count",
+      },
+    ]);
 
     // Force compaction
     await history.compact();
@@ -530,7 +571,7 @@ describe("MessageHistory compaction", () => {
     ]);
 
     // Should not throw and should return boolean results
-    expect(results.every(r => typeof r === "boolean")).toBe(true);
+    expect(results.every((r) => typeof r === "boolean")).toBe(true);
   });
 
   it("respects maxMessages even with compaction enabled", () => {
