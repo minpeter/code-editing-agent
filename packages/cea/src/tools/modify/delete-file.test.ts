@@ -30,7 +30,10 @@ describe("executeDeleteFile", () => {
       const testFile = join(tempDir, "to-delete.txt");
       writeFileSync(testFile, "content to delete");
 
-      const result = await executeDeleteFile({ path: testFile }, { rootDir: tempDir });
+      const result = await executeDeleteFile(
+        { path: testFile },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("OK - deleted file: to-delete.txt");
       expect(result).toContain(`path: ${testFile}`);
@@ -44,7 +47,10 @@ describe("executeDeleteFile", () => {
       const content = "12345";
       writeFileSync(testFile, content);
 
-      const result = await executeDeleteFile({ path: testFile }, { rootDir: tempDir });
+      const result = await executeDeleteFile(
+        { path: testFile },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("bytes: 5");
     });
@@ -99,7 +105,9 @@ describe("executeDeleteFile", () => {
     it("throws error for non-existent file by default", async () => {
       const nonExistent = join(tempDir, "does-not-exist.txt");
 
-      await expect(executeDeleteFile({ path: nonExistent }, { rootDir: tempDir })).rejects.toThrow();
+      await expect(
+        executeDeleteFile({ path: nonExistent }, { rootDir: tempDir })
+      ).rejects.toThrow();
     });
 
     it("returns skip message when ignore_missing is true", async () => {
@@ -121,7 +129,10 @@ describe("executeDeleteFile", () => {
       const testFile = join(tempDir, "file with spaces.txt");
       writeFileSync(testFile, "content");
 
-      const result = await executeDeleteFile({ path: testFile }, { rootDir: tempDir });
+      const result = await executeDeleteFile(
+        { path: testFile },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("OK - deleted file: file with spaces.txt");
       expect(existsSync(testFile)).toBe(false);
@@ -131,7 +142,10 @@ describe("executeDeleteFile", () => {
       const testFile = join(tempDir, "empty-file.txt");
       writeFileSync(testFile, "");
 
-      const result = await executeDeleteFile({ path: testFile }, { rootDir: tempDir });
+      const result = await executeDeleteFile(
+        { path: testFile },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("OK - deleted file: empty-file.txt");
       expect(result).toContain("bytes: 0");
@@ -144,12 +158,17 @@ describe("executeDeleteFile", () => {
       const traversalPath = join(tempDir, "..", "..", "etc", "passwd");
       await expect(
         executeDeleteFile({ path: traversalPath }, { rootDir: tempDir })
+        // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
       ).rejects.toThrow(/[Pp]ath traversal blocked/);
     });
 
     it("C-1: blocks absolute paths outside project root", async () => {
       await expect(
-        executeDeleteFile({ path: "/tmp/outside-project.txt" }, { rootDir: tempDir })
+        executeDeleteFile(
+          { path: "/tmp/outside-project.txt" },
+          { rootDir: tempDir }
+        )
+        // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
       ).rejects.toThrow(/[Pp]ath traversal blocked|outside/);
     });
 
@@ -161,6 +180,7 @@ describe("executeDeleteFile", () => {
 
       await expect(
         executeDeleteFile({ path: symlinkPath }, { rootDir: tempDir })
+        // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
       ).rejects.toThrow(/symlink/i);
 
       // Both the symlink and the real file should still exist
@@ -179,6 +199,7 @@ describe("executeDeleteFile", () => {
       try {
         await expect(
           executeDeleteFile({ path: symlinkPath }, { rootDir: tempDir })
+          // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
         ).rejects.toThrow(/symlink/i);
         expect(existsSync(outsideFile)).toBe(true);
         expect(readFileSync(outsideFile, "utf-8")).toBe("secret data");
@@ -191,7 +212,10 @@ describe("executeDeleteFile", () => {
       const safeFile = join(tempDir, "safe-to-delete.txt");
       writeFileSync(safeFile, "deletable content");
 
-      const result = await executeDeleteFile({ path: safeFile }, { rootDir: tempDir });
+      const result = await executeDeleteFile(
+        { path: safeFile },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("OK - deleted file: safe-to-delete.txt");
       expect(existsSync(safeFile)).toBe(false);

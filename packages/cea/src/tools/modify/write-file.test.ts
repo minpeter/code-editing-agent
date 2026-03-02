@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { executeWriteFile } from "./write-file";
 
 describe("executeWriteFile", () => {
@@ -29,7 +29,10 @@ describe("executeWriteFile", () => {
       const testFile = join(tempDir, "new.txt");
       const content = "line1\nline2\nline3";
 
-      const result = await executeWriteFile({ path: testFile, content }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: testFile, content },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("OK - created new.txt");
       expect(result).toContain("bytes:");
@@ -62,7 +65,10 @@ describe("executeWriteFile", () => {
       const nestedFile = join(tempDir, "deep", "nested", "dir", "file.txt");
       const content = "nested content";
 
-      const result = await executeWriteFile({ path: nestedFile, content }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: nestedFile, content },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("OK - created file.txt");
       expect(existsSync(nestedFile)).toBe(true);
@@ -77,7 +83,10 @@ describe("executeWriteFile", () => {
       const testFile = join(tempDir, "small.txt");
       const content = "a\nb\nc\nd\ne";
 
-      const result = await executeWriteFile({ path: testFile, content }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: testFile, content },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("bytes:");
       expect(result).toContain("lines: 5");
@@ -90,7 +99,10 @@ describe("executeWriteFile", () => {
       const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`);
       const content = lines.join("\n");
 
-      const result = await executeWriteFile({ path: testFile, content }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: testFile, content },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("bytes:");
       expect(result).toContain("lines: 20");
@@ -102,7 +114,10 @@ describe("executeWriteFile", () => {
       const testFile = join(tempDir, "bytes.txt");
       const content = "hello";
 
-      const result = await executeWriteFile({ path: testFile, content }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: testFile, content },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("bytes: 5");
     });
@@ -111,7 +126,10 @@ describe("executeWriteFile", () => {
       const testFile = join(tempDir, "unicode.txt");
       const content = "한글 테스트\n이모지 🎉";
 
-      const result = await executeWriteFile({ path: testFile, content }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: testFile, content },
+        { rootDir: tempDir }
+      );
 
       expect(result).not.toContain("한글 테스트");
       expect(result).not.toContain("이모지 🎉");
@@ -126,7 +144,10 @@ describe("executeWriteFile", () => {
     it("handles empty content", async () => {
       const testFile = join(tempDir, "empty.txt");
 
-      const result = await executeWriteFile({ path: testFile, content: "" }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: testFile, content: "" },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("OK - created empty.txt");
       expect(result).toContain("bytes: 0");
@@ -140,7 +161,10 @@ describe("executeWriteFile", () => {
       const testFile = join(tempDir, "single.txt");
       const content = "single line without newline";
 
-      const result = await executeWriteFile({ path: testFile, content }, { rootDir: tempDir });
+      const result = await executeWriteFile(
+        { path: testFile, content },
+        { rootDir: tempDir }
+      );
 
       expect(result).toContain("lines: 1");
       expect(result).not.toContain("single line without newline");
@@ -161,13 +185,21 @@ describe("executeWriteFile", () => {
     it("C-1: blocks path traversal via .. segments", async () => {
       const traversalPath = join(tempDir, "..", "..", "etc", "passwd");
       await expect(
-        executeWriteFile({ path: traversalPath, content: "malicious" }, { rootDir: tempDir })
+        executeWriteFile(
+          { path: traversalPath, content: "malicious" },
+          { rootDir: tempDir }
+        )
+        // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
       ).rejects.toThrow(/[Pp]ath traversal blocked/);
     });
 
     it("C-1: blocks absolute paths outside project root", async () => {
       await expect(
-        executeWriteFile({ path: "/tmp/outside-project.txt", content: "bad" }, { rootDir: tempDir })
+        executeWriteFile(
+          { path: "/tmp/outside-project.txt", content: "bad" },
+          { rootDir: tempDir }
+        )
+        // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
       ).rejects.toThrow(/[Pp]ath traversal blocked|outside/);
     });
 
@@ -178,7 +210,11 @@ describe("executeWriteFile", () => {
       symlinkSync(realFile, symlinkPath);
 
       await expect(
-        executeWriteFile({ path: symlinkPath, content: "through symlink" }, { rootDir: tempDir })
+        executeWriteFile(
+          { path: symlinkPath, content: "through symlink" },
+          { rootDir: tempDir }
+        )
+        // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
       ).rejects.toThrow(/symlink/i);
 
       // Original file should be unchanged
@@ -194,7 +230,11 @@ describe("executeWriteFile", () => {
 
       try {
         await expect(
-          executeWriteFile({ path: symlinkPath, content: "overwrite" }, { rootDir: tempDir })
+          executeWriteFile(
+            { path: symlinkPath, content: "overwrite" },
+            { rootDir: tempDir }
+          )
+          // biome-ignore lint/performance/useTopLevelRegex: Test regex, not performance-critical
         ).rejects.toThrow(/symlink/i);
         expect(readFileSync(outsideFile, "utf-8")).toBe("secret data");
       } finally {
@@ -214,7 +254,10 @@ describe("executeWriteFile", () => {
 
     it("H-1: no temp files left after successful write", async () => {
       const testFile = join(tempDir, "no-temp-residue.txt");
-      await executeWriteFile({ path: testFile, content: "clean" }, { rootDir: tempDir });
+      await executeWriteFile(
+        { path: testFile, content: "clean" },
+        { rootDir: tempDir }
+      );
 
       const dirEntries = readFileSync(testFile, "utf-8");
       expect(dirEntries).toBe("clean");
