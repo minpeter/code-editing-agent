@@ -16,8 +16,14 @@
     "src",
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minpeter/plugsuits.git",
+    "directory": "packages/cea"
+  },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "bin": {
     "plugsuits": "cli.js",
