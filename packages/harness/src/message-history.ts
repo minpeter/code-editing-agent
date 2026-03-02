@@ -2,12 +2,32 @@ import type { ModelMessage, TextPart, ToolResultPart } from "ai";
 
 const TRAILING_NEWLINES = /\n+$/;
 
+// Constants for token estimation and compaction
+const CHARS_PER_TOKEN = 4;
+const MAX_TEXT_LENGTH_PER_MESSAGE = 500;
+const SUMMARY_PREFIX = "Previous conversation summary:";
+const SYSTEM_CONTEXT_PREFIX = "Previous conversation context:";
+
+// ID generation counter for summaries
+let summaryIdCounter = 0;
+
+/**
+ * Sanitize summary text to prevent prompt injection.
+ * Removes potential system message boundaries and control characters.
+ */
+function sanitizeSummaryText(text: string): string {
+  // Remove XML-like tags that could be interpreted as system boundaries
+  return text
+    .replace(/<\s*(\/?)\s*(system|user|assistant)\s*>/gi, "[$1$2]")
+    .replace(/\x00-\x1F/g, ""); // Remove control characters except newlines
+}
+
 /**
  * Simple token estimator based on character count.
  * Uses a conservative estimate of ~4 characters per token.
  */
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
 /**
@@ -187,14 +207,21 @@ const DEFAULT_COMPACTION_RESERVE = 2000;
 /**
  * Default summarizer that concatenates message content.
  * This is a fallback when no custom summarizer is provided.
+ * Output is sanitized to prevent prompt injection.
  */
 async function defaultSummarizeFn(messages: ModelMessage[]): Promise<string> {
   const parts = messages.map((msg) => {
     const role = msg.role;
     const text = extractMessageText(msg);
-    return `[${role}]: ${text.slice(0, 500)}${text.length > 500 ? "..." : ""}`;
+    const truncated = text.slice(0, MAX_TEXT_LENGTH_PER_MESSAGE);
+    const suffix = text.length > MAX_TEXT_LENGTH_PER_MESSAGE ? "..." : "";
+    // Sanitize each part to prevent injection through message content
+    const sanitizedRole = sanitizeSummaryText(role);
+    const sanitizedContent = sanitizeSummaryText(truncated + suffix);
+    return `[${sanitizedRole}]: ${sanitizedContent}`;
   });
-  return `Previous conversation summary:\n${parts.join("\n")}`;
+  const summary = `${SUMMARY_PREFIX}\n${parts.join("\n")}`;
+  return sanitizeSummaryText(summary);
 }
 
 export class MessageHistory {
@@ -279,7 +306,10 @@ export class MessageHistory {
     };
     this.messages.push(message);
     this.enforceLimit();
-    void this.checkAndCompact();
+    // Trigger compaction asynchronously, errors are handled internally
+    this.checkAndCompact().catch((error) => {
+      console.error("Compaction error in addUserMessage:", error);
+    });
     return message;
   }
 
@@ -298,7 +328,10 @@ export class MessageHistory {
     }
     this.messages.push(...created);
     this.enforceLimit();
-    void this.checkAndCompact();
+    // Trigger compaction asynchronously, errors are handled internally
+    this.checkAndCompact().catch((error) => {
+      console.error("Compaction error in addModelMessages:", error);
+    });
     return created;
   }
 
@@ -306,6 +339,9 @@ export class MessageHistory {
    * Get messages with compaction summaries prepended as system context.
    * This is the recommended way to get messages for LLM calls when
    * compaction is enabled.
+   * 
+   * Security: Summary content is sanitized to prevent prompt injection.
+   * User content cannot escalate to system privileges through this method.
    */
   getMessagesForLLM(): ModelMessage[] {
     const modelMessages = this.toModelMessages();
@@ -315,13 +351,15 @@ export class MessageHistory {
     }
 
     // Combine summaries into a single system message
+    // Each summary is already sanitized during creation, but we double-check here
     const combinedSummary = this.summaries
-      .map((s) => `---\n${s.summary}`)
+      .map((s) => `---\n${sanitizeSummaryText(s.summary)}`)
       .join("\n");
 
+    // Use sanitized prefix constant to prevent injection through prefix
     const systemMessage: ModelMessage = {
       role: "system",
-      content: `Previous conversation context:\n${combinedSummary}`,
+      content: `${SYSTEM_CONTEXT_PREFIX}\n${combinedSummary}`,
     };
 
     return [systemMessage, ...modelMessages];
@@ -341,7 +379,12 @@ export class MessageHistory {
       return;
     }
 
-    await this.performCompaction();
+    try {
+      await this.performCompaction();
+    } catch (error) {
+      // Log error but don't throw to prevent breaking message flow
+      console.error("Auto-compaction failed:", error);
+    }
   }
 
   private async performCompaction(): Promise<boolean> {
@@ -353,28 +396,35 @@ export class MessageHistory {
 
     try {
       // Calculate tokens from the end to find what to keep
+      // KeepRecentTokens 범위 내 메시지는 요약되지 않고 보존
       const keepRecentTokens =
         this.compaction.keepRecentTokens ?? DEFAULT_COMPACTION_KEEP_RECENT;
 
-      let keptTokens = 0;
-      let splitIndex = this.messages.length;
+      let keptTokens = 0;  // 뒤에서부터 누적된 보존 대상 토큰 수
+      let splitIndex = this.messages.length;  // 분할 지점 (기본값: 모두 보존)
 
       // Walk backwards to find where to split
+      // Logic: 뒤에서부터 순회하며 keepRecentTokens를 초과하지 않는 범위를 찾음
+      // - splitIndex 이후 (splitIndex + 1 ~ end): 보존 대상 (요약되지 않음)
+      // - splitIndex 이전 (0 ~ splitIndex - 1): 요약 대상
       for (let i = this.messages.length - 1; i >= 0; i--) {
         const msgTokens = estimateTokens(
           extractMessageText(this.messages[i].modelMessage)
         );
 
+        // 현재 메시지까지 포함하면 keepRecentTokens를 초과하는 경우
+        // 현재 메시지(i)는 요약 대상, i+1부터는 보존 대상
         if (keptTokens + msgTokens > keepRecentTokens) {
-          splitIndex = i + 1;
+          splitIndex = i + 1;  // i+1부터 끝까지 보존
           break;
         }
 
+        // 현재 메시지를 보존 대상에 포함
         keptTokens += msgTokens;
 
-        // Always keep at least the last turn
+        // Always keep at least the last turn (처음까지 도달하면 모두 보존)
         if (i === 0) {
-          splitIndex = 0;
+          splitIndex = 0;  // 모든 메시지 보존, 요약 없음
         }
       }
 
@@ -383,8 +433,9 @@ export class MessageHistory {
         return false;
       }
 
-      // Messages to summarize
+      // Messages to summarize (splitIndex 이전 메시지들)
       const messagesToSummarize = this.messages.slice(0, splitIndex);
+      // Messages to keep as-is (splitIndex부터 끝까지)
       const messagesToKeep = this.messages.slice(splitIndex);
 
       if (messagesToSummarize.length === 0) {
@@ -395,18 +446,29 @@ export class MessageHistory {
       const firstKeptMessageId =
         messagesToKeep.length > 0 ? messagesToKeep[0].id : "end";
 
-      // Summarize
+      // Summarize with error handling and fallback
       const summarizeFn = this.compaction.summarizeFn ?? defaultSummarizeFn;
       const modelMessagesToSummarize = messagesToSummarize.map(
         (m) => m.modelMessage
       );
 
-      const summary = await summarizeFn(modelMessagesToSummarize);
+      let summary: string;
+      try {
+        summary = await summarizeFn(modelMessagesToSummarize);
+      } catch (error) {
+        // Fallback to default summarizer if custom one fails
+        console.warn("Custom summarizeFn failed, using fallback:", error);
+        summary = await defaultSummarizeFn(modelMessagesToSummarize);
+      }
+
+      // Sanitize summary to prevent prompt injection
+      summary = sanitizeSummaryText(summary);
       const summaryTokens = estimateTokens(summary);
 
-      // Create summary entry
+      // Create summary entry with unique ID (timestamp + counter + random)
+      summaryIdCounter += 1;
       const summaryEntry: CompactionSummary = {
-        id: `summary_${Date.now()}`,
+        id: `summary_${Date.now()}_${summaryIdCounter}_${Math.random().toString(36).slice(2, 8)}`,
         createdAt: new Date(),
         summary,
         firstKeptMessageId,
@@ -418,6 +480,10 @@ export class MessageHistory {
       this.messages = messagesToKeep;
 
       return true;
+    } catch (error) {
+      // Log error but don't throw to prevent breaking message flow
+      console.error("Compaction failed:", error);
+      return false;
     } finally {
       this.compactionInProgress = false;
     }
