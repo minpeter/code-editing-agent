@@ -3,7 +3,14 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executeCommand, killProcessTree } from "./process-manager";
+import {
+  executeCommand,
+  killProcessTree,
+  getProcessSessionId,
+  verifyProcessIdentity,
+  activeProcesses,
+  type ProcessInfo,
+} from "./process-manager";
 import { getShell, getShellArgs } from "./shell-detection";
 
 const FIVE_SECONDS_MS = 5000;
@@ -154,14 +161,22 @@ describe("process-manager", () => {
       throw new Error("Expected detached child pid to be defined");
     }
 
+    // Create ProcessInfo with current session
+    const sessionId = getProcessSessionId(pid);
+    const processInfo: ProcessInfo = {
+      pid,
+      sessionId,
+      startTime: Date.now(),
+    };
+
     try {
       await sleep(ABORT_DELAY_MS);
-      killProcessTree(pid);
+      killProcessTree(processInfo);
       await sleep(SIGKILL_GRACE_MS);
 
       expect(isProcessAlive(pid)).toBe(false);
     } finally {
-      killProcessTree(pid);
+      killProcessTree(processInfo);
     }
   }, 10_000);
 
@@ -171,5 +186,174 @@ describe("process-manager", () => {
     ).text();
 
     expect(source.includes("spawnSync")).toBe(false);
+  });
+
+  describe("PID recycling safety", () => {
+    it("getProcessSessionId returns valid session ID for existing process", async () => {
+      const shell = getShell();
+      const shellArgs = getShellArgs(shell);
+      const child = spawn(shell, [...shellArgs, "sleep 10"], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+
+      const pid = child.pid;
+      if (!pid) {
+        throw new Error("Expected pid to be defined");
+      }
+
+      try {
+        const sessionId = getProcessSessionId(pid);
+        // Session ID should be positive (valid) on Linux
+        expect(sessionId).toBeGreaterThan(0);
+      } finally {
+        child.kill();
+        await sleep(100);
+      }
+    }, 5000);
+
+    it("getProcessSessionId returns -1 for non-existent process", () => {
+      // Use a very high PID that's unlikely to exist
+      const sessionId = getProcessSessionId(999999);
+      expect(sessionId).toBe(-1);
+    });
+
+    it("verifyProcessIdentity returns true for valid process", async () => {
+      const shell = getShell();
+      const shellArgs = getShellArgs(shell);
+      const child = spawn(shell, [...shellArgs, "sleep 10"], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+
+      const pid = child.pid;
+      if (!pid) {
+        throw new Error("Expected pid to be defined");
+      }
+
+      const sessionId = getProcessSessionId(pid);
+      const processInfo: ProcessInfo = {
+        pid,
+        sessionId,
+        startTime: Date.now(),
+      };
+
+      try {
+        expect(verifyProcessIdentity(processInfo)).toBe(true);
+      } finally {
+        child.kill();
+        await sleep(100);
+      }
+    }, 5000);
+
+    it("verifyProcessIdentity returns false for recycled PID simulation", async () => {
+      const shell = getShell();
+      const shellArgs = getShellArgs(shell);
+      const child = spawn(shell, [...shellArgs, "sleep 10"], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+
+      const pid = child.pid;
+      if (!pid) {
+        throw new Error("Expected pid to be defined");
+      }
+
+      const sessionId = getProcessSessionId(pid);
+
+      // Kill the original process
+      child.kill();
+      await sleep(200);
+
+      // Simulate a "recycled" PID by creating ProcessInfo with wrong session
+      const fakeProcessInfo: ProcessInfo = {
+        pid,
+        sessionId: sessionId + 9999, // Wrong session ID
+        startTime: Date.now(),
+      };
+
+      // If PID hasn't been recycled yet, process won't exist
+      // If it has been recycled, session won't match
+      expect(verifyProcessIdentity(fakeProcessInfo)).toBe(false);
+    }, 5000);
+
+    it("killProcessTree does not kill process with mismatched session", async () => {
+      const shell = getShell();
+      const shellArgs = getShellArgs(shell);
+
+      // Start a victim process that we'll try to kill with wrong identity
+      const victim = spawn(shell, [...shellArgs, "sleep 10"], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+
+      const victimPid = victim.pid;
+      if (!victimPid) {
+        throw new Error("Expected pid to be defined");
+      }
+
+      try {
+        // Create ProcessInfo with wrong session (simulating recycled PID scenario)
+        const fakeProcessInfo: ProcessInfo = {
+          pid: victimPid,
+          sessionId: 999999, // Wrong session ID
+          startTime: Date.now(),
+        };
+
+        // Attempt to kill with wrong identity
+        killProcessTree(fakeProcessInfo, true);
+
+        await sleep(SIGKILL_GRACE_MS);
+
+        // Victim should still be alive because session didn't match
+        expect(isProcessAlive(victimPid)).toBe(true);
+      } finally {
+        victim.kill();
+        await sleep(100);
+      }
+    }, 5000);
+
+    it("activeProcesses tracks processes correctly", async () => {
+      const shell = getShell();
+      const shellArgs = getShellArgs(shell);
+
+      // Clear any existing tracked processes
+      activeProcesses.clear();
+
+      const child = spawn(shell, [...shellArgs, "sleep 10"], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+
+      const pid = child.pid;
+      if (!pid) {
+        throw new Error("Expected pid to be defined");
+      }
+
+      // Manually add to activeProcesses to simulate executeCommand behavior
+      const sessionId = getProcessSessionId(pid);
+      const processInfo: ProcessInfo = {
+        pid,
+        sessionId,
+        startTime: Date.now(),
+      };
+      activeProcesses.set(pid, processInfo);
+
+      try {
+        expect(activeProcesses.has(pid)).toBe(true);
+        expect(activeProcesses.get(pid)?.pid).toBe(pid);
+        expect(activeProcesses.get(pid)?.sessionId).toBe(sessionId);
+
+        // Kill the process
+        killProcessTree(pid, true);
+        await sleep(SIGKILL_GRACE_MS);
+
+        // Process should be removed from tracking after kill
+        expect(activeProcesses.has(pid)).toBe(false);
+      } finally {
+        child.kill();
+        activeProcesses.delete(pid);
+      }
+    }, 5000);
   });
 });

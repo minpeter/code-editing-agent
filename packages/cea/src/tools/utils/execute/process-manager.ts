@@ -10,7 +10,14 @@ const CANCELLED_EXIT_CODE = 130;
 const TIMEOUT_EXIT_CODE = 124;
 const MAX_IN_MEMORY_OUTPUT_BYTES = 2 * 1024 * 1024;
 const TRIMMED_BUFFER_TARGET_BYTES = 512 * 1024;
-const activeProcesses = new Set<number>();
+
+interface ProcessInfo {
+  pid: number;
+  sessionId: number;
+  startTime: number;
+}
+
+const activeProcesses = new Map<number, ProcessInfo>();
 
 export interface ExecuteOptions {
   onChunk?: (chunk: string) => void;
@@ -34,6 +41,74 @@ function hasErrnoCode(error: unknown, code: string): boolean {
     "code" in error &&
     (error as { code?: string }).code === code
   );
+}
+
+/**
+ * Get the session ID for a process.
+ * Returns -1 if the process doesn't exist or we don't have permission.
+ */
+function getProcessSessionId(pid: number): number {
+  if (pid <= 1) {
+    return -1;
+  }
+  try {
+    // Use process.kill with signal 0 to check existence first
+    process.kill(pid, 0);
+    // On Linux/macOS, we can get the session ID via process.getsid if available
+    // or by checking /proc/[pid]/stat
+    if (typeof process.getsid === "function") {
+      return process.getsid(pid);
+    }
+    // Fallback: try to read from /proc (Linux only)
+    try {
+      const { readFileSync } = require("node:fs");
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
+      // Format: pid (comm) state ppid pgrp session tty_nr ...
+      const parts = stat.split(" ");
+      // Find session field (index varies due to comm containing spaces)
+      // The session is the 5th numeric field after the command
+      const closeParenIndex = stat.indexOf(")");
+      if (closeParenIndex > 0) {
+        const afterComm = stat.slice(closeParenIndex + 2); // Skip ") "
+        const fields = afterComm.split(" ");
+        const sessionId = parseInt(fields[3], 10); // session is 4th field after comm
+        if (!isNaN(sessionId)) {
+          return sessionId;
+        }
+      }
+    } catch {
+      // /proc not available or readable
+    }
+    // Last resort: return the pid itself as a pseudo-session-id
+    // This at least prevents killing processes with different PIDs
+    return pid;
+  } catch (error) {
+    if (hasErrnoCode(error, "ESRCH") || hasErrnoCode(error, "EPERM")) {
+      return -1;
+    }
+    return -1;
+  }
+}
+
+/**
+ * Verify that a process is still the same one we started.
+ * This prevents killing unrelated processes after PID recycling.
+ */
+function verifyProcessIdentity(info: ProcessInfo): boolean {
+  // Check if process still exists
+  try {
+    process.kill(info.pid, 0);
+  } catch {
+    return false;
+  }
+
+  // Check session ID matches
+  const currentSessionId = getProcessSessionId(info.pid);
+  if (currentSessionId !== info.sessionId) {
+    return false;
+  }
+
+  return true;
 }
 
 function isProcessGroupAlive(pid: number): boolean {
@@ -87,7 +162,7 @@ function resolveExitCode(
   return SPAWN_ERROR_EXIT_CODE;
 }
 
-function trimToLastBytes(
+function trimToBytes(
   text: string,
   maxBytes: number
 ): { droppedBytes: number; text: string } {
@@ -104,8 +179,38 @@ function trimToLastBytes(
   };
 }
 
-export function killProcessTree(pid: number, force = false): void {
+/**
+ * Kill a process tree safely, preventing PID recycling attacks.
+ *
+ * The processInfo parameter allows verification that we're killing the
+ * correct process, not an unrelated process that reused the PID.
+ */
+export function killProcessTree(
+  processInfo: ProcessInfo | number,
+  force = false
+): void {
+  let pid: number;
+  let info: ProcessInfo | undefined;
+
+  if (typeof processInfo === "number") {
+    pid = processInfo;
+    // Try to look up the stored process info
+    info = activeProcesses.get(pid);
+  } else {
+    pid = processInfo.pid;
+    info = processInfo;
+  }
+
   if (pid <= 1) {
+    return;
+  }
+
+  // If we have stored process info, verify the process identity
+  // to prevent killing an unrelated process after PID recycling
+  if (info && !verifyProcessIdentity(info)) {
+    // Process has been recycled or doesn't match our records
+    // Remove from tracking and don't kill
+    activeProcesses.delete(pid);
     return;
   }
 
@@ -113,15 +218,24 @@ export function killProcessTree(pid: number, force = false): void {
 
   if (force) {
     safeKillProcessGroup(pid, "SIGKILL");
+    activeProcesses.delete(pid);
     return;
   }
 
   const handle = setTimeout(() => {
     if (!isProcessGroupAlive(pid)) {
+      activeProcesses.delete(pid);
+      return;
+    }
+    // Re-verify before SIGKILL
+    if (info && !verifyProcessIdentity(info)) {
+      activeProcesses.delete(pid);
       return;
     }
     safeKillProcessGroup(pid, "SIGKILL");
+    activeProcesses.delete(pid);
   }, SIGKILL_DELAY_MS);
+
   if (typeof handle === "object" && "unref" in handle) {
     handle.unref();
   }
@@ -165,8 +279,18 @@ export async function executeCommand(
 
     child.unref();
 
+    let processInfo: ProcessInfo | undefined;
+
     if (child.pid) {
-      activeProcesses.add(child.pid);
+      // Get the session ID as soon as the process starts
+      // This is when we can reliably identify the process
+      const sessionId = getProcessSessionId(child.pid);
+      processInfo = {
+        pid: child.pid,
+        sessionId,
+        startTime: Date.now(),
+      };
+      activeProcesses.set(child.pid, processInfo);
     }
 
     const stdoutDecoder = new TextDecoder();
@@ -181,14 +305,18 @@ export async function executeCommand(
 
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
-      if (child.pid) {
+      if (processInfo) {
+        killProcessTree(processInfo);
+      } else if (child.pid) {
         killProcessTree(child.pid);
       }
     }, timeoutMs);
 
     const abortHandler = () => {
       cancelled = true;
-      if (child.pid) {
+      if (processInfo) {
+        killProcessTree(processInfo);
+      } else if (child.pid) {
         killProcessTree(child.pid);
       }
     };
@@ -203,7 +331,7 @@ export async function executeCommand(
       if (
         Buffer.byteLength(bufferedOutput, "utf-8") > MAX_IN_MEMORY_OUTPUT_BYTES
       ) {
-        const trimmed = trimToLastBytes(
+        const trimmed = trimToBytes(
           bufferedOutput,
           TRIMMED_BUFFER_TARGET_BYTES
         );
@@ -222,7 +350,7 @@ export async function executeCommand(
       if (
         Buffer.byteLength(bufferedOutput, "utf-8") > MAX_IN_MEMORY_OUTPUT_BYTES
       ) {
-        const trimmed = trimToLastBytes(
+        const trimmed = trimToBytes(
           bufferedOutput,
           TRIMMED_BUFFER_TARGET_BYTES
         );
@@ -299,12 +427,16 @@ export async function executeCommand(
 }
 
 export function cleanup(force = false): void {
-  for (const pid of activeProcesses) {
+  for (const [, info] of activeProcesses) {
     try {
-      killProcessTree(pid, force);
+      killProcessTree(info, force);
     } catch {
       // Best-effort cleanup: continue killing remaining processes
     }
   }
   activeProcesses.clear();
 }
+
+// Export for testing
+export { activeProcesses, getProcessSessionId, verifyProcessIdentity };
+export type { ProcessInfo };
