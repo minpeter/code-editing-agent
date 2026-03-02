@@ -152,9 +152,75 @@ describe("translateToEnglish", () => {
 
     expect(result.translated).toBe(true);
     expect(generateTextCallCount).toBe(1);
+    // CDATA end sequence: ]]> becomes ]]&gt; after XML escaping, preventing CDATA closure
     expect(capturedPrompt).toContain(
-      "<user_text><![CDATA[workspace/foo.ts ]]]]><![CDATA[> 구간만 수정해줘]]></user_text>"
+      "<user_text><![CDATA[workspace/foo.ts ]]&gt; 구간만 수정해줘]]></user_text>"
     );
+  });
+
+  it("escapes XML special characters to prevent injection attacks", async () => {
+    translatedOutput = "Safe translation";
+
+    // Include Korean character to ensure translation is triggered
+    const result = await translateToEnglish(
+      '<script>alert("xss")</script> & 테스트',
+      createAgentManagerStub()
+    );
+
+    expect(result.translated).toBe(true);
+    expect(generateTextCallCount).toBe(1);
+    // XML special characters should be escaped
+    expect(capturedPrompt).toContain("&lt;script&gt;");
+    expect(capturedPrompt).toContain("&quot;xss&quot;");
+    expect(capturedPrompt).toContain("&lt;/script&gt;");
+    expect(capturedPrompt).toContain("&amp;");
+  });
+
+  it("handles combined CDATA end sequence and XML special characters", async () => {
+    translatedOutput = "Safe translation";
+
+    // Include Korean character to ensure translation is triggered
+    const result = await translateToEnglish(
+      ']]><script>alert("xss")</script>]]> 테스트',
+      createAgentManagerStub()
+    );
+
+    expect(result.translated).toBe(true);
+    expect(generateTextCallCount).toBe(1);
+    // XML special chars should be escaped
+    expect(capturedPrompt).toContain("&lt;script&gt;");
+    expect(capturedPrompt).toContain("&quot;xss&quot;");
+    // CDATA end sequence: ]]> becomes ]]&gt; after XML escaping
+    expect(capturedPrompt).toContain("]]&gt;");
+  });
+
+  it("escapes single quotes to prevent XML attribute injection", async () => {
+    translatedOutput = "Safe translation";
+
+    // Include Korean character to ensure translation is triggered
+    const result = await translateToEnglish(
+      "It's a test' attr='value 테스트",
+      createAgentManagerStub()
+    );
+
+    expect(result.translated).toBe(true);
+    expect(generateTextCallCount).toBe(1);
+    expect(capturedPrompt).toContain("&apos;");
+  });
+
+  it("handles multiple CDATA end sequences correctly", async () => {
+    translatedOutput = "Safe translation";
+
+    // Include Korean character to ensure translation is triggered
+    const result = await translateToEnglish(
+      "]]>test]]>another]]>end 테스트",
+      createAgentManagerStub()
+    );
+
+    expect(result.translated).toBe(true);
+    expect(generateTextCallCount).toBe(1);
+    // All ]]> sequences should be escaped as ]]&gt;, preventing CDATA closure
+    expect(capturedPrompt).toContain("]]&gt;test]]&gt;another]]&gt;end");
   });
 
   it("skips translation for English input", async () => {
