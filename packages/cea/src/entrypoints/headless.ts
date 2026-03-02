@@ -18,9 +18,7 @@ import {
   buildTodoContinuationUserMessage,
   getIncompleteTodos,
 } from "../middleware/todo-continuation";
-import {
-  type ReasoningMode,
-} from "../reasoning-mode";
+import type { ReasoningMode } from "../reasoning-mode";
 import {
   DEFAULT_TOOL_FALLBACK_MODE,
   type ToolFallbackMode,

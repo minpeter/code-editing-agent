@@ -56,23 +56,23 @@ function getProcessSessionId(pid: number): number {
     process.kill(pid, 0);
     // On Linux/macOS, we can get the session ID via process.getsid if available
     // or by checking /proc/[pid]/stat
-    if (typeof process.getsid === "function") {
-      return process.getsid(pid);
+    if (typeof (process as NodeJS.Process & { getsid?: (pid: number) => number }).getsid === "function") {
+      return (process as NodeJS.Process & { getsid?: (pid: number) => number }).getsid!(pid);
     }
     // Fallback: try to read from /proc (Linux only)
     try {
       const { readFileSync } = require("node:fs");
       const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
       // Format: pid (comm) state ppid pgrp session tty_nr ...
-      const parts = stat.split(" ");
+      const _parts = stat.split(" ");
       // Find session field (index varies due to comm containing spaces)
       // The session is the 5th numeric field after the command
       const closeParenIndex = stat.indexOf(")");
       if (closeParenIndex > 0) {
         const afterComm = stat.slice(closeParenIndex + 2); // Skip ") "
         const fields = afterComm.split(" ");
-        const sessionId = parseInt(fields[3], 10); // session is 4th field after comm
-        if (!isNaN(sessionId)) {
+        const sessionId = Number.parseInt(fields[3], 10); // session is 4th field after comm
+        if (!Number.isNaN(sessionId)) {
           return sessionId;
         }
       }

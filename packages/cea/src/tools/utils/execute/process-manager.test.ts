@@ -4,12 +4,12 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  executeCommand,
-  killProcessTree,
-  getProcessSessionId,
-  verifyProcessIdentity,
   activeProcesses,
+  executeCommand,
+  getProcessSessionId,
+  killProcessTree,
   type ProcessInfo,
+  verifyProcessIdentity,
 } from "./process-manager";
 import { getShell, getShellArgs } from "./shell-detection";
 
@@ -214,7 +214,7 @@ describe("process-manager", () => {
 
     it("getProcessSessionId returns -1 for non-existent process", () => {
       // Use a very high PID that's unlikely to exist
-      const sessionId = getProcessSessionId(999999);
+      const sessionId = getProcessSessionId(999_999);
       expect(sessionId).toBe(-1);
     });
 
@@ -296,7 +296,7 @@ describe("process-manager", () => {
         // Create ProcessInfo with wrong session (simulating recycled PID scenario)
         const fakeProcessInfo: ProcessInfo = {
           pid: victimPid,
-          sessionId: 999999, // Wrong session ID
+          sessionId: 999_999, // Wrong session ID
           startTime: Date.now(),
         };
 

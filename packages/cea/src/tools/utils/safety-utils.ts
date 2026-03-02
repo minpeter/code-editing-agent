@@ -25,7 +25,7 @@ const FILE_READ_POLICY = {
  * Sensitive system paths that should never be accessed.
  * These are blocked as an additional defense-in-depth measure.
  */
-const SENSITIVE_SYSTEM_PATHS = [
+const _SENSITIVE_SYSTEM_PATHS = [
   "/etc",
   "/proc",
   "/sys",

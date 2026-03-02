@@ -228,8 +228,11 @@ const main = async () => {
   // Per-model results
   for (const r of allResults) {
     const timeStr = `${(r.durationMs / 1000).toFixed(0)}s`;
-    const color = r.totalPassed === r.totalTests ? GREEN : r.totalPassed > 0 ? YELLOW : RED;
-    console.log(`  ${r.modelShort.padEnd(8)} ${color}${r.totalPassed}/${r.totalTests}${RESET} (${timeStr})`);
+    const color =
+      r.totalPassed === r.totalTests ? GREEN : r.totalPassed > 0 ? YELLOW : RED;
+    console.log(
+      `  ${r.modelShort.padEnd(8)} ${color}${r.totalPassed}/${r.totalTests}${RESET} (${timeStr})`
+    );
     for (const t of r.tests) {
       const icon = t.passed ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
       console.log(`    ${icon} ${t.name}`);

@@ -1,4 +1,5 @@
 import type { ProviderType } from "./agent";
+export type { ProviderType };
 import {
   DEFAULT_REASONING_MODE,
   parseReasoningMode,
@@ -10,8 +11,6 @@ import {
   parseToolFallbackMode,
   type ToolFallbackMode,
 } from "./tool-fallback-mode";
-
-export type { ProviderType };
 
 export const parseProviderArg = (
   providerArg: string | undefined

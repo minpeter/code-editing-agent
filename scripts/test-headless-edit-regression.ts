@@ -100,7 +100,15 @@ const runTest = async (): Promise<boolean> => {
   info(`Test file initialized with ${STORY_CONTENT.split("\n").length} lines`);
 
   // Step 2: Run headless mode
-  const headlessScript = resolve(import.meta.dir, "..", "packages", "cea", "src", "entrypoints", "headless.ts");
+  const headlessScript = resolve(
+    import.meta.dir,
+    "..",
+    "packages",
+    "cea",
+    "src",
+    "entrypoints",
+    "headless.ts"
+  );
   const headlessArgs = [
     "run",
     headlessScript,
@@ -251,7 +259,7 @@ const runTest = async (): Promise<boolean> => {
           for (const line of inputStr.split("\n")) {
             info(`  │ ${line}`);
           }
-          info(`  └────────────────────────────────────────`);
+          info("  └────────────────────────────────────────");
         }
       }
     } else {
@@ -271,12 +279,12 @@ const runTest = async (): Promise<boolean> => {
           (c) => c.tool_call_id === err.tool_call_id
         );
         if (matchingCall) {
-          info(`  ┌─ tool_input ─────────────────────────────`);
+          info("  ┌─ tool_input ─────────────────────────────");
           const inputStr = JSON.stringify(matchingCall.tool_input, null, 2);
           for (const line of inputStr.split("\n")) {
             info(`  │ ${line}`);
           }
-          info(`  └────────────────────────────────────────`);
+          info("  └────────────────────────────────────────");
         }
       }
     }
@@ -292,12 +300,12 @@ const runTest = async (): Promise<boolean> => {
           (c) => c.tool_call_id === err.tool_call_id
         );
         if (matchingCall) {
-          info(`  ┌─ tool_input ─────────────────────────────`);
+          info("  ┌─ tool_input ─────────────────────────────");
           const inputStr = JSON.stringify(matchingCall.tool_input, null, 2);
           for (const line of inputStr.split("\n")) {
             info(`  │ ${line}`);
           }
-          info(`  └────────────────────────────────────────`);
+          info("  └────────────────────────────────────────");
         }
       }
     }
