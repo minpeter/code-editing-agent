@@ -2,6 +2,53 @@ import type { ModelMessage, TextPart, ToolResultPart } from "ai";
 
 const TRAILING_NEWLINES = /\n+$/;
 
+/**
+ * Simple token estimator based on character count.
+ * Uses a conservative estimate of ~4 characters per token.
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Extract text content from a message for token estimation.
+ */
+function extractMessageText(message: ModelMessage): string {
+  if (typeof message.content === "string") {
+    return message.content;
+  }
+
+  if (!Array.isArray(message.content)) {
+    return "";
+  }
+
+  return message.content
+    .map((part) => {
+      if (typeof part === "object" && part !== null) {
+        if (part.type === "text") {
+          return (part as TextPart).text;
+        }
+        if (part.type === "tool-call") {
+          return `${part.toolName} ${JSON.stringify(part.input)}`;
+        }
+        if (part.type === "tool-result") {
+          return `${part.toolName} ${JSON.stringify(part.output)}`;
+        }
+      }
+      return "";
+    })
+    .join(" ");
+}
+
+/**
+ * Calculate estimated token count for an array of messages.
+ */
+function estimateMessagesTokens(messages: ModelMessage[]): number {
+  return messages.reduce((total, msg) => {
+    return total + estimateTokens(extractMessageText(msg));
+  }, 0);
+}
+
 function trimTrailingNewlines(message: ModelMessage): ModelMessage {
   if (message.role !== "assistant") {
     return message;
@@ -54,6 +101,60 @@ export interface Message {
   originalContent?: string;
 }
 
+/**
+ * Summary entry representing a compacted batch of messages.
+ */
+export interface CompactionSummary {
+  id: string;
+  createdAt: Date;
+  summary: string;
+  /** ID of the first message that was kept after this summary */
+  firstKeptMessageId: string;
+  /** Estimated tokens before compaction */
+  tokensBefore: number;
+  /** Estimated tokens in the summary */
+  summaryTokens: number;
+}
+
+/**
+ * Configuration for the incremental compaction feature.
+ */
+export interface CompactionConfig {
+  /**
+   * Enable incremental compaction. When enabled, older messages are
+   * summarized when context exceeds token thresholds.
+   * @default false
+   */
+  enabled?: boolean;
+
+  /**
+   * Maximum total tokens before triggering compaction.
+   * When exceeded, older messages will be summarized.
+   * @default 8000
+   */
+  maxTokens?: number;
+
+  /**
+   * Number of recent tokens to preserve from compaction.
+   * These messages are always kept in full form.
+   * @default 2000
+   */
+  keepRecentTokens?: number;
+
+  /**
+   * Reserve tokens for the response. Compaction triggers when
+   * (totalTokens + reserveTokens) > maxTokens.
+   * @default 2000
+   */
+  reserveTokens?: number;
+
+  /**
+   * Custom function to summarize a batch of messages.
+   * If not provided, a simple concatenation fallback is used.
+   */
+  summarizeFn?: (messages: ModelMessage[]) => Promise<string>;
+}
+
 export interface MessageHistoryOptions {
   /**
    * Maximum number of messages to retain. When exceeded, older messages
@@ -61,6 +162,13 @@ export interface MessageHistoryOptions {
    * for context continuity. Defaults to 1000.
    */
   maxMessages?: number;
+
+  /**
+   * Incremental compaction configuration for managing long contexts.
+   * When enabled, older messages are summarized to reduce token usage
+   * while preserving important context.
+   */
+  compaction?: CompactionConfig;
 }
 
 const createMessageId = (() => {
@@ -72,10 +180,29 @@ const createMessageId = (() => {
 })();
 
 const DEFAULT_MAX_MESSAGES = 1000;
+const DEFAULT_COMPACTION_MAX_TOKENS = 8000;
+const DEFAULT_COMPACTION_KEEP_RECENT = 2000;
+const DEFAULT_COMPACTION_RESERVE = 2000;
+
+/**
+ * Default summarizer that concatenates message content.
+ * This is a fallback when no custom summarizer is provided.
+ */
+async function defaultSummarizeFn(messages: ModelMessage[]): Promise<string> {
+  const parts = messages.map((msg) => {
+    const role = msg.role;
+    const text = extractMessageText(msg);
+    return `[${role}]: ${text.slice(0, 500)}${text.length > 500 ? "..." : ""}`;
+  });
+  return `Previous conversation summary:\n${parts.join("\n")}`;
+}
 
 export class MessageHistory {
   private messages: Message[] = [];
   private readonly maxMessages: number;
+  private readonly compaction: CompactionConfig;
+  private summaries: CompactionSummary[] = [];
+  private compactionInProgress = false;
 
   constructor(options?: MessageHistoryOptions) {
     const max = options?.maxMessages ?? DEFAULT_MAX_MESSAGES;
@@ -85,14 +212,59 @@ export class MessageHistory {
       );
     }
     this.maxMessages = max;
+
+    this.compaction = {
+      enabled: options?.compaction?.enabled ?? false,
+      maxTokens: options?.compaction?.maxTokens ?? DEFAULT_COMPACTION_MAX_TOKENS,
+      keepRecentTokens:
+        options?.compaction?.keepRecentTokens ?? DEFAULT_COMPACTION_KEEP_RECENT,
+      reserveTokens:
+        options?.compaction?.reserveTokens ?? DEFAULT_COMPACTION_RESERVE,
+      summarizeFn: options?.compaction?.summarizeFn,
+    };
   }
 
   getAll(): Message[] {
     return [...this.messages];
   }
 
+  getSummaries(): CompactionSummary[] {
+    return [...this.summaries];
+  }
+
   clear(): void {
     this.messages = [];
+    this.summaries = [];
+  }
+
+  /**
+   * Check if compaction is enabled.
+   */
+  isCompactionEnabled(): boolean {
+    return this.compaction.enabled === true;
+  }
+
+  /**
+   * Get the current estimated token count.
+   */
+  getEstimatedTokens(): number {
+    const messagesTokens = estimateMessagesTokens(this.toModelMessages());
+    const summariesTokens = this.summaries.reduce(
+      (total, s) => total + s.summaryTokens,
+      0
+    );
+    return messagesTokens + summariesTokens;
+  }
+
+  /**
+   * Trigger compaction manually. Returns true if compaction was performed.
+   */
+  async compact(): Promise<boolean> {
+    if (!this.compaction.enabled || this.messages.length === 0) {
+      return false;
+    }
+
+    return this.performCompaction();
   }
 
   addUserMessage(content: string, originalContent?: string): Message {
@@ -107,6 +279,7 @@ export class MessageHistory {
     };
     this.messages.push(message);
     this.enforceLimit();
+    void this.checkAndCompact();
     return message;
   }
 
@@ -114,7 +287,6 @@ export class MessageHistory {
     const created: Message[] = [];
     for (const modelMessage of messages) {
       const processedMessage = trimTrailingNewlines(modelMessage);
-
       const sanitizedMessage = this.sanitizeMessage(processedMessage);
 
       const message: Message = {
@@ -126,7 +298,129 @@ export class MessageHistory {
     }
     this.messages.push(...created);
     this.enforceLimit();
+    void this.checkAndCompact();
     return created;
+  }
+
+  /**
+   * Get messages with compaction summaries prepended as system context.
+   * This is the recommended way to get messages for LLM calls when
+   * compaction is enabled.
+   */
+  getMessagesForLLM(): ModelMessage[] {
+    const modelMessages = this.toModelMessages();
+
+    if (this.summaries.length === 0) {
+      return modelMessages;
+    }
+
+    // Combine summaries into a single system message
+    const combinedSummary = this.summaries
+      .map((s) => `---\n${s.summary}`)
+      .join("\n");
+
+    const systemMessage: ModelMessage = {
+      role: "system",
+      content: `Previous conversation context:\n${combinedSummary}`,
+    };
+
+    return [systemMessage, ...modelMessages];
+  }
+
+  private async checkAndCompact(): Promise<void> {
+    if (!this.compaction.enabled || this.compactionInProgress) {
+      return;
+    }
+
+    const totalTokens = this.getEstimatedTokens();
+    const threshold =
+      (this.compaction.maxTokens ?? DEFAULT_COMPACTION_MAX_TOKENS) -
+      (this.compaction.reserveTokens ?? DEFAULT_COMPACTION_RESERVE);
+
+    if (totalTokens < threshold) {
+      return;
+    }
+
+    await this.performCompaction();
+  }
+
+  private async performCompaction(): Promise<boolean> {
+    if (this.messages.length === 0) {
+      return false;
+    }
+
+    this.compactionInProgress = true;
+
+    try {
+      // Calculate tokens from the end to find what to keep
+      const keepRecentTokens =
+        this.compaction.keepRecentTokens ?? DEFAULT_COMPACTION_KEEP_RECENT;
+
+      let keptTokens = 0;
+      let splitIndex = this.messages.length;
+
+      // Walk backwards to find where to split
+      for (let i = this.messages.length - 1; i >= 0; i--) {
+        const msgTokens = estimateTokens(
+          extractMessageText(this.messages[i].modelMessage)
+        );
+
+        if (keptTokens + msgTokens > keepRecentTokens) {
+          splitIndex = i + 1;
+          break;
+        }
+
+        keptTokens += msgTokens;
+
+        // Always keep at least the last turn
+        if (i === 0) {
+          splitIndex = 0;
+        }
+      }
+
+      // If nothing to compact, return early
+      if (splitIndex === 0) {
+        return false;
+      }
+
+      // Messages to summarize
+      const messagesToSummarize = this.messages.slice(0, splitIndex);
+      const messagesToKeep = this.messages.slice(splitIndex);
+
+      if (messagesToSummarize.length === 0) {
+        return false;
+      }
+
+      // Get the first kept message ID
+      const firstKeptMessageId =
+        messagesToKeep.length > 0 ? messagesToKeep[0].id : "end";
+
+      // Summarize
+      const summarizeFn = this.compaction.summarizeFn ?? defaultSummarizeFn;
+      const modelMessagesToSummarize = messagesToSummarize.map(
+        (m) => m.modelMessage
+      );
+
+      const summary = await summarizeFn(modelMessagesToSummarize);
+      const summaryTokens = estimateTokens(summary);
+
+      // Create summary entry
+      const summaryEntry: CompactionSummary = {
+        id: `summary_${Date.now()}`,
+        createdAt: new Date(),
+        summary,
+        firstKeptMessageId,
+        tokensBefore: estimateMessagesTokens(modelMessagesToSummarize),
+        summaryTokens,
+      };
+
+      this.summaries.push(summaryEntry);
+      this.messages = messagesToKeep;
+
+      return true;
+    } finally {
+      this.compactionInProgress = false;
+    }
   }
 
   private enforceLimit(): void {
@@ -199,9 +493,6 @@ export class MessageHistory {
         return part;
       }
 
-      // SAFETY: serializeValue preserves the ToolResultOutput discriminated union structure.
-      // It only transforms Error instances (which shouldn't appear in ToolResultOutput's
-      // JSON-serializable variants). The cast narrows unknown -> ToolResultOutput.
       return {
         ...part,
         output: sanitizedOutput as ToolResultPart["output"],
