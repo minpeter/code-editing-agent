@@ -1,8 +1,3 @@
-/**
- * @module types
- * Shared TypeScript types for the harness package.
- */
-
 import type {
   LanguageModel,
   ModelMessage,
@@ -24,7 +19,6 @@ type StreamTextOptions = Parameters<typeof streamText>[0];
 
 export type AgentInstructions = string | (() => Promise<string>);
 
-/** Configuration for creating an agent via {@link createAgent}. */
 export interface AgentConfig {
   experimental_repairToolCall?: StreamTextOptions["experimental_repairToolCall"];
   instructions?: AgentInstructions;
@@ -33,13 +27,11 @@ export interface AgentConfig {
   tools?: ToolSet;
 }
 
-/** An agent instance returned by {@link createAgent}. */
 export interface Agent {
   config: AgentConfig;
   stream(opts: AgentStreamOptions): AgentStreamResult;
 }
 
-/** Options passed to {@link Agent.stream} for a single turn. */
 export interface AgentStreamOptions {
   abortSignal?: AbortSignal;
   maxOutputTokens?: StreamTextOptions["maxOutputTokens"];
@@ -48,7 +40,6 @@ export interface AgentStreamOptions {
   system?: string;
 }
 
-/** Result of a single streaming turn from {@link Agent.stream}. */
 export interface AgentStreamResult {
   finishReason: CoreStreamResult["finishReason"];
   fullStream: CoreStreamResult["fullStream"];
@@ -57,13 +48,11 @@ export interface AgentStreamResult {
 
 export type AgentFinishReason = Awaited<AgentStreamResult["finishReason"]>;
 
-/** Context passed to loop hooks during each iteration. */
 export interface LoopContinueContext {
   iteration: number;
   messages: ModelMessage[];
 }
 
-/** Information about a completed loop step, passed to `onStepComplete`. */
 export interface LoopStepInfo {
   finishReason: Awaited<AgentStreamResult["finishReason"]>;
   iteration: number;
@@ -71,7 +60,6 @@ export interface LoopStepInfo {
   response: Awaited<AgentStreamResult["response"]>;
 }
 
-/** Lifecycle hooks for {@link runAgentLoop}. */
 export interface LoopHooks {
   onError?: (
     error: unknown,
@@ -88,7 +76,6 @@ export interface LoopHooks {
   ) => boolean;
 }
 
-/** Options for {@link runAgentLoop}. */
 export interface RunAgentLoopOptions extends LoopHooks {
   abortSignal?: AbortSignal;
   agent: Agent;
@@ -96,7 +83,6 @@ export interface RunAgentLoopOptions extends LoopHooks {
   messages: ModelMessage[];
 }
 
-/** Result returned by {@link runAgentLoop} after the loop completes. */
 export interface RunAgentLoopResult {
   finishReason: AgentFinishReason;
   iterations: number;
