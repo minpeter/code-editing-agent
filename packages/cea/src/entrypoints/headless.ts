@@ -146,11 +146,7 @@ const parseMaxIterations = (
   if (args[i] !== "--max-iterations" || i + 1 >= args.length) {
     return null;
   }
-  const nextArg = args[i + 1];
-  if (nextArg === undefined) {
-    return null;
-  }
-  const val = Number.parseInt(nextArg, 10);
+  const val = Number.parseInt(args[i + 1], 10);
   if (Number.isNaN(val) || val <= 0) {
     return null;
   }
@@ -160,14 +156,11 @@ const parseMaxIterations = (
 const parseProviderOption = (
   args: string[],
   i: number
-): { provider: ProviderType; consumedArgs: number } | null => {
+): { provider: ProviderType | null; consumedArgs: number } | null => {
   if (args[i] !== "--provider" || i + 1 >= args.length) {
     return null;
   }
   const parsed = parseProviderArg(args[i + 1]);
-  if (!parsed) {
-    return null;
-  }
   return { provider: parsed, consumedArgs: 1 };
 };
 
@@ -211,7 +204,9 @@ const parseArgs = (): {
 
     const providerOption = parseProviderOption(args, i);
     if (providerOption) {
-      provider = providerOption.provider;
+      if (providerOption.provider) {
+        provider = providerOption.provider;
+      }
       i += providerOption.consumedArgs;
       continue;
     }
