@@ -304,3 +304,54 @@ describe("getFullWrappedCommand", () => {
     expect(result.length).toBeLessThan(1000);
   });
 });
+
+describe("compound command handling", () => {
+  it("does not append -y to apt-get update && apt-get install nginx", () => {
+    const result = wrapCommandNonInteractive(
+      "apt-get update && apt-get install nginx"
+    );
+    expect(result.command).toBe("apt-get update && apt-get install nginx");
+    expect(result.command).not.toMatch(/-y/);
+  });
+
+  it("does not append -y to pip install package && pip install other", () => {
+    const result = wrapCommandNonInteractive(
+      "pip install package && pip install other"
+    );
+    expect(result.command).toBe("pip install package && pip install other");
+  });
+
+  it("does not append suffix args to commands with || operator", () => {
+    const result = wrapCommandNonInteractive(
+      "apt-get update || apt-get install nginx"
+    );
+    expect(result.command).toBe("apt-get update || apt-get install nginx");
+    expect(result.command).not.toMatch(/-y/);
+  });
+
+  it("does not append suffix args to commands with ; separator", () => {
+    const result = wrapCommandNonInteractive(
+      "apt-get update ; apt-get install nginx"
+    );
+    expect(result.command).toBe("apt-get update ; apt-get install nginx");
+    expect(result.command).not.toMatch(/-y/);
+  });
+
+  it("does not append suffix args to piped commands", () => {
+    const result = wrapCommandNonInteractive(
+      "apt-get install nginx | tee /tmp/log"
+    );
+    expect(result.command).toBe("apt-get install nginx | tee /tmp/log");
+    expect(result.command).not.toMatch(/-y/);
+  });
+
+  it("still appends -y to simple apt-get install", () => {
+    const result = wrapCommandNonInteractive("apt-get install nginx");
+    expect(result.command).toContain("-y");
+  });
+
+  it("hasFlag does not match -y inside single-quoted argument", () => {
+    const result = wrapCommandNonInteractive("pip install 'package==-y'");
+    expect(result.command).not.toMatch(/ -y$/);
+  });
+});

@@ -199,8 +199,35 @@ const TOOL_PATTERNS: ToolPattern[] = [
 
 const WHITESPACE_SPLIT_PATTERN = /\s+/;
 
+function isCompoundCommand(command: string): boolean {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; continue; }
+    if (ch === '"' && !inSingle) { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    const twoChar = command.slice(i, i + 2);
+    if (twoChar === '&&' || twoChar === '||') return true;
+    if (ch === ';' || ch === '|') return true;
+  }
+  return false;
+}
+
 function hasFlag(command: string, flag: string): boolean {
-  return command.split(WHITESPACE_SPLIT_PATTERN).includes(flag);
+  const tokens: string[] = [];
+  let current = '';
+  let inSingle = false;
+  let inDouble = false;
+  for (const ch of command) {
+    if (ch === "'" && !inDouble) { inSingle = !inSingle; current += ch; }
+    else if (ch === '"' && !inSingle) { inDouble = !inDouble; current += ch; }
+    else if ((ch === ' ' || ch === '\t') && !inSingle && !inDouble) {
+      if (current) { tokens.push(current); current = ''; }
+    } else { current += ch; }
+  }
+  if (current) tokens.push(current);
+  return tokens.includes(flag);
 }
 
 function insertArgsAfterCommand(
@@ -221,11 +248,12 @@ function insertArgsAfterCommand(
 }
 
 function appendArgs(command: string, args: string[]): string {
+  if (isCompoundCommand(command)) return command;
   const argsToAdd = args.filter((arg) => !hasFlag(command, arg));
   if (argsToAdd.length === 0) {
     return command;
   }
-  return `${command} ${argsToAdd.join(" ")}`;
+  return `${command} ${argsToAdd.join(' ')}`;
 }
 
 function getBaseEnv(): Record<string, string> {
