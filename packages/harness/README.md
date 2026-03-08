@@ -84,7 +84,7 @@ import { runAgentLoop } from "@ai-sdk-tool/harness";
 const result = await runAgentLoop({
   agent,           // Agent — required
   messages,        // ModelMessage[] — initial conversation history
-  maxIterations,   // number — max loop iterations (default: MANUAL_TOOL_LOOP_MAX_STEPS = 50)
+  maxIterations,   // number — max loop iterations (default: MANUAL_TOOL_LOOP_MAX_STEPS = 200)
   abortSignal,     // AbortSignal — for cancellation
 
   // Hooks
