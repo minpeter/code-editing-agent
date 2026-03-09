@@ -84,7 +84,7 @@ import { runAgentLoop } from "@ai-sdk-tool/harness";
 const result = await runAgentLoop({
   agent,           // Agent — required
   messages,        // ModelMessage[] — initial conversation history
-  maxIterations,   // number — max loop iterations (default: MANUAL_TOOL_LOOP_MAX_STEPS = 200)
+  maxIterations,   // number — max loop iterations (default: unlimited)
   abortSignal,     // AbortSignal — for cancellation
 
   // Hooks
@@ -142,7 +142,7 @@ history.enforceLimit();
 
 ### `shouldContinueManualToolLoop(finishReason, context)`
 
-The default continuation predicate used by `runAgentLoop`. Returns `true` when `finishReason` is `"tool-calls"` or `"unknown"`.
+The default continuation predicate used by `runAgentLoop`. Returns `true` when `finishReason` is `"tool-calls"`.
 
 ```typescript
 import { shouldContinueManualToolLoop } from "@ai-sdk-tool/harness";

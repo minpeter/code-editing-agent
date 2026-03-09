@@ -1468,4 +1468,83 @@ describe("renderFullStreamWithPiTui", () => {
       expect(output).not.toContain(`Tool ${testCase.toolName}`);
     }
   });
+
+  it("renders read_file error with pretty background instead of raw fallback", async () => {
+    const errorObj = {
+      code: "ENOENT",
+      path: "packages/harness/src/loop.test.ts",
+      syscall: "open",
+      errno: -2,
+    };
+
+    const { output } = await renderParts([
+      {
+        type: "tool-call",
+        toolCallId: "call_read_err",
+        toolName: "read_file",
+        input: {
+          path: "packages/harness/src/loop.test.ts",
+        },
+      },
+      {
+        type: "tool-error" as never,
+        toolCallId: "call_read_err",
+        toolName: "read_file",
+        error: errorObj,
+      },
+    ]);
+
+    expect(output).toContain("Read");
+    expect(output).toContain("packages/harness/src/loop.test.ts");
+    expect(output).toContain("ENOENT");
+    expect(output).not.toContain("Tool read_file");
+  });
+
+  it("renders glob_files error with pretty background", async () => {
+    const { output } = await renderParts([
+      {
+        type: "tool-call",
+        toolCallId: "call_glob_err",
+        toolName: "glob_files",
+        input: {
+          pattern: "**/*.xyz",
+        },
+      },
+      {
+        type: "tool-error" as never,
+        toolCallId: "call_glob_err",
+        toolName: "glob_files",
+        error: "glob permission denied",
+      },
+    ]);
+
+    expect(output).toContain("Glob");
+    expect(output).toContain("**/*.xyz");
+    expect(output).toContain("glob permission denied");
+    expect(output).not.toContain("Tool glob_files");
+  });
+
+  it("renders shell_execute error with pretty background", async () => {
+    const { output } = await renderParts([
+      {
+        type: "tool-call",
+        toolCallId: "call_shell_err",
+        toolName: "shell_execute",
+        input: {
+          command: "nonexistent-cmd",
+        },
+      },
+      {
+        type: "tool-error" as never,
+        toolCallId: "call_shell_err",
+        toolName: "shell_execute",
+        error: "command not found",
+      },
+    ]);
+
+    expect(output).toContain("Shell");
+    expect(output).toContain("nonexistent-cmd");
+    expect(output).toContain("command not found");
+    expect(output).not.toContain("Tool shell_execute");
+  });
 });

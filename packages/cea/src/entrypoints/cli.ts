@@ -2,7 +2,6 @@
 
 import { stripVTControlCharacters } from "node:util";
 import {
-  MANUAL_TOOL_LOOP_MAX_STEPS,
   MessageHistory,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
@@ -1319,8 +1318,6 @@ type AgentResponseStatus = "completed" | "interrupted";
 const processAgentResponse = async (
   ui: CliUi
 ): Promise<AgentResponseStatus> => {
-  let manualToolLoopCount = 0;
-
   while (true) {
     ui.showLoader("Working...");
     const streamAbortController = new AbortController();
@@ -1374,16 +1371,6 @@ const processAgentResponse = async (
       messageHistory.addModelMessages(response.messages);
 
       if (!shouldContinueManualToolLoop(finishReason)) {
-        return "completed";
-      }
-
-      manualToolLoopCount += 1;
-      if (manualToolLoopCount >= MANUAL_TOOL_LOOP_MAX_STEPS) {
-        addSystemMessage(
-          ui.chatContainer,
-          `[agent] Manual tool loop safety cap reached (${MANUAL_TOOL_LOOP_MAX_STEPS}); waiting for input.`
-        );
-        ui.tui.requestRender();
         return "completed";
       }
     } catch (error) {

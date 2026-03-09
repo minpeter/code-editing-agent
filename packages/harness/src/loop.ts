@@ -3,10 +3,7 @@
  * Agent execution loop for the harness package.
  */
 
-import {
-  MANUAL_TOOL_LOOP_MAX_STEPS,
-  shouldContinueManualToolLoop,
-} from "./tool-loop-control";
+import { shouldContinueManualToolLoop } from "./tool-loop-control";
 import type {
   AgentFinishReason,
   LoopContinueContext,
@@ -39,7 +36,7 @@ export async function runAgentLoop(
 ): Promise<RunAgentLoopResult> {
   const { agent, abortSignal, onError, onStepComplete, onToolCall } = options;
   const shouldContinue = options.shouldContinue ?? shouldContinueManualToolLoop;
-  const maxIterations = options.maxIterations ?? MANUAL_TOOL_LOOP_MAX_STEPS;
+  const maxIterations = options.maxIterations ?? Infinity;
   const messages = [...options.messages];
 
   let iteration = 0;
@@ -84,7 +81,7 @@ export async function runAgentLoop(
 
       iteration += 1;
 
-      if (!shouldContinue(lastFinishReason, context)) {
+      if (!shouldContinue(lastFinishReason, { iteration, messages })) {
         break;
       }
     } catch (error) {

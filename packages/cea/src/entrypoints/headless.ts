@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import {
-  MANUAL_TOOL_LOOP_MAX_STEPS,
   MessageHistory,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
@@ -438,7 +437,6 @@ const processAgentResponse = async (
   maxIterations?: number
 ): Promise<void> => {
   const modelId = agentManager.getModelId();
-  let manualToolLoopCount = 0;
   let iterationCount = 0;
 
   while (true) {
@@ -539,17 +537,6 @@ const processAgentResponse = async (
       completedToolCallIds.clear();
 
       if (!shouldContinueManualToolLoop(finishReason)) {
-        return;
-      }
-
-      manualToolLoopCount += 1;
-      if (manualToolLoopCount >= MANUAL_TOOL_LOOP_MAX_STEPS) {
-        emitEvent({
-          timestamp: new Date().toISOString(),
-          type: "error",
-          sessionId,
-          error: `Manual tool loop safety cap reached (${MANUAL_TOOL_LOOP_MAX_STEPS}).`,
-        });
         return;
       }
     } catch (error) {

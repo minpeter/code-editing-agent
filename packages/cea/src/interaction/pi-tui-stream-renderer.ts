@@ -653,11 +653,16 @@ const ANSI_DIM = "\x1b[2m";
 const ANSI_ITALIC = "\x1b[3m";
 const ANSI_GRAY = "\x1b[90m";
 const ANSI_BG_GRAY = "\x1b[100m";
+const ANSI_BG_RED = "\x1b[41m";
 const LEADING_NEWLINES = /^\n+/;
 const TRAILING_NEWLINES = /\n+$/;
 
 const applyReadPreviewBackground = (text: string): string => {
   return `${ANSI_BG_GRAY}${text}${ANSI_RESET}`;
+};
+
+const applyErrorBackground = (text: string): string => {
+  return `${ANSI_BG_RED}${text}${ANSI_RESET}`;
 };
 
 const styleThinkingText = (text: string): string => {
@@ -679,7 +684,7 @@ class TruncatedReadBody {
   private cachedLines?: string[];
   private cachedText?: string;
   private cachedWidth?: number;
-  private readonly background?: (text: string) => string;
+  private background?: (text: string) => string;
   private backgroundEnabled = true;
   private readonly paddingX: number;
   private text: string;
@@ -699,6 +704,11 @@ class TruncatedReadBody {
     this.cachedText = undefined;
     this.cachedWidth = undefined;
     this.cachedLines = undefined;
+  }
+
+  setBackground(background: (text: string) => string): void {
+    this.background = background;
+    this.invalidate();
   }
 
   setBackgroundEnabled(enabled: boolean): void {
@@ -1145,7 +1155,7 @@ class ToolCallView extends Container {
   }
 
   private canRenderPrettyTool(toolName: string | Set<string>): boolean {
-    if (this.error !== undefined || this.outputDenied) {
+    if (this.outputDenied) {
       return false;
     }
 
@@ -1194,6 +1204,17 @@ class ToolCallView extends Container {
     this.readBody.setText(body);
   }
 
+  private tryRenderPrettyError(header: string): boolean {
+    if (this.error === undefined) {
+      return false;
+    }
+    this.readBody.setBackground(applyErrorBackground);
+    this.setPrettyBlock(header, safeStringify(this.error), {
+      useBackground: true,
+    });
+    return true;
+  }
+
   private renderOutputPreviewBody(
     output: unknown,
     emptyText = "(no output)"
@@ -1206,15 +1227,15 @@ class ToolCallView extends Container {
   }
 
   private tryRenderReadFileMode(): boolean {
-    if (
-      this.toolName !== "read_file" ||
-      this.error !== undefined ||
-      this.outputDenied
-    ) {
+    if (this.toolName !== "read_file" || this.outputDenied) {
       return false;
     }
 
     const readPath = this.resolveInputStringField("path");
+
+    if (this.tryRenderPrettyError(`**Read** \`${readPath ?? "(unknown)"}\``)) {
+      return true;
+    }
 
     if (typeof this.output === "string") {
       const renderedReadFile = renderReadFileOutput(this.output);
@@ -1254,15 +1275,17 @@ class ToolCallView extends Container {
   }
 
   private tryRenderGlobMode(): boolean {
-    if (
-      this.toolName !== "glob_files" ||
-      this.error !== undefined ||
-      this.outputDenied
-    ) {
+    if (this.toolName !== "glob_files" || this.outputDenied) {
       return false;
     }
 
     const globPattern = this.resolveInputStringField("pattern");
+
+    if (
+      this.tryRenderPrettyError(`**Glob** \`${globPattern ?? "(unknown)"}\``)
+    ) {
+      return true;
+    }
 
     if (typeof this.output === "string") {
       const renderedGlob = renderGlobOutput(this.output);
@@ -1299,15 +1322,17 @@ class ToolCallView extends Container {
   }
 
   private tryRenderGrepMode(): boolean {
-    if (
-      this.toolName !== "grep_files" ||
-      this.error !== undefined ||
-      this.outputDenied
-    ) {
+    if (this.toolName !== "grep_files" || this.outputDenied) {
       return false;
     }
 
     const grepPattern = this.resolveInputStringField("pattern");
+
+    if (
+      this.tryRenderPrettyError(`**Grep** \`${grepPattern ?? "(unknown)"}\``)
+    ) {
+      return true;
+    }
 
     if (typeof this.output === "string") {
       const renderedGrep = renderGrepOutput(this.output);
@@ -1350,6 +1375,10 @@ class ToolCallView extends Container {
 
     const command = this.resolveInputStringField("command") ?? "(command)";
     const header = buildPrettyHeader("Shell", command);
+
+    if (this.tryRenderPrettyError(header)) {
+      return true;
+    }
 
     if (this.output === undefined) {
       this.setPrettyBlock(header, renderPendingOutput(), {
@@ -1398,6 +1427,10 @@ class ToolCallView extends Container {
       this.resolveInputStringField("keystrokes") ?? "(keystrokes)";
     const header = buildPrettyHeader("Interact", keystrokes);
 
+    if (this.tryRenderPrettyError(header)) {
+      return true;
+    }
+
     if (this.output === undefined) {
       this.setPrettyBlock(header, renderPendingOutput(), {
         isPending: true,
@@ -1435,6 +1468,10 @@ class ToolCallView extends Container {
     const path = extractStringField(bestInput, "path") ?? "(unknown)";
     const fileContent = extractStringField(bestInput, "content");
     const header = buildPrettyHeader("Write", path);
+
+    if (this.tryRenderPrettyError(header)) {
+      return true;
+    }
 
     const hasVisibleFileContent =
       fileContent !== null && fileContent.trim().length > 0;
@@ -1476,6 +1513,10 @@ class ToolCallView extends Container {
     const bestInput = this.resolveBestInput();
     const path = this.resolveInputStringField("path") ?? "(unknown)";
     const header = buildPrettyHeader("Edit", path);
+
+    if (this.tryRenderPrettyError(header)) {
+      return true;
+    }
     const bodyLines: string[] = [];
 
     if (typeof bestInput === "object" && bestInput !== null) {
@@ -1519,6 +1560,10 @@ class ToolCallView extends Container {
     const path = this.resolveInputStringField("path") ?? "(unknown)";
     const header = buildPrettyHeader("Delete", path);
 
+    if (this.tryRenderPrettyError(header)) {
+      return true;
+    }
+
     if (this.output === undefined) {
       this.setPrettyBlock(header, renderPendingOutput(), {
         isPending: true,
@@ -1540,6 +1585,10 @@ class ToolCallView extends Container {
     const relativePath = this.resolveInputStringField("relativePath");
     const target = relativePath ? `${skillName}/${relativePath}` : skillName;
     const header = buildPrettyHeader("Skill", target);
+
+    if (this.tryRenderPrettyError(header)) {
+      return true;
+    }
 
     if (this.output === undefined) {
       this.setPrettyBlock(header, renderPendingOutput(), {
@@ -1572,6 +1621,10 @@ class ToolCallView extends Container {
     const totalTodos = todos.length;
     const headerTarget = `${totalTodos} task${totalTodos === 1 ? "" : "s"}`;
     const header = buildPrettyHeader("Todo", headerTarget);
+
+    if (this.tryRenderPrettyError(header)) {
+      return true;
+    }
 
     if (this.output === undefined) {
       this.setPrettyBlock(header, renderPendingOutput(), {

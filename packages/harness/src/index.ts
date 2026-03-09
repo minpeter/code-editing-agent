@@ -13,7 +13,6 @@ export type {
 } from "./message-history";
 export { MessageHistory } from "./message-history";
 export {
-  MANUAL_TOOL_LOOP_MAX_STEPS,
   normalizeFinishReason,
   shouldContinueManualToolLoop,
 } from "./tool-loop-control";

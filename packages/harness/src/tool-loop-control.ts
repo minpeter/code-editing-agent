@@ -1,5 +1,3 @@
-export const MANUAL_TOOL_LOOP_MAX_STEPS = 200;
-
 const CONTINUATION_FINISH_REASONS = new Set(["tool-calls"]);
 const FINISH_REASON_ALIASES = new Map([
   ["tool_calls", "tool-calls"],
