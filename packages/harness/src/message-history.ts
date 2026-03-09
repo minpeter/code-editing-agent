@@ -619,7 +619,7 @@ export class MessageHistory {
    * No async work is done here — avoids the fire-and-forget race condition.
    */
   private markCompactionNeeded(): void {
-    if (!this.compaction.enabled) return;
+    if (!this.compaction.enabled && !this.pruning.enabled) return;
     this.pendingCompaction = true;
   }
 
@@ -785,9 +785,9 @@ export class MessageHistory {
         messagesToKeep.length > 0 ? messagesToKeep[0].id : "end";
 
       // Combine existing summaries into previousSummary for iterative compaction
-      const previousSummary = this.summaries.length > 0
-        ? this.summaries.map((s) => s.summary).join("\n\n---\n\n")
-        : undefined;
+      // The iterative compaction invariant guarantees at most one summary entry.
+      // Access directly rather than mapping/joining.
+      const previousSummary = this.summaries[0]?.summary;
 
       // Summarize with error handling and fallback
       const summarizeFn = this.compaction.summarizeFn ?? defaultSummarizeFn;

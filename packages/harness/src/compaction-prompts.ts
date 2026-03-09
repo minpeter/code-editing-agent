@@ -145,7 +145,9 @@ function buildSummarizationInput(messages: ModelMessage[], previousSummary?: str
   const formatted = messages.map(formatMessageForSummarization);
 
   if (previousSummary) {
-    return `<previous-summary>\n${previousSummary}\n</previous-summary>\n\nUpdate the above summary by incorporating the following new conversation:\n\n${formatted.join("\n\n")}`;
+    // Escape closing tags to prevent prompt injection via previous LLM outputs
+    const escapedSummary = previousSummary.replace(/<\/previous-summary>/gi, '[/previous-summary]');
+    return `<previous-summary>\n${escapedSummary}\n</previous-summary>\n\nUpdate the above summary by incorporating the following new conversation:\n\n${formatted.join("\n\n")}`;
   }
 
   return `Summarize the following conversation:\n\n${formatted.join("\n\n")}`;
