@@ -280,9 +280,21 @@ const DEFAULT_COMPACTION_RESERVE = 2000;
  * Improved default summarizer that extracts conversation essence.
  * Groups messages by turns, prioritizes user intents and assistant decisions,
  * and drops verbose tool outputs.
- * Output is sanitized to prevent prompt injection.
+ * Output is sanitized to prevent prompt injection and structured with
+ * clear sections for context preservation.
  */
 async function defaultSummarizeFn(messages: ModelMessage[]): Promise<string> {
+  if (messages.length === 0) {
+    return sanitizeSummaryText(`${SUMMARY_PREFIX}\n(empty conversation)`);
+  }
+
+  // Extract user intents (what the user asked/said)
+  const userIntents: string[] = [];
+  // Extract assistant key responses
+  const assistantResponses: string[] = [];
+  // Extract tool usage summary
+  const toolUsage: string[] = [];
+
   const turns: string[] = [];
   let currentTurn: string[] = [];
 
@@ -304,6 +316,9 @@ async function defaultSummarizeFn(messages: ModelMessage[]): Promise<string> {
       const briefOutput = text.slice(0, 100);
       const suffix = text.length > 100 ? "..." : "";
       currentTurn.push(`  [tool:${sanitizeSummaryText(toolName)}]: ${sanitizeSummaryText(briefOutput + suffix)}`);
+      if (!toolUsage.includes(toolName)) {
+        toolUsage.push(sanitizeSummaryText(toolName));
+      }
       continue;
     }
 
@@ -318,26 +333,65 @@ async function defaultSummarizeFn(messages: ModelMessage[]): Promise<string> {
     const sanitizedRole = sanitizeSummaryText(role);
     const sanitizedContent = sanitizeSummaryText(truncated + suffix);
     currentTurn.push(`[${sanitizedRole}]: ${sanitizedContent}`);
+
+    // Track user intents (first 150 chars)
+    if (role === "user") {
+      const intent = sanitizeSummaryText(text.slice(0, 150));
+      if (intent.trim()) {
+        userIntents.push(intent);
+      }
+    }
+
+    // Track assistant key points (first 150 chars)
+    if (role === "assistant" && text.trim()) {
+      const response = sanitizeSummaryText(text.slice(0, 150));
+      if (response.trim()) {
+        assistantResponses.push(response);
+      }
+    }
   }
 
   if (currentTurn.length > 0) {
     turns.push(currentTurn.join("\n"));
   }
 
-  // If too many turns, keep first and last few for context
-  let summaryBody: string;
+  // Build structured summary
+  const sections: string[] = [];
+
+  // Section 1: Key Topics (from user messages)
+  if (userIntents.length > 0) {
+    const topicEntries = userIntents.length > 4
+      ? [...userIntents.slice(0, 2), `(... ${userIntents.length - 3} more)`, userIntents[userIntents.length - 1]]
+      : userIntents;
+    sections.push(`Key Topics:\n${topicEntries.map(t => `- ${t}`).join("\n")}`);
+  }
+
+  // Section 2: Tools Used
+  if (toolUsage.length > 0) {
+    sections.push(`Tools Used: ${toolUsage.join(", ")}`);
+  }
+
+  // Section 3: Conversation Flow (condensed turns)
+  let turnBody: string;
   if (turns.length > 6) {
     const kept = [
       ...turns.slice(0, 2),
       `[... ${turns.length - 4} turns omitted ...]`,
       ...turns.slice(-2),
     ];
-    summaryBody = kept.join("\n---\n");
+    turnBody = kept.join("\n---\n");
   } else {
-    summaryBody = turns.join("\n---\n");
+    turnBody = turns.join("\n---\n");
+  }
+  sections.push(`Conversation:\n${turnBody}`);
+
+  // Section 4: Last state (most recent assistant response)
+  if (assistantResponses.length > 0) {
+    const lastResponse = assistantResponses[assistantResponses.length - 1];
+    sections.push(`Last Response: ${lastResponse}`);
   }
 
-  const summary = `${SUMMARY_PREFIX}\n${summaryBody}`;
+  const summary = `${SUMMARY_PREFIX}\n${sections.join("\n\n")}`;
   return sanitizeSummaryText(summary);
 }
 
