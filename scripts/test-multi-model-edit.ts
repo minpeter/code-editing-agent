@@ -16,8 +16,7 @@ import { resolve } from "node:path";
 const MODELS = [
   { id: "MiniMaxAI/MiniMax-M2.5", short: "M2.5" },
   // { id: "MiniMaxAI/MiniMax-M2.1", short: "M2.1" },  // masked: slow + timeout-prone
-  // { id: "zai-org/GLM-5", short: "GLM-5" },            // masked: API 503
-  { id: "zai-org/GLM-4.7", short: "GLM-4.7" },
+  { id: "zai-org/GLM-5", short: "GLM-5" },
 ];
 
 // ── CLI args ──────────────────────────────────────────────────

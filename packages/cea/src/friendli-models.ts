@@ -64,8 +64,8 @@ export const FRIENDLI_MODELS: readonly FriendliModelInfo[] = [
     masked: true,
   },
   {
-    id: "zai-org/GLM-4.7",
-    name: "GLM 4.7",
+    id: "zai-org/GLM-5",
+    name: "GLM 5",
     provider: "friendli",
     type: "serverless",
     reasoning: {

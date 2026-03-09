@@ -35,7 +35,7 @@ import {
 } from "./tool-fallback-mode";
 import { createTools, type ToolRegistry } from "./tools";
 
-export const DEFAULT_MODEL_ID = "MiniMaxAI/MiniMax-M2.5";
+export const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 export const DEFAULT_ANTHROPIC_MODEL_ID = "claude-sonnet-4-6";
 const OUTPUT_TOKEN_MAX = 64_000;
 const TRANSLATION_MAX_OUTPUT_TOKENS = 4000;
