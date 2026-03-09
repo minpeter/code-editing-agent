@@ -11,13 +11,13 @@ export interface FriendliReasoningModelConfig {
 }
 
 export interface FriendliModelInfo {
-  /** Internal identifier used for model selection and config lookup. */
-  id: string;
   /** Actual model ID sent to the provider API. Defaults to `id` if omitted. */
   apiModelId?: string;
   contextLength: number;
-  maxCompletionTokens: number;
+  /** Internal identifier used for model selection and config lookup. */
+  id: string;
   masked?: boolean;
+  maxCompletionTokens: number;
   name?: string;
   provider: "friendli";
   reasoning: FriendliReasoningModelConfig | null;
@@ -91,8 +91,8 @@ export const FRIENDLI_MODELS: readonly FriendliModelInfo[] = [
     name: "GLM 5 (8k)",
     provider: "friendli",
     type: "serverless",
-    contextLength: 8_192,
-    maxCompletionTokens: 1_024,
+    contextLength: 8192,
+    maxCompletionTokens: 1024,
     reasoning: {
       ...DEFAULT_FRIENDLI_REASONING,
     },

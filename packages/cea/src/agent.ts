@@ -1,10 +1,10 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ProviderOptions as AiProviderOptions } from "@ai-sdk/provider-utils";
 import {
+  type CompactionConfig,
   createAgent,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
-  type CompactionConfig,
 } from "@ai-sdk-tool/harness";
 import { createFriendli } from "@friendliai/ai-provider";
 import {
@@ -18,12 +18,12 @@ import { loadSkillsMetadata } from "./context/skills";
 import { SYSTEM_PROMPT } from "./context/system-prompt";
 import type { TranslationModelConfig } from "./context/translation";
 import { env } from "./env";
+import { getFriendliApiModelId, getFriendliModelById } from "./friendli-models";
 import {
   applyFriendliInterleavedField,
   buildFriendliChatTemplateKwargs,
   getFriendliSelectableReasoningModes,
 } from "./friendli-reasoning";
-import { getFriendliApiModelId, getFriendliModelById } from "./friendli-models";
 import { buildMiddlewares } from "./middleware";
 import {
   buildTodoContinuationPrompt,
@@ -69,8 +69,18 @@ export interface AnthropicModelInfo extends ModelTokenLimits {
 }
 
 export const ANTHROPIC_MODELS: readonly AnthropicModelInfo[] = [
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Latest)", contextLength: 200_000, maxCompletionTokens: 64_000 },
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6 (Latest)", contextLength: 200_000, maxCompletionTokens: 32_000 },
+  {
+    id: "claude-sonnet-4-6",
+    name: "Claude Sonnet 4.6 (Latest)",
+    contextLength: 200_000,
+    maxCompletionTokens: 64_000,
+  },
+  {
+    id: "claude-opus-4-6",
+    name: "Claude Opus 4.6 (Latest)",
+    contextLength: 200_000,
+    maxCompletionTokens: 32_000,
+  },
 ] as const;
 
 const friendli = env.FRIENDLI_TOKEN
@@ -357,7 +367,10 @@ export class AgentManager {
   getModelTokenLimits(): ModelTokenLimits {
     return {
       contextLength: getModelContextLength(this.modelId, this.provider),
-      maxCompletionTokens: getModelMaxCompletionTokens(this.modelId, this.provider),
+      maxCompletionTokens: getModelMaxCompletionTokens(
+        this.modelId,
+        this.provider
+      ),
     };
   }
 
@@ -370,7 +383,10 @@ export class AgentManager {
     overrides?: Partial<CompactionConfig>
   ): CompactionConfig {
     const contextLength = getModelContextLength(this.modelId, this.provider);
-    const effectiveOutputTokens = getEffectiveMaxOutputTokens(this.modelId, this.provider);
+    const effectiveOutputTokens = getEffectiveMaxOutputTokens(
+      this.modelId,
+      this.provider
+    );
     return {
       enabled: true,
       maxTokens: contextLength,
