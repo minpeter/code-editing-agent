@@ -620,7 +620,7 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
   const help = new Text(
     style(
       ANSI_DIM,
-      "Enter to submit, Shift+Enter for newline, /help for commands, Ctrl+C clears input, Ctrl+C again exits"
+      "Enter to submit, Shift+Enter for newline, /help for commands, Ctrl+C to clear, Ctrl+C twice to exit"
     ),
     1,
     0
@@ -661,7 +661,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
 
   let loader: Loader | null = null;
   let inputResolver: ((value: string | null) => void) | null = null;
-  let pendingExitConfirmation = false;
   let lastCtrlCPressAt = 0;
   let activeModalCancel: (() => void) | null = null;
 
@@ -674,15 +673,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
     statusContainer.clear();
     tui.requestRender();
   };
-
-  const showCtrlCExitNotice = (): void => {
-    clearStatus();
-    statusContainer.addChild(
-      new Text(style(ANSI_CYAN, "Press Ctrl+C again to exit"), 1, 0)
-    );
-    tui.requestRender();
-  };
-
   const showLoader = (message: string): void => {
     clearStatus();
     loader = new Loader(
@@ -701,12 +691,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
     tui.setFocus(editor);
     tui.requestRender();
   };
-
-  const clearPendingExitConfirmation = (): void => {
-    pendingExitConfirmation = false;
-    lastCtrlCPressAt = 0;
-  };
-
   const setActiveModalCancel = (cancel: (() => void) | null): void => {
     activeModalCancel = cancel;
   };
@@ -720,23 +704,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
     activeModalCancel = null;
     cancel();
   };
-
-  const shouldClearPendingExitConfirmation = (data: string): boolean => {
-    if (!pendingExitConfirmation) {
-      return false;
-    }
-
-    if (isCtrlCInput(data)) {
-      return false;
-    }
-
-    if (isKeyRelease(data) || isKeyRepeat(data)) {
-      return false;
-    }
-
-    return true;
-  };
-
   const isCtrlCInput = (data: string): boolean => {
     if (isKeyRelease(data) || isKeyRepeat(data)) {
       return false;
@@ -746,38 +713,15 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
   };
 
   const handleCtrlCPress = (): void => {
-    if (pendingExitConfirmation) {
-      pendingExitConfirmation = false;
-      lastCtrlCPressAt = 0;
-      dismissActiveModal();
-      requestExit();
-      return;
-    }
-
     const now = Date.now();
-
-    // Double press within window: request graceful shutdown immediately.
     if (now - lastCtrlCPressAt < CTRL_C_EXIT_WINDOW_MS) {
-      lastCtrlCPressAt = 0;
-      dismissActiveModal();
       requestExit();
-      return;
+    } else {
+      cancelActiveStream();
+      dismissActiveModal();
+      clearPromptInput();
+      lastCtrlCPressAt = now;
     }
-
-    lastCtrlCPressAt = now;
-    // First press: try to cancel active stream
-    const canceled = cancelActiveStream();
-    if (canceled) {
-      pendingExitConfirmation = true;
-      showCtrlCExitNotice();
-      return;
-    }
-
-    // First press, no active stream: clear prompt
-    pendingExitConfirmation = true;
-    dismissActiveModal();
-    clearPromptInput();
-    showCtrlCExitNotice();
   };
 
   const showReasoningModeSelector = async (
@@ -853,10 +797,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
           handleCtrlCPress();
           finish(null);
           return { consume: true };
-        }
-
-        if (shouldClearPendingExitConfirmation(data)) {
-          clearPendingExitConfirmation();
         }
 
         selectList.handleInput(data);
@@ -960,10 +900,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
           return { consume: true };
         }
 
-        if (shouldClearPendingExitConfirmation(data)) {
-          clearPendingExitConfirmation();
-        }
-
         selectList.handleInput(data);
         tui.requestRender();
         return { consume: true };
@@ -1040,10 +976,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
           handleCtrlCPress();
           finish(null);
           return { consume: true };
-        }
-
-        if (shouldClearPendingExitConfirmation(data)) {
-          clearPendingExitConfirmation();
         }
 
         selectList.handleInput(data);
@@ -1162,10 +1094,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
           return { consume: true };
         }
 
-        if (shouldClearPendingExitConfirmation(data)) {
-          clearPendingExitConfirmation();
-        }
-
         if (
           matchesKey(data, Key.up) ||
           matchesKey(data, Key.down) ||
@@ -1186,9 +1114,7 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
   };
 
   const requestExit = (): void => {
-    pendingExitConfirmation = false;
     shouldExit = true;
-    lastCtrlCPressAt = 0;
     cancelActiveStream();
     clearStatus();
     dismissActiveModal();
@@ -1197,10 +1123,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
       inputResolver = null;
       resolve(null);
     }
-  };
-
-  const onSigInt = () => {
-    handleCtrlCPress();
   };
 
   const onTerminalResize = () => {
@@ -1213,13 +1135,12 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
       return { consume: true };
     }
 
-    if (shouldClearPendingExitConfirmation(data)) {
-      clearPendingExitConfirmation();
-    }
-
     return undefined;
   });
 
+  const onSigInt = () => {
+    handleCtrlCPress();
+  };
   process.on("SIGINT", onSigInt);
   process.stdout.on("resize", onTerminalResize);
 
@@ -1233,8 +1154,6 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
       editor.addToHistory(trimmed);
     }
 
-    pendingExitConfirmation = false;
-    lastCtrlCPressAt = 0;
     const resolve = inputResolver;
     inputResolver = null;
     resolve(text);
@@ -1263,8 +1182,8 @@ const createCliUi = (skills: SkillInfo[]): CliUi => {
     dismissActiveModal();
 
     removeInputListener();
-    process.off("SIGINT", onSigInt);
     process.stdout.off("resize", onTerminalResize);
+    process.off("SIGINT", onSigInt);
 
     try {
       await terminal.drainInput();
@@ -1817,9 +1736,9 @@ const run = async (): Promise<void> => {
     setSpinnerOutputEnabled(true);
   }
 
-  if (requestedProcessExitCode !== null) {
-    process.exit(requestedProcessExitCode);
-  }
+  // Force exit to terminate any lingering event loop handles
+  // (e.g. HTTP connections from AI SDK that keep the process alive)
+  process.exit(requestedProcessExitCode ?? 0);
 };
 
 const cleanupExecutionResources = (): void => {
