@@ -1,0 +1,42 @@
+{
+  "name": "@ai-sdk-tool/headless",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minpeter/plugsuits.git",
+    "directory": "packages/headless"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@ai-sdk-tool/harness": "workspace:*"
+  },
+  "peerDependencies": {
+    "@ai-sdk-tool/harness": "workspace:*",
+    "ai": "^6.0.101",
+    "zod": "^4.3.6",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
