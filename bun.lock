@@ -10,7 +10,7 @@
     },
     "packages/cea": {
       "name": "plugsuits",
-      "version": "1.1.0",
+      "version": "1.1.3",
       "bin": {
         "plugsuits": "cli.js",
       },
@@ -41,7 +41,7 @@
     },
     "packages/harness": {
       "name": "@ai-sdk-tool/harness",
-      "version": "0.2.1",
+      "version": "0.3.1",
       "dependencies": {
         "ai": "^6.0.101",
       },
@@ -54,11 +54,48 @@
         "zod": "^4.3.6",
       },
     },
+    "packages/headless": {
+      "name": "@ai-sdk-tool/headless",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ai-sdk-tool/harness": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "@ai-sdk-tool/harness": "workspace:*",
+        "ai": "^6.0.101",
+        "typescript": "^5.0.0",
+        "zod": "^4.3.6",
+      },
+    },
+    "packages/tui": {
+      "name": "@ai-sdk-tool/tui",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ai-sdk-tool/harness": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "@ai-sdk-tool/harness": "workspace:*",
+        "@mariozechner/pi-tui": "*",
+        "ai": "^6.0.101",
+        "typescript": "^5.0.0",
+        "zod": "^4.3.6",
+      },
+    },
   },
   "packages": {
     "@ai-sdk-tool/harness": ["@ai-sdk-tool/harness@workspace:packages/harness"],
 
+    "@ai-sdk-tool/headless": ["@ai-sdk-tool/headless@workspace:packages/headless"],
+
     "@ai-sdk-tool/parser": ["@ai-sdk-tool/parser@4.1.3", "", { "dependencies": { "@ai-sdk/openai": "^3.0.30", "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.15", "dedent": "^1.7.1", "yaml": "^2.8.2" } }, "sha512-PAsavSkHBiTyNHrL6RATpKVw3kSekkABj27zyRgN/rGOVzD8UVdo5XD06KJfZ52x4BOVEX8KANmjKKpITw2fEw=="],
+
+    "@ai-sdk-tool/tui": ["@ai-sdk-tool/tui@workspace:packages/tui"],
 
     "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.47", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.15" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-E6Z3i/xvxGDxRskMMbuX9+xDK4l5LesrP2O7YQ0CcbAkYP25qTo/kYGf/AsJrLkNIY23HeO/kheUWtG1XZllDA=="],
 
