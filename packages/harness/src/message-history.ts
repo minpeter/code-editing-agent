@@ -3,10 +3,15 @@ import type { ModelMessage, TextPart, ToolResultPart } from "ai";
 const TRAILING_NEWLINES = /\n+$/;
 
 // Constants for token estimation and compaction
-const CHARS_PER_TOKEN = 4;
+const LATIN_CHARS_PER_TOKEN = 4;
+const CJK_CHARS_PER_TOKEN = 1.5;
 const MAX_TEXT_LENGTH_PER_MESSAGE = 500;
 const SUMMARY_PREFIX = "Previous conversation summary:";
 const SYSTEM_CONTEXT_PREFIX = "Previous conversation context:";
+
+// CJK Unicode ranges for improved token estimation
+const CJK_REGEX =
+  /[\u2E80-\u2FFF\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u3100-\u312F\u3130-\u318F\u3200-\u32FF\u3400-\u4DBF\u4E00-\u9FFF\uA960-\uA97F\uAC00-\uD7FF\uF900-\uFAFF]/g;
 
 // ID generation counter for summaries
 let summaryIdCounter = 0;
@@ -23,11 +28,18 @@ function sanitizeSummaryText(text: string): string {
 }
 
 /**
- * Simple token estimator based on character count.
- * Uses a conservative estimate of ~4 characters per token.
+ * Improved token estimator that accounts for CJK characters.
+ * CJK characters typically map to ~1-2 tokens each (vs ~4 chars/token for Latin).
  */
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+  const cjkMatches = text.match(CJK_REGEX);
+  const cjkCount = cjkMatches ? cjkMatches.length : 0;
+  const nonCjkCount = text.length - cjkCount;
+
+  const cjkTokens = cjkCount / CJK_CHARS_PER_TOKEN;
+  const nonCjkTokens = nonCjkCount / LATIN_CHARS_PER_TOKEN;
+
+  return Math.ceil(cjkTokens + nonCjkTokens);
 }
 
 /**
@@ -67,6 +79,66 @@ function estimateMessagesTokens(messages: ModelMessage[]): number {
   return messages.reduce((total, msg) => {
     return total + estimateTokens(extractMessageText(msg));
   }, 0);
+}
+
+/**
+ * Check if a message contains tool-call parts.
+ */
+function hasToolCalls(message: ModelMessage): boolean {
+  if (message.role !== "assistant") return false;
+  if (!Array.isArray(message.content)) return false;
+  return message.content.some(
+    (part) => typeof part === "object" && part !== null && part.type === "tool-call"
+  );
+}
+
+/**
+ * Find a valid split index that preserves tool-call/tool-result pairs.
+ * If the proposed splitIndex would split a tool-call from its tool-result,
+ * adjust it to keep the pair together (either both summarized or both kept).
+ */
+function adjustSplitIndexForToolPairs(
+  messages: { modelMessage: ModelMessage }[],
+  proposedIndex: number
+): number {
+  if (proposedIndex <= 0 || proposedIndex >= messages.length) {
+    return proposedIndex;
+  }
+
+  // If the message at splitIndex is a tool result, we'd be separating it from
+  // its tool-call. Move splitIndex forward to include tool results with their calls.
+  let idx = proposedIndex;
+  while (idx < messages.length && messages[idx].modelMessage.role === "tool") {
+    idx++;
+  }
+
+  // If the message just before splitIndex is an assistant with tool-calls,
+  // the tool results are being kept but the tool-call is being summarized.
+  // Move splitIndex back to include the assistant message too.
+  if (idx > 0 && idx <= messages.length) {
+    const prevMsg = messages[idx - 1];
+    if (prevMsg && hasToolCalls(prevMsg.modelMessage)) {
+      // The assistant message at idx-1 has tool-calls. Check if idx has the tool results.
+      // If so, we need to keep the assistant message too — move split back.
+      // But only if we haven't already adjusted past it.
+      if (idx === proposedIndex) {
+        // No tool messages at split point, check if we're splitting a pair
+        const prevPrev = idx >= 2 ? messages[idx - 1] : null;
+        if (prevPrev && hasToolCalls(prevPrev.modelMessage)) {
+          // assistant with tool-calls is being summarized, but its results might be at idx
+          if (idx < messages.length && messages[idx].modelMessage.role === "tool") {
+            // Results are being kept — include the assistant too
+            idx--;
+          }
+        }
+      }
+    }
+  }
+
+  // Final check: if idx would leave nothing to summarize, return original
+  if (idx <= 0) return proposedIndex;
+
+  return idx;
 }
 
 function trimTrailingNewlines(message: ModelMessage): ModelMessage {
@@ -170,7 +242,7 @@ export interface CompactionConfig {
 
   /**
    * Custom function to summarize a batch of messages.
-   * If not provided, a simple concatenation fallback is used.
+   * If not provided, an improved extraction-based fallback is used.
    */
   summarizeFn?: (messages: ModelMessage[]) => Promise<string>;
 }
@@ -205,22 +277,67 @@ const DEFAULT_COMPACTION_KEEP_RECENT = 2000;
 const DEFAULT_COMPACTION_RESERVE = 2000;
 
 /**
- * Default summarizer that concatenates message content.
- * This is a fallback when no custom summarizer is provided.
+ * Improved default summarizer that extracts conversation essence.
+ * Groups messages by turns, prioritizes user intents and assistant decisions,
+ * and drops verbose tool outputs.
  * Output is sanitized to prevent prompt injection.
  */
 async function defaultSummarizeFn(messages: ModelMessage[]): Promise<string> {
-  const parts = messages.map((msg) => {
+  const turns: string[] = [];
+  let currentTurn: string[] = [];
+
+  for (const msg of messages) {
     const role = msg.role;
     const text = extractMessageText(msg);
+
+    if (role === "tool") {
+      // For tool results, only include a brief indicator
+      const toolName = Array.isArray(msg.content)
+        ? msg.content
+            .filter(
+              (p: any) =>
+                typeof p === "object" && p !== null && p.type === "tool-result"
+            )
+            .map((p: any) => p.toolName)
+            .join(", ")
+        : "tool";
+      const briefOutput = text.slice(0, 100);
+      const suffix = text.length > 100 ? "..." : "";
+      currentTurn.push(`  [tool:${sanitizeSummaryText(toolName)}]: ${sanitizeSummaryText(briefOutput + suffix)}`);
+      continue;
+    }
+
+    // New user message starts a new turn
+    if (role === "user" && currentTurn.length > 0) {
+      turns.push(currentTurn.join("\n"));
+      currentTurn = [];
+    }
+
     const truncated = text.slice(0, MAX_TEXT_LENGTH_PER_MESSAGE);
     const suffix = text.length > MAX_TEXT_LENGTH_PER_MESSAGE ? "..." : "";
-    // Sanitize each part to prevent injection through message content
     const sanitizedRole = sanitizeSummaryText(role);
     const sanitizedContent = sanitizeSummaryText(truncated + suffix);
-    return `[${sanitizedRole}]: ${sanitizedContent}`;
-  });
-  const summary = `${SUMMARY_PREFIX}\n${parts.join("\n")}`;
+    currentTurn.push(`[${sanitizedRole}]: ${sanitizedContent}`);
+  }
+
+  if (currentTurn.length > 0) {
+    turns.push(currentTurn.join("\n"));
+  }
+
+  // If too many turns, keep first and last few for context
+  let summaryBody: string;
+  if (turns.length > 6) {
+    const kept = [
+      ...turns.slice(0, 2),
+      `[... ${turns.length - 4} turns omitted ...]`,
+      ...turns.slice(-2),
+    ];
+    summaryBody = kept.join("\n---\n");
+  } else {
+    summaryBody = turns.join("\n---\n");
+  }
+
+  const summary = `${SUMMARY_PREFIX}\n${summaryBody}`;
   return sanitizeSummaryText(summary);
 }
 
@@ -230,6 +347,7 @@ export class MessageHistory {
   private compaction: CompactionConfig;
   private summaries: CompactionSummary[] = [];
   private compactionInProgress = false;
+  private pendingCompaction = false;
 
   constructor(options?: MessageHistoryOptions) {
     const max = options?.maxMessages ?? DEFAULT_MAX_MESSAGES;
@@ -313,6 +431,23 @@ export class MessageHistory {
   }
 
   /**
+   * Check if compaction is needed based on current token count.
+   * This is a synchronous check — no compaction is performed.
+   */
+  needsCompaction(): boolean {
+    if (!this.compaction.enabled || this.messages.length === 0) {
+      return false;
+    }
+
+    const totalTokens = this.getEstimatedTokens();
+    const threshold =
+      (this.compaction.maxTokens ?? DEFAULT_COMPACTION_MAX_TOKENS) -
+      (this.compaction.reserveTokens ?? DEFAULT_COMPACTION_RESERVE);
+
+    return totalTokens >= threshold;
+  }
+
+  /**
    * Trigger compaction manually. Returns true if compaction was performed.
    */
   async compact(): Promise<boolean> {
@@ -340,10 +475,9 @@ export class MessageHistory {
     };
     this.messages.push(message);
     this.enforceLimit();
-    // Trigger compaction asynchronously, errors are handled internally
-    this.checkAndCompact().catch((error) => {
-      console.error("Compaction error in addUserMessage:", error);
-    });
+    // Mark that compaction may be needed — actual compaction happens
+    // at getMessagesForLLM() or via explicit compact() call
+    this.markCompactionNeeded();
     return message;
   }
 
@@ -362,18 +496,29 @@ export class MessageHistory {
     }
     this.messages.push(...created);
     this.enforceLimit();
-    // Trigger compaction asynchronously, errors are handled internally
-    this.checkAndCompact().catch((error) => {
-      console.error("Compaction error in addModelMessages:", error);
-    });
+    // Mark that compaction may be needed
+    this.markCompactionNeeded();
     return created;
+  }
+
+  /**
+   * Synchronously mark that compaction check is needed.
+   * No async work is done here — avoids the fire-and-forget race condition.
+   */
+  private markCompactionNeeded(): void {
+    if (!this.compaction.enabled) return;
+    this.pendingCompaction = true;
   }
 
   /**
    * Get messages with compaction summaries prepended as system context.
    * This is the recommended way to get messages for LLM calls when
    * compaction is enabled.
-   * 
+   *
+   * If compaction is pending and needed, it is performed synchronously
+   * within this call (the summarizeFn is awaited). For synchronous access
+   * without triggering compaction, use toModelMessages() instead.
+   *
    * Security: Summary content is sanitized to prevent prompt injection.
    * User content cannot escalate to system privileges through this method.
    */
@@ -399,26 +544,22 @@ export class MessageHistory {
     return [systemMessage, ...modelMessages];
   }
 
-  private async checkAndCompact(): Promise<void> {
-    if (!this.compaction.enabled || this.compactionInProgress) {
-      return;
+  /**
+   * Async version of getMessagesForLLM that performs pending compaction
+   * before returning messages. This ensures compaction happens at the
+   * point of use rather than fire-and-forget.
+   */
+  async getMessagesForLLMAsync(): Promise<ModelMessage[]> {
+    if (this.pendingCompaction && this.needsCompaction()) {
+      this.pendingCompaction = false;
+      try {
+        await this.performCompaction();
+      } catch (error) {
+        console.error("Compaction error in getMessagesForLLMAsync:", error);
+      }
     }
 
-    const totalTokens = this.getEstimatedTokens();
-    const threshold =
-      (this.compaction.maxTokens ?? DEFAULT_COMPACTION_MAX_TOKENS) -
-      (this.compaction.reserveTokens ?? DEFAULT_COMPACTION_RESERVE);
-
-    if (totalTokens < threshold) {
-      return;
-    }
-
-    try {
-      await this.performCompaction();
-    } catch (error) {
-      // Log error but don't throw to prevent breaking message flow
-      console.error("Auto-compaction failed:", error);
-    }
+    return this.getMessagesForLLM();
   }
 
   private async performCompaction(): Promise<boolean> {
@@ -430,41 +571,40 @@ export class MessageHistory {
 
     try {
       // Calculate tokens from the end to find what to keep
-      // KeepRecentTokens 범위 내 메시지는 요약되지 않고 보존
       const keepRecentTokens =
         this.compaction.keepRecentTokens ?? DEFAULT_COMPACTION_KEEP_RECENT;
 
-      let keptTokens = 0;  // 뒤에서부터 누적된 보존 대상 토큰 수
-      let splitIndex = this.messages.length;  // 분할 지점 (기본값: 모두 보존)
+      let keptTokens = 0;
+      let splitIndex = this.messages.length;
 
       // Walk backwards to find where to split
-      // Logic: 뒤에서부터 순회하며 keepRecentTokens를 초과하지 않는 범위를 찾음
-      // - splitIndex 이후 (splitIndex + 1 ~ end): 보존 대상 (요약되지 않음)
-      // - splitIndex 이전 (0 ~ splitIndex - 1): 요약 대상
       for (let i = this.messages.length - 1; i >= 0; i--) {
         const msgTokens = estimateTokens(
           extractMessageText(this.messages[i].modelMessage)
         );
 
-        // 현재 메시지까지 포함하면 keepRecentTokens를 초과하는 경우
-        // 현재 메시지(i)는 요약 대상, i+1부터는 보존 대상
         if (keptTokens + msgTokens > keepRecentTokens) {
-          splitIndex = i + 1;  // i+1부터 끝까지 보존
+          splitIndex = i + 1;
           break;
         }
 
-        // 현재 메시지를 보존 대상에 포함
         keptTokens += msgTokens;
 
-        // Always keep at least the last turn (처음까지 도달하면 모두 보존)
         if (i === 0) {
-          splitIndex = 0;  // 모든 메시지 보존, 요약 없음
+          splitIndex = 0;
         }
       }
 
-      // Ensure at least one message is kept (empty messages bug fix)
+      // Edge case: all messages fit in keepRecentTokens
       if (splitIndex === 0) {
-        splitIndex = 1;
+        // Don't force splitIndex to 1 blindly.
+        // If we have only 1 message, there's nothing to summarize.
+        if (this.messages.length <= 1) {
+          return false;
+        }
+        // Need to summarize at least something — find a reasonable split
+        // Summarize the first half
+        splitIndex = Math.max(1, Math.floor(this.messages.length / 2));
       }
 
       // If all messages would be kept, nothing to compact
@@ -472,9 +612,17 @@ export class MessageHistory {
         return false;
       }
 
-      // Messages to summarize (splitIndex 이전 메시지들)
+      // Adjust split index to preserve tool-call/tool-result pairs
+      splitIndex = adjustSplitIndexForToolPairs(this.messages, splitIndex);
+
+      // Re-check after adjustment
+      if (splitIndex >= this.messages.length || splitIndex <= 0) {
+        return false;
+      }
+
+      // Messages to summarize (before splitIndex)
       const messagesToSummarize = this.messages.slice(0, splitIndex);
-      // Messages to keep as-is (splitIndex부터 끝까지)
+      // Messages to keep as-is (splitIndex onwards)
       const messagesToKeep = this.messages.slice(splitIndex);
 
       if (messagesToSummarize.length === 0) {
@@ -584,13 +732,11 @@ export class MessageHistory {
 
   /**
    * Remove orphaned tool_result messages that lack a preceding tool_call.
+   * Also removes assistant messages with tool-calls whose tool-results are missing.
    * Called after enforceLimit() and performCompaction() trim the message array.
-   * Providers reject message sequences where a tool role message appears without
-   * a corresponding assistant message containing tool-call parts.
    */
   private ensureNoOrphanedToolResults(): void {
-    // Remove leading 'tool' messages (handles maxMessages=1 edge case where
-    // the only remaining message is a tool result with no parent tool_call)
+    // Remove leading 'tool' messages (handles maxMessages=1 edge case)
     while (
       this.messages.length > 0 &&
       this.messages[0]?.modelMessage.role === "tool"
@@ -599,12 +745,40 @@ export class MessageHistory {
     }
 
     // Remove 'tool' messages at subsequent positions that lack a preceding
-    // 'assistant' message (handles fallback slice starting with a tool message)
+    // 'assistant' message
     let i = 1;
     while (i < this.messages.length) {
       if (this.messages[i]?.modelMessage.role === "tool") {
         const prev = this.messages[i - 1];
         if (prev?.modelMessage.role !== "assistant") {
+          this.messages.splice(i, 1);
+          continue;
+        }
+      }
+      i++;
+    }
+
+    // Remove assistant messages with tool-calls that have no following tool results
+    this.removeOrphanedToolCalls();
+  }
+
+  /**
+   * Remove assistant messages that contain tool-calls but have no
+   * corresponding tool-result messages following them.
+   * This prevents sending incomplete tool sequences to the LLM.
+   */
+  private removeOrphanedToolCalls(): void {
+    let i = 0;
+    while (i < this.messages.length) {
+      const msg = this.messages[i];
+      if (hasToolCalls(msg.modelMessage)) {
+        // Check if next message(s) are tool results
+        const nextIdx = i + 1;
+        if (
+          nextIdx >= this.messages.length ||
+          this.messages[nextIdx].modelMessage.role !== "tool"
+        ) {
+          // Orphaned tool-call — remove it
           this.messages.splice(i, 1);
           continue;
         }

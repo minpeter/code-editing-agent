@@ -7,7 +7,8 @@ import { MessageHistory } from "./message-history";
  * Simulates the compaction config that AgentManager.buildCompactionConfig()
  * would produce for different model configurations.
  *
- * Token estimation: ~4 chars per token (CHARS_PER_TOKEN constant in message-history.ts)
+ * Token estimation: improved estimator that accounts for CJK characters.
+ * Latin: ~4 chars/token, CJK: ~1.5 chars/token
  */
 
 // ─── Model configs (mirrors what buildCompactionConfig produces) ───
@@ -32,7 +33,7 @@ const GLM5_CONFIG = {
 
 const CHARS_PER_TOKEN = 4;
 
-/** Create a message string of approximately `tokenCount` tokens. */
+/** Create a message string of approximately `tokenCount` tokens (Latin text). */
 function makeContent(tokenCount: number): string {
   return "x".repeat(tokenCount * CHARS_PER_TOKEN);
 }
@@ -44,8 +45,6 @@ function createHistory(compaction: typeof TEST_8K_CONFIG) {
 /**
  * Create a history with auto-compaction disabled.
  * Messages are added freely, then compact() is called manually.
- * Avoids the race where async checkAndCompact overwrites this.messages
- * while the sync loop is still adding messages.
  */
 function createHistoryManual(compaction: typeof TEST_8K_CONFIG) {
   return new MessageHistory({
@@ -74,17 +73,13 @@ describe("compaction integration with model-specific configs", () => {
         history.addUserMessage(makeContent(1000));
       }
 
-      // Allow async compaction to settle
-      await new Promise((r) => setTimeout(r, 50));
-
-      const estimated = history.getEstimatedTokens();
-      expect(estimated).toBeGreaterThanOrEqual(6900);
-      expect(estimated).toBeLessThan(7168);
+      // Use needsCompaction() for synchronous check
+      expect(history.needsCompaction()).toBe(false);
       expect(history.getSummaries()).toHaveLength(0);
       expect(history.getAll().length).toBe(7);
     });
 
-    it("DOES trigger compaction above threshold", async () => {
+    it("DOES trigger compaction above threshold via compact()", async () => {
       const history = createHistory(TEST_8K_CONFIG);
 
       // Add 8 messages of ~1000 tokens each = ~8000 tokens (above 7168)
@@ -92,13 +87,30 @@ describe("compaction integration with model-specific configs", () => {
         history.addUserMessage(makeContent(1000));
       }
 
-      // Allow async compaction to settle
-      await new Promise((r) => setTimeout(r, 100));
+      // Compaction is no longer fire-and-forget — use explicit compact()
+      expect(history.needsCompaction()).toBe(true);
+      await history.compact();
 
       // Should have compacted
       expect(history.getSummaries().length).toBeGreaterThanOrEqual(1);
       // Messages should be reduced
       expect(history.getAll().length).toBeLessThan(8);
+    });
+
+    it("DOES trigger compaction via getMessagesForLLMAsync()", async () => {
+      const history = createHistory(TEST_8K_CONFIG);
+
+      // Add 8 messages of ~1000 tokens each = ~8000 tokens (above 7168)
+      for (let i = 0; i < 8; i++) {
+        history.addUserMessage(makeContent(1000));
+      }
+
+      // getMessagesForLLMAsync triggers pending compaction
+      const messages = await history.getMessagesForLLMAsync();
+
+      // Should have compacted and prepended system summary
+      expect(history.getSummaries().length).toBeGreaterThanOrEqual(1);
+      expect(messages[0].role).toBe("system");
     });
 
     it("preserves recent messages within keepRecentTokens budget", async () => {
@@ -135,12 +147,13 @@ describe("compaction integration with model-specific configs", () => {
     it("includes summaries in getMessagesForLLM()", async () => {
       const history = createHistory(TEST_8K_CONFIG);
 
-      // Force compaction
+      // Add messages above threshold
       for (let i = 0; i < 10; i++) {
         history.addUserMessage(makeContent(1000));
       }
 
-      await new Promise((r) => setTimeout(r, 100));
+      // Explicitly compact
+      await history.compact();
 
       const llmMessages = history.getMessagesForLLM();
       const regularMessages = history.toModelMessages();
@@ -160,7 +173,8 @@ describe("compaction integration with model-specific configs", () => {
         history.addUserMessage(`Message ${i}: ${makeContent(990)}`);
       }
 
-      await new Promise((r) => setTimeout(r, 100));
+      // Explicitly compact
+      await history.compact();
 
       const summaries = history.getSummaries();
       expect(summaries.length).toBeGreaterThanOrEqual(1);
@@ -182,9 +196,8 @@ describe("compaction integration with model-specific configs", () => {
         history.addUserMessage(makeContent(1000));
       }
 
-      await new Promise((r) => setTimeout(r, 50));
-
       // Should not compact yet (5000 < 7168)
+      expect(history.needsCompaction()).toBe(false);
       expect(history.getSummaries()).toHaveLength(0);
 
       // Simulate switching to a model with a tiny context
@@ -195,6 +208,7 @@ describe("compaction integration with model-specific configs", () => {
       });
 
       // Now manually compact — threshold is now 4000-500=3500, we have ~5000
+      expect(history.needsCompaction()).toBe(true);
       const compacted = await history.compact();
       expect(compacted).toBe(true);
       expect(history.getSummaries().length).toBeGreaterThanOrEqual(1);
@@ -202,20 +216,17 @@ describe("compaction integration with model-specific configs", () => {
   });
 
   describe("threshold boundary precision", () => {
-    it("does NOT compact at exactly the threshold", async () => {
+    it("does NOT compact at exactly the threshold", () => {
       // Threshold = maxTokens - reserveTokens = 8192 - 1024 = 7168
       // We need totalTokens < 7168
       const history = createHistory(TEST_8K_CONFIG);
 
-      // 7168 tokens * 4 chars = 28672 chars
-      // Add exactly 7168 - 1 = 7167 tokens worth of content
-      // Split into 7 messages of ~1024 tokens + 1 message of ~15 tokens
+      // 7 messages of ~1000 tokens = ~7000 tokens (below 7168)
       for (let i = 0; i < 7; i++) {
         history.addUserMessage(makeContent(1000));
       }
-      // Total now: ~7000 tokens, which is below 7168
-      await new Promise((r) => setTimeout(r, 50));
 
+      expect(history.needsCompaction()).toBe(false);
       expect(history.getSummaries()).toHaveLength(0);
     });
 
@@ -230,14 +241,15 @@ describe("compaction integration with model-specific configs", () => {
       history.addUserMessage(makeContent(200));
       // Total: ~7200 tokens > 7168
 
-      await new Promise((r) => setTimeout(r, 100));
+      expect(history.needsCompaction()).toBe(true);
+      await history.compact();
 
       expect(history.getSummaries().length).toBeGreaterThanOrEqual(1);
     });
   });
 
   describe("GLM-5 model sanity check (large context)", () => {
-    it("does NOT trigger compaction prematurely with large context", async () => {
+    it("does NOT trigger compaction prematurely with large context", () => {
       const history = createHistory(GLM5_CONFIG);
 
       // Add 50 messages of ~1000 tokens = ~50000 tokens
@@ -247,8 +259,7 @@ describe("compaction integration with model-specific configs", () => {
         history.addUserMessage(makeContent(1000));
       }
 
-      await new Promise((r) => setTimeout(r, 50));
-
+      expect(history.needsCompaction()).toBe(false);
       expect(history.getSummaries()).toHaveLength(0);
       expect(history.getAll().length).toBe(50);
     });
@@ -276,6 +287,80 @@ describe("compaction integration with model-specific configs", () => {
       // Unchanged fields stay the same
       expect(config.keepRecentTokens).toBe(Math.floor(8192 * 0.3));
       expect(config.enabled).toBe(true);
+    });
+  });
+
+  describe("tool-call/tool-result pair preservation during compaction", () => {
+    it("does not split tool-call from its tool-result", async () => {
+      const history = new MessageHistory({
+        compaction: {
+          enabled: true,
+          maxTokens: 200,
+          keepRecentTokens: 50,
+          reserveTokens: 50,
+        },
+      });
+
+      // Add messages: user, assistant(tool-call), tool(result), user, assistant
+      history.addUserMessage("First message with enough content to exceed limits easily");
+      history.addModelMessages([
+        {
+          role: "assistant" as const,
+          content: [
+            {
+              type: "tool-call" as const,
+              toolCallId: "call_1",
+              toolName: "read_file",
+              input: { path: "test.ts" },
+            },
+          ],
+        },
+        {
+          role: "tool" as const,
+          content: [
+            {
+              type: "tool-result" as const,
+              toolCallId: "call_1",
+              toolName: "read_file",
+              output: { type: "text" as const, value: "file contents that are long enough" },
+            },
+          ],
+        },
+      ]);
+      history.addUserMessage("Recent user message");
+      history.addModelMessages([
+        { role: "assistant" as const, content: "Recent assistant response" },
+      ]);
+
+      await history.compact();
+
+      const msgs = history.toModelMessages();
+      // Verify no orphaned tool results
+      for (let i = 0; i < msgs.length; i++) {
+        if (msgs[i].role === "tool") {
+          expect(i).toBeGreaterThan(0);
+          expect(msgs[i - 1].role).toBe("assistant");
+        }
+      }
+    });
+  });
+
+  describe("CJK token estimation", () => {
+    it("estimates more tokens for CJK text than Latin text of same length", () => {
+      const history = new MessageHistory({ compaction: { enabled: true } });
+
+      // Add CJK text
+      history.addUserMessage("안녕하세요 이것은 한국어 테스트입니다");
+      const cjkTokens = history.getEstimatedTokens();
+      history.clear();
+
+      // Add Latin text of same character count
+      const latinText = "x".repeat("안녕하세요 이것은 한국어 테스트입니다".length);
+      history.addUserMessage(latinText);
+      const latinTokens = history.getEstimatedTokens();
+
+      // CJK should estimate more tokens for same char count
+      expect(cjkTokens).toBeGreaterThan(latinTokens);
     });
   });
 });
