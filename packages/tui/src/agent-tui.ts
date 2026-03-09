@@ -579,6 +579,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   try {
     await config.onSetup?.();
+    updateHeader();
 
     while (!shouldExit) {
       const input = await waitForInput();

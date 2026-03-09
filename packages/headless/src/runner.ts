@@ -19,15 +19,15 @@ export interface HeadlessRunnerConfig {
 
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const emitEvent = config.emitEvent ?? defaultEmitEvent;
-  const processAgentResponse = async (): Promise<void> => {
-    let iterationCount = 0;
+  let globalIterationCount = 0;
 
+  const processAgentResponse = async (): Promise<void> => {
     while (true) {
-      iterationCount += 1;
+      globalIterationCount += 1;
 
       if (
         config.maxIterations !== undefined &&
-        iterationCount > config.maxIterations
+        globalIterationCount > config.maxIterations
       ) {
         emitEvent({
           timestamp: new Date().toISOString(),

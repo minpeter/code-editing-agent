@@ -94,7 +94,7 @@ export class BaseToolCallView extends Container {
     this.refresh();
   }
 
-  setRenderedMarkdown(markdown: string): void {
+  setRenderedOverride(markdown: string): void {
     this.renderedOverride = markdown;
   }
 

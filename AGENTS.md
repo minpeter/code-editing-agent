@@ -13,8 +13,7 @@
 plugsuits/
 |- packages/
 |  |- harness/          @ai-sdk-tool/harness — core loop, session, skills, TODO, commands
-|  |  |- src/           Agent, MessageHistory, SessionManager, SkillsEngine, TodoContinuation
-|  |  `- AGENTS.md      (see packages/harness/src for local guidance)
+|  |  `- src/           Agent, MessageHistory, SessionManager, SkillsEngine, TodoContinuation
 |  |- tui/              @ai-sdk-tool/tui — terminal UI components
 |  |  |- src/           createAgentTUI, AssistantStreamView, BaseToolCallView, Spinner, colors
 |  |  `- AGENTS.md      TUI package conventions
@@ -74,7 +73,7 @@ plugsuits/
 
 - Runtime and scripts are Bun-first (`packageManager: bun@1.2.x`); prefer `bun run <script>` over ad-hoc `npm exec`.
 - Canonical quality flow is `check` (non-mutating) and `lint` (mutating via `ultracite fix`).
-- Tests are colocated in `packages/harness/src/**` as `*.test.ts` and executed with `bun test`.
+- Tests are colocated in `packages/harness/src/**` and `packages/cea/src/**` as `*.test.ts` and executed with `bun test`.
 - `tsconfig.json` enforces `strict` in each package; do not treat `dist/` as source-of-truth.
 - Legacy code should always be fully deprecated; aggressive updates without backward-compatibility guarantees are acceptable.
 - Package build order: `harness` then `tui` and `headless` (both depend on harness), then `cea` (depends on all three).

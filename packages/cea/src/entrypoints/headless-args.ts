@@ -108,6 +108,7 @@ export const parseArgs = (): ParsedHeadlessArgs => {
     if (toolFallbackOption) {
       toolFallbackMode = toolFallbackOption.mode;
       index += toolFallbackOption.consumedArgs;
+      continue;
     }
 
     const maxIterOption = parseMaxIterations(args, index);

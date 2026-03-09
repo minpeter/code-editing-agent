@@ -27,17 +27,14 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
-  "dependencies": {
-    "@ai-sdk-tool/harness": "workspace:*"
-  },
   "peerDependencies": {
     "@ai-sdk-tool/harness": "workspace:*",
     "@mariozechner/pi-tui": "*",
     "ai": "^6.0.101",
-    "zod": "^4.3.6",
-    "typescript": "^5.0.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ai-sdk-tool/harness": "workspace:*",
     "typescript": "^5.9.3"
   }
 }

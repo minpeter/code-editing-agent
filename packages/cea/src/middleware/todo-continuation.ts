@@ -8,7 +8,7 @@ const sessionManager =
   (globalThis as typeof globalThis & { __ceaSessionManager?: SessionManager })
     .__ceaSessionManager ?? new SessionManager();
 
-const STATUS_EMOJI: Record<string, string> = {
+const STATUS_EMOJI: Record<TodoItem["status"], string> = {
   in_progress: "🔄",
   pending: "📋",
   completed: "✅",

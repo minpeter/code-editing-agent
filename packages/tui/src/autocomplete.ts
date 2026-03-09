@@ -240,7 +240,7 @@ export const createAliasAwareAutocompleteProvider = (
     commands?: Iterable<Command>;
   }
 ): AutocompleteProvider => {
-  const commands = options?.commands ?? getCommands().values();
+  const commands = [...(options?.commands ?? getCommands().values())];
   const slashCommands = createAutocompleteCommands(skills, commands);
   const fallbackProvider = new CombinedAutocompleteProvider(
     slashCommands,

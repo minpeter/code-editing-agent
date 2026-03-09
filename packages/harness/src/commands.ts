@@ -82,6 +82,13 @@ export const registerCommand = (command: Command): void => {
     throw new Error(`Duplicate command name: ${normalizedName}`);
   }
 
+  const existingAliasTarget = commandAliases.get(normalizedName);
+  if (existingAliasTarget) {
+    throw new Error(
+      `Command name '${normalizedName}' conflicts with existing alias for /${existingAliasTarget}`
+    );
+  }
+
   const aliases = command.aliases?.map((alias) => alias.toLowerCase()) ?? [];
   const normalizedCommand: Command = {
     ...command,

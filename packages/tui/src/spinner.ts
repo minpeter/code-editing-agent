@@ -47,14 +47,14 @@ export class Spinner {
 
   succeed(message?: string): void {
     this.stop();
-    if (message) {
+    if (message && spinnerOutputEnabled) {
       process.stdout.write(`✓ ${message}\n`);
     }
   }
 
   fail(message?: string): void {
     this.stop();
-    if (message) {
+    if (message && spinnerOutputEnabled) {
       process.stdout.write(`✗ ${message}\n`);
     }
   }

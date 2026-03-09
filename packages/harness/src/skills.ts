@@ -173,7 +173,7 @@ async function loadLegacySkills(
           if (!metadata) {
             return null;
           }
-          const skillId = file.replace(".md", "");
+          const skillId = basename(file, ".md");
           return {
             id: skillId,
             name: metadata.name,

@@ -289,14 +289,17 @@ export const processStream = async (
   );
 
   try {
+    let timeoutId: ReturnType<typeof setTimeout>;
     const [response, finishReason] = await Promise.race([
-      Promise.all([stream.response, stream.finishReason]),
-      new Promise<never>((_, reject) =>
-        setTimeout(
+      Promise.all([stream.response, stream.finishReason]).finally(() => {
+        clearTimeout(timeoutId);
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
           () => reject(new Error("Stream response timeout")),
           STREAM_RESPONSE_TIMEOUT_MS
-        )
-      ),
+        );
+      }),
     ]);
     onMessages(response.messages);
 

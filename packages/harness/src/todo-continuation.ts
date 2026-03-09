@@ -105,8 +105,11 @@ export class TodoContinuation {
     try {
       const content = await readFile(todoPath, "utf-8");
       data = JSON.parse(content);
-    } catch {
-      return [];
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return [];
+      }
+      throw error;
     }
 
     if (!Array.isArray(data.todos)) {
