@@ -227,7 +227,7 @@ async function defaultSummarizeFn(messages: ModelMessage[]): Promise<string> {
 export class MessageHistory {
   private messages: Message[] = [];
   private readonly maxMessages: number;
-  private readonly compaction: CompactionConfig;
+  private compaction: CompactionConfig;
   private summaries: CompactionSummary[] = [];
   private compactionInProgress = false;
 
@@ -269,6 +269,35 @@ export class MessageHistory {
    */
   isCompactionEnabled(): boolean {
     return this.compaction.enabled === true;
+  }
+
+  /**
+   * Get the current compaction configuration.
+   */
+  getCompactionConfig(): Readonly<CompactionConfig> {
+    return { ...this.compaction };
+  }
+
+  /**
+   * Update compaction configuration dynamically.
+   * Useful when switching models with different context limits.
+   */
+  updateCompaction(config: Partial<CompactionConfig>): void {
+    if (config.enabled !== undefined) {
+      this.compaction.enabled = config.enabled;
+    }
+    if (config.maxTokens !== undefined) {
+      this.compaction.maxTokens = config.maxTokens;
+    }
+    if (config.keepRecentTokens !== undefined) {
+      this.compaction.keepRecentTokens = config.keepRecentTokens;
+    }
+    if (config.reserveTokens !== undefined) {
+      this.compaction.reserveTokens = config.reserveTokens;
+    }
+    if (config.summarizeFn !== undefined) {
+      this.compaction.summarizeFn = config.summarizeFn;
+    }
   }
 
   /**

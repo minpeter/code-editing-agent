@@ -585,7 +585,9 @@ const run = async (): Promise<void> => {
     translateUserPrompts,
   });
 
-  const messageHistory = new MessageHistory();
+  const messageHistory = new MessageHistory({
+    compaction: agentManager.buildCompactionConfig(),
+  });
   const preparedPrompt = agentManager.isTranslationEnabled()
     ? await translateToEnglish(prompt, agentManager)
     : {

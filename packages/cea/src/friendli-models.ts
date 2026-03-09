@@ -11,7 +11,12 @@ export interface FriendliReasoningModelConfig {
 }
 
 export interface FriendliModelInfo {
+  /** Internal identifier used for model selection and config lookup. */
   id: string;
+  /** Actual model ID sent to the provider API. Defaults to `id` if omitted. */
+  apiModelId?: string;
+  contextLength: number;
+  maxCompletionTokens: number;
   masked?: boolean;
   name?: string;
   provider: "friendli";
@@ -35,6 +40,8 @@ export const FRIENDLI_MODELS: readonly FriendliModelInfo[] = [
     name: "MiniMax M2.5",
     provider: "friendli",
     type: "serverless",
+    contextLength: 196_608,
+    maxCompletionTokens: 196_608,
     reasoning: {
       ...DEFAULT_FRIENDLI_REASONING,
       reasoning_toggle: null,
@@ -46,6 +53,8 @@ export const FRIENDLI_MODELS: readonly FriendliModelInfo[] = [
     name: "MiniMax M2.1",
     provider: "friendli",
     type: "serverless",
+    contextLength: 196_608,
+    maxCompletionTokens: 196_608,
     reasoning: {
       ...DEFAULT_FRIENDLI_REASONING,
       reasoning_toggle: null,
@@ -58,6 +67,8 @@ export const FRIENDLI_MODELS: readonly FriendliModelInfo[] = [
     name: "GLM 5",
     provider: "friendli",
     type: "serverless",
+    contextLength: 202_752,
+    maxCompletionTokens: 202_752,
     reasoning: {
       ...DEFAULT_FRIENDLI_REASONING,
     },
@@ -68,6 +79,20 @@ export const FRIENDLI_MODELS: readonly FriendliModelInfo[] = [
     name: "GLM 5",
     provider: "friendli",
     type: "serverless",
+    contextLength: 202_752,
+    maxCompletionTokens: 202_752,
+    reasoning: {
+      ...DEFAULT_FRIENDLI_REASONING,
+    },
+  },
+  {
+    id: "test-8k",
+    apiModelId: "zai-org/GLM-5",
+    name: "GLM 5 (8k)",
+    provider: "friendli",
+    type: "serverless",
+    contextLength: 8_192,
+    maxCompletionTokens: 1_024,
     reasoning: {
       ...DEFAULT_FRIENDLI_REASONING,
     },
@@ -78,4 +103,13 @@ export const getFriendliModelById = (
   modelId: string
 ): FriendliModelInfo | undefined => {
   return FRIENDLI_MODELS.find((model) => model.id === modelId);
+};
+
+/**
+ * Resolve the actual model ID to send to the FriendliAI API.
+ * Falls back to the internal `id` if `apiModelId` is not set.
+ */
+export const getFriendliApiModelId = (modelId: string): string => {
+  const model = getFriendliModelById(modelId);
+  return model?.apiModelId ?? modelId;
 };

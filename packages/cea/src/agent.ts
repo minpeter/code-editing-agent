@@ -4,6 +4,7 @@ import {
   createAgent,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
+  type CompactionConfig,
 } from "@ai-sdk-tool/harness";
 import { createFriendli } from "@friendliai/ai-provider";
 import {
@@ -22,6 +23,7 @@ import {
   buildFriendliChatTemplateKwargs,
   getFriendliSelectableReasoningModes,
 } from "./friendli-reasoning";
+import { getFriendliApiModelId, getFriendliModelById } from "./friendli-models";
 import { buildMiddlewares } from "./middleware";
 import {
   buildTodoContinuationPrompt,
@@ -37,7 +39,15 @@ import { createTools, type ToolRegistry } from "./tools";
 
 export const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 export const DEFAULT_ANTHROPIC_MODEL_ID = "claude-sonnet-4-6";
-const OUTPUT_TOKEN_MAX = 64_000;
+
+/**
+ * Hard cap on output tokens sent to the API.
+ * Even if a model supports more, we limit the actual request to this value
+ * to preserve context space for input and keep compaction sane.
+ * Also used as fallback when model-specific limits are not available.
+ */
+const OUTPUT_TOKEN_CAP = 64_000;
+const DEFAULT_CONTEXT_LENGTH = 200_000;
 const TRANSLATION_MAX_OUTPUT_TOKENS = 4000;
 
 type ProviderOptions = AiProviderOptions | undefined;
@@ -47,9 +57,20 @@ export type AgentStreamResult = HarnessAgentStreamResult;
 
 export type ProviderType = "friendli" | "anthropic";
 
-export const ANTHROPIC_MODELS = [
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Latest)" },
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6 (Latest)" },
+/** Token limits shared across all provider types. */
+export interface ModelTokenLimits {
+  contextLength: number;
+  maxCompletionTokens: number;
+}
+
+export interface AnthropicModelInfo extends ModelTokenLimits {
+  id: string;
+  name: string;
+}
+
+export const ANTHROPIC_MODELS: readonly AnthropicModelInfo[] = [
+  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Latest)", contextLength: 200_000, maxCompletionTokens: 64_000 },
+  { id: "claude-opus-4-6", name: "Claude Opus 4.6 (Latest)", contextLength: 200_000, maxCompletionTokens: 32_000 },
 ] as const;
 
 const friendli = env.FRIENDLI_TOKEN
@@ -68,7 +89,7 @@ const anthropic = env.ANTHROPIC_API_KEY
   : null;
 
 const ANTHROPIC_THINKING_BUDGET_TOKENS = 10_000;
-const ANTHROPIC_MAX_OUTPUT_TOKENS = 64_000;
+
 const ANTHROPIC_SELECTABLE_REASONING_MODES: ReasoningMode[] = ["off", "on"];
 const REASONING_MODE_PRIORITY: readonly ReasoningMode[] = [
   "preserved",
@@ -116,12 +137,52 @@ const isAnthropicWithReasoning = (
   );
 };
 
+const getModelMaxCompletionTokens = (
+  modelId: string,
+  provider: ProviderType
+): number => {
+  if (provider === "anthropic") {
+    const model = ANTHROPIC_MODELS.find((m) => m.id === modelId);
+    return model?.maxCompletionTokens ?? OUTPUT_TOKEN_CAP;
+  }
+  const model = getFriendliModelById(modelId);
+  return model?.maxCompletionTokens ?? OUTPUT_TOKEN_CAP;
+};
+
+/**
+ * Effective output token limit: min(model capability, hard cap).
+ * Prevents models where maxCompletionTokens == contextLength
+ * (e.g. GLM-5: 202K/202K) from consuming the entire context window.
+ */
+const getEffectiveMaxOutputTokens = (
+  modelId: string,
+  provider: ProviderType
+): number => {
+  return Math.min(
+    getModelMaxCompletionTokens(modelId, provider),
+    OUTPUT_TOKEN_CAP
+  );
+};
+
+const getModelContextLength = (
+  modelId: string,
+  provider: ProviderType
+): number => {
+  if (provider === "anthropic") {
+    const model = ANTHROPIC_MODELS.find((m) => m.id === modelId);
+    return model?.contextLength ?? DEFAULT_CONTEXT_LENGTH;
+  }
+  const model = getFriendliModelById(modelId);
+  return model?.contextLength ?? DEFAULT_CONTEXT_LENGTH;
+};
+
 const getProviderOptions = (
   modelId: string,
   provider: ProviderType,
   reasoningMode: ReasoningMode
 ): { options: ProviderOptions; maxOutputTokens: number } => {
   const thinkingEnabled = reasoningMode !== "off";
+  const effectiveMaxTokens = getEffectiveMaxOutputTokens(modelId, provider);
 
   const getAnthropicProviderOptions = () => {
     if (!thinkingEnabled) {
@@ -151,8 +212,8 @@ const getProviderOptions = (
         provider,
         reasoningMode
       )
-        ? ANTHROPIC_MAX_OUTPUT_TOKENS - ANTHROPIC_THINKING_BUDGET_TOKENS
-        : OUTPUT_TOKEN_MAX,
+        ? effectiveMaxTokens - ANTHROPIC_THINKING_BUDGET_TOKENS
+        : effectiveMaxTokens,
     };
   }
 
@@ -169,7 +230,7 @@ const getProviderOptions = (
           },
         }
       : undefined,
-    maxOutputTokens: OUTPUT_TOKEN_MAX,
+    maxOutputTokens: effectiveMaxTokens,
   };
 };
 
@@ -266,7 +327,9 @@ export class AgentManager {
         "FRIENDLI_TOKEN is not set. Please set it in your environment."
       );
     }
-    return this.friendliClient(modelId);
+    // Resolve internal id (e.g. "test-8k") to actual API model id
+    const apiModelId = getFriendliApiModelId(modelId);
+    return this.friendliClient(apiModelId);
   }
 
   private buildModel(reasoningMode: ReasoningMode = this.reasoningMode) {
@@ -285,6 +348,36 @@ export class AgentManager {
     });
 
     return { model: wrappedModel, providerOptions: options, maxOutputTokens };
+  }
+
+  /**
+   * Get the token limits for the currently selected model.
+   * Used by compaction and context management systems.
+   */
+  getModelTokenLimits(): ModelTokenLimits {
+    return {
+      contextLength: getModelContextLength(this.modelId, this.provider),
+      maxCompletionTokens: getModelMaxCompletionTokens(this.modelId, this.provider),
+    };
+  }
+
+  /**
+   * Build a CompactionConfig suitable for the current model's token limits.
+   * Callers (CLI/headless) should apply this to their MessageHistory
+   * whenever the model changes.
+   */
+  buildCompactionConfig(
+    overrides?: Partial<CompactionConfig>
+  ): CompactionConfig {
+    const contextLength = getModelContextLength(this.modelId, this.provider);
+    const effectiveOutputTokens = getEffectiveMaxOutputTokens(this.modelId, this.provider);
+    return {
+      enabled: true,
+      maxTokens: contextLength,
+      reserveTokens: effectiveOutputTokens,
+      keepRecentTokens: Math.floor(contextLength * 0.3),
+      ...overrides,
+    };
   }
 
   getModelId(): string {

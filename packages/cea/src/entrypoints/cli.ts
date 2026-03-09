@@ -1390,6 +1390,9 @@ const setupAgent = (): void => {
 
   agentManager.setToolFallbackMode(toolFallbackMode);
   agentManager.setTranslationEnabled(translateUserPrompts);
+
+  // Configure compaction based on current model's token limits
+  messageHistory.updateCompaction(agentManager.buildCompactionConfig());
 };
 
 type AgentResponseStatus = "completed" | "interrupted";
@@ -1546,6 +1549,8 @@ const handleModelCommand = async (
   }
 
   const selectionResult = applyModelSelection(selectedModel);
+  // Update compaction config for the newly selected model
+  messageHistory.updateCompaction(agentManager.buildCompactionConfig());
   if (selectionResult.message) {
     renderCommandMessage(ui, selectionResult.message);
     return true;
