@@ -32,6 +32,8 @@ export type {
   MessageHistoryOptions,
 } from "./message-history";
 export { MessageHistory } from "./message-history";
+export type { MiddlewareConfig } from "./middleware.js";
+export { buildMiddlewareChain } from "./middleware.js";
 export type { AgentPaths, AgentPathsOptions } from "./paths.js";
 export { createAgentPaths } from "./paths.js";
 export { SessionManager } from "./session.js";
