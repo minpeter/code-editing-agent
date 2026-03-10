@@ -97,6 +97,16 @@ const formatTokens = (n: number): string => {
   return String(n);
 };
 
+const formatContextUsage = (
+  contextUsage: NonNullable<MessageHistory["getContextUsage"] extends () => infer T ? T : never>
+): string => {
+  if (contextUsage.source === "estimated" && contextUsage.used === 0) {
+    return `Context: ?/${formatTokens(contextUsage.limit)} (?)`;
+  }
+
+  return `Context: ${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
+};
+
 const buildCurrentIndicatorLabel = (
   label: string,
   isCurrent: boolean
@@ -912,7 +922,7 @@ const mainCommand = defineCommand({
             if (!contextUsage) {
               return undefined;
             }
-            return `Context: ${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
+            return formatContextUsage(contextUsage);
           },
         },
         header: {

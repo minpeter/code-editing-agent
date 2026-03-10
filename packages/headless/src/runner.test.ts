@@ -1,15 +1,18 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import type { AgentStreamResult, ModelMessage } from "@ai-sdk-tool/harness";
 import { MessageHistory } from "@ai-sdk-tool/harness";
 import { runHeadless } from "./runner";
 
-function createMockStream(responseMessages: ModelMessage[]): AgentStreamResult {
+function createMockStream(
+  responseMessages: ModelMessage[],
+  finishReason: "stop" | "tool-calls" = "stop"
+): AgentStreamResult {
   return {
-    finishReason: Promise.resolve("stop"),
+    finishReason: Promise.resolve(finishReason),
     fullStream: (async function* () {
       await Promise.resolve();
       yield { type: "text-delta", text: "ok" };
-      yield { type: "finish-step", finishReason: "stop" };
+      yield { type: "finish-step", finishReason };
     })() as AgentStreamResult["fullStream"],
     response: Promise.resolve({
       id: "mock-response",
@@ -207,5 +210,52 @@ describe("runHeadless", () => {
 
     expect(streamCallCount).toBe(2);
     expect(secondCallMessages[0]?.role).toBe("system");
+  });
+
+  it("can apply speculative compaction between internal tool-loop steps", async () => {
+    const summarizeFn = mock(async () => "Prepared summary");
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        keepRecentTokens: 260,
+        maxTokens: 600,
+        reserveTokens: 200,
+        speculativeStartRatio: 0.5,
+        summarizeFn,
+      },
+    });
+    history.setContextLimit(600);
+
+    const capturedMessages: ModelMessage[][] = [];
+    let streamCallCount = 0;
+
+    await runHeadless({
+      agent: {
+        stream: ({ messages }) => {
+          capturedMessages.push(messages);
+          streamCallCount += 1;
+
+          return createMockStream(
+            [
+              {
+                role: "assistant",
+                content: streamCallCount === 1 ? "a".repeat(1000) : "done",
+              },
+            ],
+            streamCallCount === 1 ? "tool-calls" : "stop"
+          );
+        },
+      },
+      initialUserMessage: {
+        content: "u".repeat(300),
+      },
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-internal-step",
+    });
+
+    expect(streamCallCount).toBe(2);
+    expect(summarizeFn).toHaveBeenCalled();
+    expect(capturedMessages[1]?.[0]?.role).toBe("system");
   });
 });

@@ -74,6 +74,16 @@ function formatTokens(tokenCount: number): string {
   return String(tokenCount);
 }
 
+function formatContextUsage(
+  contextUsage: NonNullable<ReturnType<MessageHistory["getContextUsage"]>>
+): string {
+  if (contextUsage.source === "estimated" && contextUsage.used === 0) {
+    return `Context: ?/${formatTokens(contextUsage.limit)} (?)`;
+  }
+
+  return `Context: ${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
+}
+
 const main = defineCommand({
   meta: {
     name: "minimal-agent",
@@ -134,7 +144,7 @@ const main = defineCommand({
             return undefined;
           }
 
-          return `Context: ${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
+          return formatContextUsage(contextUsage);
         },
       },
       messageHistory,

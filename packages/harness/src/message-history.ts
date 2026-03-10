@@ -270,7 +270,9 @@ export interface CompactionSummary {
 
 export interface PreparedCompaction {
   actualUsage: ActualTokenUsage | null;
+  baseMessageIds: string[];
   baseRevision: number;
+  baseSummaryIds: string[];
   didChange: boolean;
   messages: Message[];
   pendingCompaction: boolean;
@@ -309,6 +311,16 @@ export interface CompactionConfig {
    * @default 2000
    */
   reserveTokens?: number;
+
+  /**
+   * Optional ratio for starting speculative/background compaction early.
+   * When set, speculative compaction starts once current usage reaches
+   * `maxTokens * speculativeStartRatio`.
+   *
+   * If omitted or invalid, the fallback heuristic is used:
+   * `maxTokens - 2 * reserveTokens`.
+   */
+  speculativeStartRatio?: number;
 
   /**
    * Custom function to summarize a batch of messages.
@@ -630,6 +642,7 @@ export class MessageHistory {
         options?.compaction?.keepRecentTokens ?? DEFAULT_COMPACTION_KEEP_RECENT,
       reserveTokens:
         options?.compaction?.reserveTokens ?? DEFAULT_COMPACTION_RESERVE,
+      speculativeStartRatio: options?.compaction?.speculativeStartRatio,
       summarizeFn: options?.compaction?.summarizeFn,
     };
 
@@ -782,6 +795,11 @@ export class MessageHistory {
       didChange ||= this.compaction.reserveTokens !== config.reserveTokens;
       this.compaction.reserveTokens = config.reserveTokens;
     }
+    if (config.speculativeStartRatio !== undefined) {
+      didChange ||=
+        this.compaction.speculativeStartRatio !== config.speculativeStartRatio;
+      this.compaction.speculativeStartRatio = config.speculativeStartRatio;
+    }
     if (config.summarizeFn !== undefined) {
       didChange ||= this.compaction.summarizeFn !== config.summarizeFn;
       this.compaction.summarizeFn = config.summarizeFn;
@@ -823,17 +841,24 @@ export class MessageHistory {
   shouldStartSpeculativeCompactionForNextTurn(): boolean {
     if (
       !(this.compaction.enabled || this.pruning.enabled) ||
-      !this.pendingCompaction ||
       this.messages.length === 0
     ) {
       return false;
     }
 
-    const reserveTokens = this.getEffectiveReserveTokens({ phase: "new-turn" });
-    const predictiveThreshold = Math.max(
-      0,
-      this.getActiveContextLimit() - reserveTokens * 2
-    );
+    const contextLimit = this.getActiveContextLimit();
+    const speculativeStartRatio = this.compaction.speculativeStartRatio;
+    const predictiveThreshold =
+      typeof speculativeStartRatio === "number" &&
+      Number.isFinite(speculativeStartRatio) &&
+      speculativeStartRatio > 0 &&
+      speculativeStartRatio < 1
+        ? Math.floor(contextLimit * speculativeStartRatio)
+        : Math.max(
+            0,
+            contextLimit -
+              this.getEffectiveReserveTokens({ phase: "new-turn" }) * 2
+          );
 
     return this.getCurrentUsageTokens() >= predictiveThreshold;
   }
@@ -841,7 +866,10 @@ export class MessageHistory {
   async prepareSpeculativeCompaction(
     options?: MessagePreparationOptions
   ): Promise<PreparedCompaction | null> {
-    if (!(this.compaction.enabled || this.pruning.enabled) || !this.pendingCompaction) {
+    if (
+      !(this.compaction.enabled || this.pruning.enabled) ||
+      this.messages.length === 0
+    ) {
       return null;
     }
 
@@ -859,7 +887,9 @@ export class MessageHistory {
 
     return {
       actualUsage: cloneActualUsage(clone.actualUsage),
+      baseMessageIds: this.messages.map((message) => message.id),
       baseRevision,
+      baseSummaryIds: this.summaries.map((summary) => summary.id),
       didChange: clone.revision !== baseRevision,
       messages: clone.messages.map(cloneMessage),
       pendingCompaction: clone.pendingCompaction,
@@ -872,7 +902,19 @@ export class MessageHistory {
     applied: boolean;
     reason: "applied" | "noop" | "stale";
   } {
-    if (prepared.baseRevision !== this.revision) {
+    const hasExactRevisionMatch = prepared.baseRevision === this.revision;
+    const hasMatchingSummaryPrefix =
+      this.summaries.length === prepared.baseSummaryIds.length &&
+      this.summaries.every(
+        (summary, index) => summary.id === prepared.baseSummaryIds[index]
+      );
+    const hasMatchingMessagePrefix =
+      this.messages.length >= prepared.baseMessageIds.length &&
+      prepared.baseMessageIds.every(
+        (messageId, index) => this.messages[index]?.id === messageId
+      );
+
+    if (!hasExactRevisionMatch && !(hasMatchingSummaryPrefix && hasMatchingMessagePrefix)) {
       return { applied: false, reason: "stale" };
     }
 
@@ -880,9 +922,14 @@ export class MessageHistory {
       return { applied: false, reason: "noop" };
     }
 
-    this.messages = prepared.messages.map(cloneMessage);
+    const appendedMessages = hasExactRevisionMatch
+      ? []
+      : this.messages.slice(prepared.baseMessageIds.length).map(cloneMessage);
+
+    this.messages = [...prepared.messages.map(cloneMessage), ...appendedMessages];
     this.summaries = prepared.summaries.map(cloneCompactionSummary);
-    this.pendingCompaction = prepared.pendingCompaction;
+    this.pendingCompaction =
+      appendedMessages.length > 0 ? true : prepared.pendingCompaction;
     this.actualUsage = cloneActualUsage(prepared.actualUsage);
     this.touch();
 

@@ -1081,7 +1081,7 @@ describe("MessageHistory speculative compaction", () => {
     expect(history.getSummaries()).toHaveLength(liveSummaryCount);
   });
 
-  it("drops prepared compaction when the live revision changed", async () => {
+  it("drops prepared compaction when the live history no longer matches the base snapshot", async () => {
     const history = new MessageHistory({
       compaction: {
         enabled: true,
@@ -1104,7 +1104,7 @@ describe("MessageHistory speculative compaction", () => {
       throw new Error("Expected prepared compaction");
     }
 
-    history.addUserMessage("new live message");
+    history.clear();
 
     expect(history.applyPreparedCompaction(prepared)).toEqual({
       applied: false,
@@ -1144,6 +1144,43 @@ describe("MessageHistory speculative compaction", () => {
     expect(history.getSummaries()[0].summary).toBe("Prepared summary");
   });
 
+  it("applies prepared compaction across append-only message growth", async () => {
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 100,
+        keepRecentTokens: 20,
+        reserveTokens: 10,
+        summarizeFn: async () => "Prepared summary",
+      },
+    });
+    history.setContextLimit(100);
+
+    for (let i = 0; i < 5; i++) {
+      history.addUserMessage("x".repeat(80));
+    }
+
+    const prepared = await history.prepareSpeculativeCompaction({
+      phase: "new-turn",
+    });
+    if (!prepared) {
+      throw new Error("Expected prepared compaction");
+    }
+
+    history.addModelMessages([{ role: "assistant", content: "new tail message" }]);
+
+    expect(history.applyPreparedCompaction(prepared)).toEqual({
+      applied: true,
+      reason: "applied",
+    });
+    expect(history.getSummaries()).toHaveLength(1);
+    expect(history.getSummaries()[0].summary).toBe("Prepared summary");
+    expect(history.getAll().at(-1)?.modelMessage).toEqual({
+      role: "assistant",
+      content: "new tail message",
+    });
+  });
+
   it("predicts speculative compaction one turn early", () => {
     const history = new MessageHistory({
       compaction: {
@@ -1158,6 +1195,50 @@ describe("MessageHistory speculative compaction", () => {
     history.updateActualUsage({ totalTokens: 650 });
     expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
     expect(history.needsCompaction()).toBe(false);
+  });
+
+  it("uses speculativeStartRatio when configured", () => {
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 1000,
+        reserveTokens: 200,
+        speculativeStartRatio: 0.75,
+      },
+    });
+    history.setContextLimit(1000);
+    history.addUserMessage("hello");
+
+    history.updateActualUsage({ totalTokens: 740 });
+    expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(false);
+
+    history.updateActualUsage({ totalTokens: 760 });
+    expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
+    expect(history.needsCompaction()).toBe(false);
+  });
+
+  it("can start speculative compaction proactively even after pendingCompaction was cleared", async () => {
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 1000,
+        reserveTokens: 200,
+        speculativeStartRatio: 0.75,
+        summarizeFn: async () => "Prepared summary",
+      },
+    });
+    history.setContextLimit(1000);
+    history.addUserMessage("hello");
+
+    await history.getMessagesForLLMAsync({ phase: "new-turn" });
+    history.updateActualUsage({ totalTokens: 800 });
+
+    expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
+
+    const prepared = await history.prepareSpeculativeCompaction({
+      phase: "new-turn",
+    });
+    expect(prepared).not.toBeNull();
   });
 
   it("detects whether an additional message would exceed the context limit", () => {

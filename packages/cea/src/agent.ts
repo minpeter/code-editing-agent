@@ -187,6 +187,20 @@ const getModelContextLength = (
   return model?.contextLength ?? DEFAULT_CONTEXT_LENGTH;
 };
 
+const getCompactionReserveTokens = (
+  modelId: string,
+  provider: ProviderType
+): number => {
+  if (provider === "anthropic") {
+    return getEffectiveMaxOutputTokens(modelId, provider);
+  }
+
+  const model = getFriendliModelById(modelId);
+  return (
+    model?.compactionReserveTokens ?? getEffectiveMaxOutputTokens(modelId, provider)
+  );
+};
+
 const getProviderOptions = (
   modelId: string,
   provider: ProviderType,
@@ -384,7 +398,7 @@ export class AgentManager {
     overrides?: Partial<CompactionConfig>
   ): CompactionConfig {
     const contextLength = getModelContextLength(this.modelId, this.provider);
-    const effectiveOutputTokens = getEffectiveMaxOutputTokens(
+    const compactionReserveTokens = getCompactionReserveTokens(
       this.modelId,
       this.provider
     );
@@ -394,8 +408,9 @@ export class AgentManager {
     return {
       enabled: true,
       maxTokens: contextLength,
-      reserveTokens: effectiveOutputTokens,
+      reserveTokens: compactionReserveTokens,
       keepRecentTokens: Math.floor(contextLength * 0.3),
+      speculativeStartRatio: 0.75,
       summarizeFn,
       ...overrides,
     };

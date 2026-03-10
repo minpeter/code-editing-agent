@@ -388,7 +388,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const help = new Text(
     style(
       ANSI_DIM,
-      "Enter to submit, Shift+Enter for newline, /help for commands, Ctrl+C to clear, Ctrl+C twice to exit"
+      "Enter to submit, Shift+Enter for newline, /help for commands, Esc to interrupt, Ctrl+C to clear, Ctrl+C twice to exit"
     ),
     1,
     0
@@ -540,7 +540,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
       if (result.reason === "applied") {
         discardAllSpeculativeCompactionJobs();
-        addSystemMessage(chatContainer, "Applied prepared compaction.");
         updateHeader();
         tui.requestRender();
         applied = true;
@@ -580,17 +579,21 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       return;
     }
 
-    showLoader("Finalizing context...");
-    try {
-      await runningJob.promise;
-    } finally {
-      clearStatus();
-    }
+    await runningJob.promise;
 
     applyReadySpeculativeCompaction();
   };
 
   const startSpeculativeCompaction = (): void => {
+    applyReadySpeculativeCompaction();
+    if (
+      speculativeCompactionJobs.some(
+        (job) => !job.discarded && (job.state === "running" || job.state === "completed")
+      )
+    ) {
+      return;
+    }
+
     if (!config.messageHistory.shouldStartSpeculativeCompactionForNextTurn()) {
       return;
     }
@@ -605,8 +608,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       state: "running",
     };
 
-    setBackgroundStatus(jobId, "Background compacting...");
-
     job.promise = (async () => {
       try {
         job.prepared = await config.messageHistory.prepareSpeculativeCompaction({
@@ -615,20 +616,12 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         job.state = "completed";
 
         if (!job.discarded && job.prepared?.didChange) {
-          setBackgroundStatus(jobId, "Background compaction ready.", "ready");
           updateHeader();
           tui.requestRender();
         }
       } catch (error) {
         job.state = "failed";
-        if (!job.discarded) {
-          clearBackgroundStatus(jobId);
-        }
         console.error("Speculative compaction failed:", error);
-      } finally {
-        if (!job.discarded && !job.prepared?.didChange) {
-          clearBackgroundStatus(jobId);
-        }
       }
     })();
 
@@ -665,6 +658,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     return data === CTRL_C_ETX || matchesKey(data, Key.ctrl("c"));
   };
 
+  const isEscapeInput = (data: string): boolean => {
+    if (isKeyRelease(data) || isKeyRepeat(data)) {
+      return false;
+    }
+
+    return matchesKey(data, Key.escape);
+  };
+
   const handleCtrlCPress = (): void => {
     const now = Date.now();
     if (now - lastCtrlCPressAt < CTRL_C_EXIT_WINDOW_MS) {
@@ -672,7 +673,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       return;
     }
 
-    cancelActiveStream();
     clearPromptInput();
     lastCtrlCPressAt = now;
   };
@@ -684,6 +684,15 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const removeInputListener = tui.addInputListener((data) => {
     if (isCtrlCInput(data) && !commandInputListenerActive) {
       handleCtrlCPress();
+      return { consume: true };
+    }
+    if (
+      isEscapeInput(data) &&
+      !commandInputListenerActive &&
+      activeStreamController &&
+      !activeStreamController.signal.aborted
+    ) {
+      cancelActiveStream();
       return { consume: true };
     }
     return undefined;
@@ -823,49 +832,30 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   ): Promise<ModelMessage[]> => {
     applyReadySpeculativeCompaction();
 
-    const willCompact =
+    let willCompact =
       config.messageHistory.isCompactionEnabled() &&
       config.messageHistory.needsCompaction({ phase });
 
-    if (willCompact) {
-      discardAllSpeculativeCompactionJobs();
-      showLoader("Compacting conversation...");
+    const runningJob = getLatestRunningSpeculativeCompaction();
+    if (willCompact && runningJob) {
+      await runningJob.promise;
+      applyReadySpeculativeCompaction();
+      willCompact =
+        config.messageHistory.isCompactionEnabled() &&
+        config.messageHistory.needsCompaction({ phase });
     }
 
-    const summaryIdBefore = config.messageHistory.getSummaries()[0]?.id ?? null;
-    const tokensBefore = willCompact
-      ? config.messageHistory.getEstimatedTokens()
-      : 0;
-
     try {
+      if (willCompact) {
+        discardAllSpeculativeCompactionJobs();
+      }
+
       const messagesForLLM = await config.messageHistory.getMessagesForLLMAsync(
         { phase }
       );
-
-      if (willCompact) {
-        const summaryIdAfter =
-          config.messageHistory.getSummaries()[0]?.id ?? null;
-        const actuallyCompacted = summaryIdAfter !== summaryIdBefore;
-
-        if (actuallyCompacted) {
-          const tokensAfter = config.messageHistory.getEstimatedTokens();
-          const reduction =
-            tokensBefore > 0
-              ? Math.max(0, Math.round((1 - tokensAfter / tokensBefore) * 100))
-              : 0;
-          addSystemMessage(
-            chatContainer,
-            `✓ Compacted: ${tokensBefore.toLocaleString()} → ${tokensAfter.toLocaleString()} tokens (${reduction}% reduction)`
-          );
-          tui.requestRender();
-        }
-      }
-
       return messagesForLLM;
     } finally {
-      if (willCompact) {
-        clearStatus();
-      }
+      clearStatus();
     }
   };
 
@@ -873,6 +863,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     phase: "new-turn" | "intermediate-step"
   ): Promise<"completed" | "continue" | "interrupted"> => {
     const messagesForLLM = await prepareMessagesWithCompaction(phase);
+    startSpeculativeCompaction();
 
     showLoader("Working...");
     const streamAbortController = new AbortController();
@@ -932,6 +923,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         return "interrupted";
       }
 
+      applyReadySpeculativeCompaction();
       config.messageHistory.addModelMessages(response.messages);
       config.messageHistory.updateActualUsage(usage);
       updateHeader();
@@ -991,6 +983,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     while (true) {
       const turnStatus = await runSingleStreamTurn(phase);
       if (turnStatus === "continue") {
+        startSpeculativeCompaction();
         phase = "intermediate-step";
         continue;
       }

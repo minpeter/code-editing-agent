@@ -1,4 +1,8 @@
-import type { MessageHistory, RunnableAgent } from "@ai-sdk-tool/harness";
+import type {
+  MessageHistory,
+  ModelMessage,
+  RunnableAgent,
+} from "@ai-sdk-tool/harness";
 import { shouldContinueManualToolLoop } from "@ai-sdk-tool/harness";
 import { emitEvent as defaultEmitEvent } from "./emit";
 import { processStream } from "./stream-processor";
@@ -87,6 +91,15 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   };
 
   const startSpeculativeCompaction = (): void => {
+    applyReadySpeculativeCompaction();
+    if (
+      speculativeCompactionJob &&
+      !speculativeCompactionJob.discarded &&
+      speculativeCompactionJob.state !== "failed"
+    ) {
+      return;
+    }
+
     if (!config.messageHistory.shouldStartSpeculativeCompactionForNextTurn()) {
       return;
     }
@@ -154,20 +167,28 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         break;
       }
 
+      let pendingMessages: ModelMessage[] = [];
+
       const messages = await config.messageHistory.getMessagesForLLMAsync({
         phase,
       });
+      startSpeculativeCompaction();
       const stream = await config.agent.stream({ messages });
       const processStreamResult = await processStream({
         emitEvent,
         modelId: config.modelId,
         onMessages: (messages) => {
-          config.messageHistory.addModelMessages(messages);
+          pendingMessages = messages;
         },
         sessionId: config.sessionId,
         shouldContinue: shouldContinueManualToolLoop,
         stream,
       });
+
+      applyReadySpeculativeCompaction();
+      if (pendingMessages.length > 0) {
+        config.messageHistory.addModelMessages(pendingMessages);
+      }
 
       if (processStreamResult.usage) {
         config.messageHistory.updateActualUsage(processStreamResult.usage);
@@ -178,6 +199,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         return;
       }
 
+      startSpeculativeCompaction();
       phase = "intermediate-step";
     }
   };

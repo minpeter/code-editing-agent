@@ -58,7 +58,7 @@ describe("AgentManager compaction config", () => {
     agentManager.resetForTesting();
   });
 
-  it("supports one-turn-early speculative compaction with the compact test model", () => {
+  it("uses a 75% speculative compaction start threshold with the compact test model", () => {
     agentManager.setProvider("friendli");
     agentManager.setModelId("test-compact");
 
@@ -66,11 +66,13 @@ describe("AgentManager compaction config", () => {
     const history = new MessageHistory({ compaction });
     history.setContextLimit(agentManager.getModelTokenLimits().contextLength);
     history.addUserMessage("hello");
-    history.updateActualUsage({ totalTokens: 1100 });
+    history.updateActualUsage({ totalTokens: 15_500 });
 
-    expect(compaction.maxTokens).toBe(2048);
+    expect(compaction.maxTokens).toBe(20_480);
+    expect(agentManager.getModelTokenLimits().maxCompletionTokens).toBe(20_480);
     expect(compaction.reserveTokens).toBe(512);
-    expect(compaction.keepRecentTokens).toBe(Math.floor(2048 * 0.3));
+    expect(compaction.keepRecentTokens).toBe(Math.floor(20_480 * 0.3));
+    expect(compaction.speculativeStartRatio).toBe(0.75);
     expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
     expect(history.needsCompaction()).toBe(false);
   });

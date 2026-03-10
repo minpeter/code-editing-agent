@@ -417,7 +417,12 @@ interface FileCheckResult {
   allowed: boolean;
   lastModified?: string;
   reason?: string;
-}
+  metadata?: {
+    fileSize?: number;
+    isBinary?: boolean;
+    ignoredBy?: string;
+  };
+};
 
 interface FileReadGuardContext {
   filePath: string;
@@ -1012,7 +1017,7 @@ export async function safeAtomicWriteFile(
   try {
     const stats = await lstat(targetPath);
     existed = true;
-    originalMode = stats.mode % 0o1000;
+    originalMode = stats.mode & 0o7777;
     // Belt-and-suspenders: reject symlinks even after assertWriteSafety
     if (stats.isSymbolicLink()) {
       throw new Error(
