@@ -6,7 +6,8 @@ describe("buildTuiCommandSet", () => {
   it("merges local commands with global help for autocomplete and execution", async () => {
     const localCommands: Command[] = [
       {
-        name: "clear",
+        name: "new",
+        aliases: ["clear", "reset"],
         description: "Start a new session",
         execute: () => ({
           success: true,
@@ -20,16 +21,18 @@ describe("buildTuiCommandSet", () => {
     expect(commandSet.commands.some((command) => command.name === "help")).toBe(
       true
     );
-    expect(
-      commandSet.commands.some((command) => command.name === "clear")
-    ).toBe(true);
+    expect(commandSet.commands.some((command) => command.name === "new")).toBe(
+      true
+    );
 
     const helpCommand = commandSet.commandLookup.get("help");
     const result = await helpCommand?.execute({ args: [] });
 
     expect(result?.success).toBe(true);
     expect(result?.message).toContain("/help - Show available commands");
-    expect(result?.message).toContain("/clear - Start a new session");
+    expect(result?.message).toContain(
+      "/new (clear, reset) - Start a new session"
+    );
   });
 
   it("preserves a custom local help command instead of overwriting it", async () => {

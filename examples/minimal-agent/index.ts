@@ -19,7 +19,8 @@ const DEFAULT_SYSTEM_PROMPT =
   "You are a minimal FriendliAI example agent. Be concise and helpful.";
 const LOCAL_COMMANDS: Command[] = [
   {
-    name: "clear",
+    name: "new",
+    aliases: ["clear", "reset"],
     description: "Clear the conversation and start a new session",
     execute: () => ({
       success: true,
