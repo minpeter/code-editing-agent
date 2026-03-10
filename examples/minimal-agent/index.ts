@@ -11,35 +11,34 @@ import {
   createFriendli,
   type FriendliAIProvider,
 } from "@friendliai/ai-provider";
+import { createEnv } from "@t3-oss/env-core";
 import { defineCommand, runMain } from "citty";
+import { z } from "zod";
 
 const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 const DEFAULT_SYSTEM_PROMPT =
   "You are a minimal FriendliAI example agent. Be concise and helpful.";
 
-function getFriendliToken(): string {
-  const token = process.env.FRIENDLI_TOKEN?.trim();
-  if (!token) {
-    throw new Error(
-      "FRIENDLI_TOKEN is not set. Export FRIENDLI_TOKEN to run the minimal agent example."
-    );
-  }
-
-  return token;
-}
+const env = createEnv({
+  server: {
+    FRIENDLI_BASE_URL: z.string().min(1).optional(),
+    FRIENDLI_MODEL: z.string().min(1).optional(),
+    FRIENDLI_TOKEN: z.string().min(1),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+});
 
 function createFriendliProvider(): FriendliAIProvider {
   return createFriendli({
-    apiKey: getFriendliToken(),
-    baseURL: process.env.FRIENDLI_BASE_URL?.trim() || "serverless",
+    apiKey: env.FRIENDLI_TOKEN,
+    baseURL: env.FRIENDLI_BASE_URL || "serverless",
     includeUsage: true,
   });
 }
 
 function resolveModelId(cliModel?: string): string {
-  return (
-    cliModel?.trim() || process.env.FRIENDLI_MODEL?.trim() || DEFAULT_MODEL_ID
-  );
+  return cliModel?.trim() || env.FRIENDLI_MODEL || DEFAULT_MODEL_ID;
 }
 
 const main = defineCommand({

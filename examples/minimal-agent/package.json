@@ -11,8 +11,10 @@
     "@ai-sdk-tool/harness": "workspace:*",
     "@ai-sdk-tool/tui": "workspace:*",
     "@ai-sdk-tool/headless": "workspace:*",
+    "@t3-oss/env-core": "^0.13.10",
     "@friendliai/ai-provider": "^1.1.4",
-    "citty": "^0.2.1"
+    "citty": "^0.2.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
