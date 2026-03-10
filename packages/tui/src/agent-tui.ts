@@ -2,13 +2,14 @@ import {
   type Command,
   type CommandAction,
   type CommandResult,
+  estimateTokens,
   executeCommand,
   isCommand,
   isSkillCommandResult,
   type MessageHistory,
   type ModelMessage,
-  parseCommand,
   type PreparedCompaction,
+  parseCommand,
   type RunnableAgent,
   type SkillInfo,
   shouldContinueManualToolLoop,
@@ -178,13 +179,16 @@ class FooterStatusBar extends Text {
     const contentWidth = Math.max(1, width - 2);
     const lines: string[] = [];
     const rightTextPlain = this.rightText ?? "";
-    const rightTextStyled = rightTextPlain ? style(ANSI_DIM, rightTextPlain) : "";
+    const rightTextStyled = rightTextPlain
+      ? style(ANSI_DIM, rightTextPlain)
+      : "";
 
     const renderLeftEntry = (
       entry: FooterStatusEntry,
       maxWidth: number
     ): { plain: string; styled: string } => {
-      const prefix = entry.state === "running" ? this.frames[this.currentFrame] : "";
+      const prefix =
+        entry.state === "running" ? this.frames[this.currentFrame] : "";
       const prefixStyle =
         entry.state === "running" ? style(ANSI_CYAN, prefix) : "";
       const reservedPrefixWidth = prefix ? visibleWidth(prefix) + 1 : 0;
@@ -204,7 +208,9 @@ class FooterStatusBar extends Text {
       const maxLeftWidth = rightTextPlain
         ? Math.max(0, contentWidth - visibleWidth(rightTextPlain) - 1)
         : contentWidth;
-      const left = firstEntry ? renderLeftEntry(firstEntry, maxLeftWidth) : null;
+      const left = firstEntry
+        ? renderLeftEntry(firstEntry, maxLeftWidth)
+        : null;
       const leftWidth = left ? visibleWidth(left.plain) : 0;
       const gap = rightTextPlain
         ? Math.max(1, contentWidth - leftWidth - visibleWidth(rightTextPlain))
@@ -364,6 +370,136 @@ interface SpeculativeCompactionJob {
   state: "completed" | "failed" | "running";
 }
 
+type CompactionPhase = "new-turn" | "intermediate-step";
+
+export function discardAllSpeculativeCompactionJobsCore(params: {
+  discardJob: (job: SpeculativeCompactionJob) => void;
+  jobs: SpeculativeCompactionJob[];
+}): void {
+  for (const job of [...params.jobs]) {
+    params.discardJob(job);
+  }
+}
+
+export function applyReadySpeculativeCompactionCore(params: {
+  applyPreparedCompaction: (prepared: PreparedCompaction) => {
+    applied: boolean;
+    reason: "applied" | "noop" | "stale";
+  };
+  discardAllJobs: () => void;
+  discardJob: (job: SpeculativeCompactionJob) => void;
+  jobs: SpeculativeCompactionJob[];
+  onStale: () => void;
+}): { applied: boolean; stale: boolean } {
+  let applied = false;
+  let stale = false;
+  let didRefire = false;
+
+  for (let i = params.jobs.length - 1; i >= 0; i--) {
+    const job = params.jobs[i];
+    if (job.discarded || job.state !== "completed" || !job.prepared) {
+      continue;
+    }
+
+    const result = params.applyPreparedCompaction(job.prepared);
+    params.discardJob(job);
+
+    if (result.reason === "stale") {
+      stale = true;
+      if (!didRefire) {
+        params.onStale();
+        didRefire = true;
+      }
+      continue;
+    }
+
+    if (result.reason === "applied") {
+      params.discardAllJobs();
+      applied = true;
+    }
+    break;
+  }
+
+  return { applied, stale };
+}
+
+export async function blockAtHardContextLimitCore(params: {
+  additionalTokens: number;
+  applyPreparedCompaction: (prepared: PreparedCompaction) => {
+    applied: boolean;
+    reason: "applied" | "noop" | "stale";
+  };
+  applyReadySpeculativeCompaction: () => { applied: boolean; stale: boolean };
+  getLatestRunningSpeculativeCompaction: () => SpeculativeCompactionJob | null;
+  isAtHardContextLimit: (
+    additionalTokens: number,
+    options: { phase: CompactionPhase }
+  ) => boolean;
+  phase: CompactionPhase;
+  prepareSpeculativeCompaction: (
+    phase: CompactionPhase
+  ) => Promise<PreparedCompaction | null>;
+  warnHardLimitStillExceeded: () => void;
+}): Promise<void> {
+  if (
+    !params.isAtHardContextLimit(params.additionalTokens, {
+      phase: params.phase,
+    })
+  ) {
+    return;
+  }
+
+  const attemptPhases: CompactionPhase[] = [params.phase, "new-turn"];
+
+  for (let attempt = 0; attempt < attemptPhases.length; attempt++) {
+    if (
+      !params.isAtHardContextLimit(params.additionalTokens, {
+        phase: params.phase,
+      })
+    ) {
+      return;
+    }
+
+    const runningJob = params.getLatestRunningSpeculativeCompaction();
+    if (runningJob) {
+      await runningJob.promise;
+    } else {
+      const prepared = await params.prepareSpeculativeCompaction(
+        attemptPhases[attempt]
+      );
+      if (prepared) {
+        const result = params.applyPreparedCompaction(prepared);
+        if (result.reason === "stale" && attempt === 0) {
+          const retryPrepared =
+            await params.prepareSpeculativeCompaction("new-turn");
+          if (retryPrepared) {
+            params.applyPreparedCompaction(retryPrepared);
+          }
+          break;
+        }
+      }
+    }
+
+    const readyResult = params.applyReadySpeculativeCompaction();
+    if (readyResult.stale && attempt === 0) {
+      const retryPrepared =
+        await params.prepareSpeculativeCompaction("new-turn");
+      if (retryPrepared) {
+        params.applyPreparedCompaction(retryPrepared);
+      }
+      break;
+    }
+  }
+
+  if (
+    params.isAtHardContextLimit(params.additionalTokens, {
+      phase: params.phase,
+    })
+  ) {
+    params.warnHardLimitStillExceeded();
+  }
+}
+
 export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const markdownTheme =
     config.theme?.markdownTheme ?? createDefaultMarkdownTheme();
@@ -484,18 +620,10 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   };
 
   const discardAllSpeculativeCompactionJobs = (): void => {
-    for (const job of [...speculativeCompactionJobs]) {
-      discardSpeculativeCompactionJob(job);
-    }
-  };
-
-  const setBackgroundStatus = (
-    id: string,
-    message: string,
-    state: FooterStatusEntry["state"] = "running"
-  ): void => {
-    backgroundStatuses.set(id, { message, state });
-    renderFooterStatuses();
+    discardAllSpeculativeCompactionJobsCore({
+      jobs: speculativeCompactionJobs,
+      discardJob: discardSpeculativeCompactionJob,
+    });
   };
 
   const clearStatus = (): void => {
@@ -522,32 +650,25 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     tui.requestRender();
   };
 
-  const applyReadySpeculativeCompaction = (): boolean => {
-    let applied = false;
+  const applyReadySpeculativeCompaction = (): {
+    applied: boolean;
+    stale: boolean;
+  } => {
+    const result = applyReadySpeculativeCompactionCore({
+      jobs: speculativeCompactionJobs,
+      applyPreparedCompaction: (prepared) =>
+        config.messageHistory.applyPreparedCompaction(prepared),
+      discardJob: discardSpeculativeCompactionJob,
+      discardAllJobs: discardAllSpeculativeCompactionJobs,
+      onStale: () => startSpeculativeCompaction(),
+    });
 
-    for (let i = speculativeCompactionJobs.length - 1; i >= 0; i--) {
-      const job = speculativeCompactionJobs[i];
-      if (job.discarded || job.state !== "completed" || !job.prepared) {
-        continue;
-      }
-
-      const result = config.messageHistory.applyPreparedCompaction(job.prepared);
-      discardSpeculativeCompactionJob(job);
-
-      if (result.reason === "stale") {
-        continue;
-      }
-
-      if (result.reason === "applied") {
-        discardAllSpeculativeCompactionJobs();
-        updateHeader();
-        tui.requestRender();
-        applied = true;
-      }
-      break;
+    if (result.applied) {
+      updateHeader();
+      tui.requestRender();
     }
 
-    return applied;
+    return result;
   };
 
   const getLatestRunningSpeculativeCompaction =
@@ -561,34 +682,47 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       return null;
     };
 
-  const waitForSpeculativeCompactionIfNeeded = async (
-    content: string
+  const blockAtHardContextLimit = async (
+    additionalTokens: number,
+    phase: "new-turn" | "intermediate-step"
   ): Promise<void> => {
-    applyReadySpeculativeCompaction();
+    await blockAtHardContextLimitCore({
+      additionalTokens,
+      phase,
+      isAtHardContextLimit: (tokens, options) =>
+        config.messageHistory.isAtHardContextLimit(tokens, options),
+      getLatestRunningSpeculativeCompaction,
+      prepareSpeculativeCompaction: (attemptPhase) =>
+        config.messageHistory.prepareSpeculativeCompaction({
+          phase: attemptPhase,
+        }),
+      applyPreparedCompaction: (prepared) =>
+        config.messageHistory.applyPreparedCompaction(prepared),
+      applyReadySpeculativeCompaction,
+      warnHardLimitStillExceeded: () => {
+        console.warn(
+          "[compaction] Hard limit still exceeded after 2 compaction attempts. Proceeding with current context."
+        );
+      },
+    });
 
-    const runningJob = getLatestRunningSpeculativeCompaction();
-    if (!runningJob) {
-      return;
-    }
+    updateHeader();
+    tui.requestRender();
+  };
 
-    if (
-      !config.messageHistory.wouldExceedContextWithAdditionalMessage(content, {
-        phase: "new-turn",
-      })
-    ) {
-      return;
-    }
-
-    await runningJob.promise;
-
-    applyReadySpeculativeCompaction();
+  const blockOnlyIfAtHardContextLimit = async (
+    userContent: string
+  ): Promise<void> => {
+    await blockAtHardContextLimit(estimateTokens(userContent), "new-turn");
   };
 
   const startSpeculativeCompaction = (): void => {
     applyReadySpeculativeCompaction();
     if (
       speculativeCompactionJobs.some(
-        (job) => !job.discarded && (job.state === "running" || job.state === "completed")
+        (job) =>
+          !job.discarded &&
+          (job.state === "running" || job.state === "completed")
       )
     ) {
       return;
@@ -610,9 +744,11 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
     job.promise = (async () => {
       try {
-        job.prepared = await config.messageHistory.prepareSpeculativeCompaction({
-          phase: "new-turn",
-        });
+        job.prepared = await config.messageHistory.prepareSpeculativeCompaction(
+          {
+            phase: "new-turn",
+          }
+        );
         job.state = "completed";
 
         if (!job.discarded && job.prepared?.didChange) {
@@ -827,43 +963,24 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
   };
 
-  const prepareMessagesWithCompaction = async (
+  const prepareMessages = async (
     phase: "new-turn" | "intermediate-step"
   ): Promise<ModelMessage[]> => {
     applyReadySpeculativeCompaction();
 
-    let willCompact =
-      config.messageHistory.isCompactionEnabled() &&
-      config.messageHistory.needsCompaction({ phase });
-
-    const runningJob = getLatestRunningSpeculativeCompaction();
-    if (willCompact && runningJob) {
-      await runningJob.promise;
-      applyReadySpeculativeCompaction();
-      willCompact =
-        config.messageHistory.isCompactionEnabled() &&
-        config.messageHistory.needsCompaction({ phase });
+    if (config.messageHistory.isAtHardContextLimit(0, { phase })) {
+      await blockAtHardContextLimit(0, phase);
     }
 
-    try {
-      if (willCompact) {
-        discardAllSpeculativeCompactionJobs();
-      }
-
-      const messagesForLLM = await config.messageHistory.getMessagesForLLMAsync(
-        { phase }
-      );
-      return messagesForLLM;
-    } finally {
-      clearStatus();
-    }
+    const messagesForLLM = config.messageHistory.getMessagesForLLM();
+    startSpeculativeCompaction();
+    return messagesForLLM;
   };
 
   const runSingleStreamTurn = async (
     phase: "new-turn" | "intermediate-step"
   ): Promise<"completed" | "continue" | "interrupted"> => {
-    const messagesForLLM = await prepareMessagesWithCompaction(phase);
-    startSpeculativeCompaction();
+    const messagesForLLM = await prepareMessages(phase);
 
     showLoader("Working...");
     const streamAbortController = new AbortController();
@@ -1083,7 +1200,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
     if (isSkillCommandResult(commandResult)) {
       addUserMessage(chatContainer, markdownTheme, trimmed);
-      await waitForSpeculativeCompactionIfNeeded(commandResult.skillContent);
+      await blockOnlyIfAtHardContextLimit(commandResult.skillContent);
       config.messageHistory.addUserMessage(commandResult.skillContent);
       tui.requestRender();
       const responseState = await processAgentResponse();
@@ -1130,7 +1247,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       addUserMessage(chatContainer, markdownTheme, trimmed);
     }
 
-    await waitForSpeculativeCompactionIfNeeded(contentForModel);
+    await blockOnlyIfAtHardContextLimit(contentForModel);
     config.messageHistory.addUserMessage(contentForModel, originalContent);
     tui.requestRender();
     const responseState = await processAgentResponse();
