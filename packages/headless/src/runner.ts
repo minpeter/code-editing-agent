@@ -1,25 +1,51 @@
-import type { AgentStreamResult, MessageHistory } from "@ai-sdk-tool/harness";
+import type { MessageHistory, RunnableAgent } from "@ai-sdk-tool/harness";
 import { shouldContinueManualToolLoop } from "@ai-sdk-tool/harness";
 import { emitEvent as defaultEmitEvent } from "./emit";
 import { processStream } from "./stream-processor";
 import type { TrajectoryEvent } from "./types";
 
+export interface InitialUserMessage {
+  content: string;
+  eventContent?: string;
+  originalContent?: string;
+}
+
 export interface HeadlessRunnerConfig {
+  agent: RunnableAgent;
   emitEvent?: (event: TrajectoryEvent) => void;
-  getModelId: () => string;
+  initialUserMessage?: InitialUserMessage;
   maxIterations?: number;
   messageHistory: MessageHistory;
+  modelId: string;
   onTodoReminder?: () => Promise<{
     hasReminder: boolean;
     message: string | null;
   }>;
   sessionId: string;
-  stream: (messages: unknown[]) => Promise<AgentStreamResult>;
 }
 
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const emitEvent = config.emitEvent ?? defaultEmitEvent;
   let globalIterationCount = 0;
+
+  const enqueueUserMessage = (
+    message: InitialUserMessage | { content: string }
+  ): void => {
+    emitEvent({
+      timestamp: new Date().toISOString(),
+      type: "user",
+      sessionId: config.sessionId,
+      content:
+        "eventContent" in message
+          ? (message.eventContent ?? message.content)
+          : message.content,
+    });
+
+    config.messageHistory.addUserMessage(
+      message.content,
+      "originalContent" in message ? message.originalContent : undefined
+    );
+  };
 
   const processAgentResponse = async (): Promise<void> => {
     let phase: "new-turn" | "intermediate-step" = "new-turn";
@@ -43,10 +69,10 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       const messages = await config.messageHistory.getMessagesForLLMAsync({
         phase,
       });
-      const stream = await config.stream(messages);
+      const stream = await config.agent.stream({ messages });
       const processStreamResult = await processStream({
         emitEvent,
-        modelId: config.getModelId(),
+        modelId: config.modelId,
         onMessages: (messages) => {
           config.messageHistory.addModelMessages(messages);
         },
@@ -66,6 +92,10 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       phase = "intermediate-step";
     }
   };
+
+  if (config.initialUserMessage) {
+    enqueueUserMessage(config.initialUserMessage);
+  }
 
   await processAgentResponse();
 
@@ -98,14 +128,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       continue;
     }
 
-    emitEvent({
-      timestamp: new Date().toISOString(),
-      type: "user",
-      sessionId: config.sessionId,
-      content: reminderMessage,
-    });
-
-    config.messageHistory.addUserMessage(reminderMessage);
+    enqueueUserMessage({ content: reminderMessage });
     await processAgentResponse();
   }
 }

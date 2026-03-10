@@ -1,8 +1,6 @@
 import {
-  type AgentStreamResult,
   createAgent,
   MessageHistory,
-  type ModelMessage,
   SessionManager,
 } from "@ai-sdk-tool/harness";
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
@@ -70,10 +68,6 @@ const main = defineCommand({
       model: friendli(selectedModelId),
       instructions: DEFAULT_SYSTEM_PROMPT,
     });
-    const runtimeAgent = {
-      stream: (messages: unknown[]): Promise<AgentStreamResult> =>
-        Promise.resolve(agent.stream({ messages: messages as ModelMessage[] })),
-    };
 
     if (args.headless) {
       const prompt = args.prompt?.trim();
@@ -83,27 +77,22 @@ const main = defineCommand({
         return;
       }
 
-      emitEvent({
-        timestamp: new Date().toISOString(),
-        type: "user",
-        sessionId,
-        content: prompt,
-      });
-      messageHistory.addUserMessage(prompt);
-
       await runHeadless({
+        agent,
         sessionId,
         emitEvent,
-        getModelId: () => selectedModelId,
+        initialUserMessage: {
+          content: prompt,
+        },
         messageHistory,
         maxIterations: 1,
-        stream: runtimeAgent.stream,
+        modelId: selectedModelId,
       });
       return;
     }
 
     await createAgentTUI({
-      agent: runtimeAgent,
+      agent,
       messageHistory,
       header: {
         title: "Minimal Agent",

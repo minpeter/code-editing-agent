@@ -1,5 +1,4 @@
 import {
-  type AgentStreamResult,
   type Command,
   type CommandResult,
   executeCommand,
@@ -7,7 +6,9 @@ import {
   isCommand,
   isSkillCommandResult,
   type MessageHistory,
+  type ModelMessage,
   parseCommand,
+  type RunnableAgent,
   type SkillInfo,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
@@ -161,9 +162,7 @@ export interface CommandPreprocessHooks {
 }
 
 export interface AgentTUIConfig {
-  agent: {
-    stream: (messages: unknown[], opts?: unknown) => Promise<AgentStreamResult>;
-  };
+  agent: RunnableAgent;
   commands?: Command[];
   header?: { title: string; subtitle?: string };
   messageHistory: MessageHistory;
@@ -476,7 +475,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   const prepareMessagesWithCompaction = async (
     phase: "new-turn" | "intermediate-step"
-  ): Promise<unknown[]> => {
+  ): Promise<ModelMessage[]> => {
     const willCompact =
       config.messageHistory.isCompactionEnabled() &&
       config.messageHistory.needsCompaction({ phase });
@@ -533,7 +532,8 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     streamInterruptRequested = false;
 
     try {
-      const stream = await config.agent.stream(messagesForLLM, {
+      const stream = await config.agent.stream({
+        messages: messagesForLLM,
         abortSignal: streamAbortController.signal,
       });
 

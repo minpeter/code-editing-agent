@@ -7,7 +7,6 @@ import {
   registerSignalHandlers,
   runHeadless,
 } from "@ai-sdk-tool/headless";
-import type { ModelMessage } from "ai";
 import { defineCommand, runMain } from "citty";
 import { agentManager } from "../agent";
 import {
@@ -84,13 +83,6 @@ const headlessCommand = defineCommand({
       ? await translateToEnglish(config.prompt, agentManager)
       : { translated: false, text: config.prompt };
 
-    emit({
-      timestamp: timestamp(),
-      type: "user",
-      sessionId,
-      content: config.prompt,
-    });
-
     if (preparedPrompt.error) {
       emit({
         timestamp: timestamp(),
@@ -100,18 +92,21 @@ const headlessCommand = defineCommand({
       });
     }
 
-    messageHistory.addUserMessage(
-      preparedPrompt.text,
-      preparedPrompt.originalText
-    );
-
     try {
       await runHeadless({
+        agent: {
+          stream: (opts) => agentManager.stream(opts.messages),
+        },
         sessionId,
         emitEvent,
-        getModelId: () => agentManager.getModelId(),
+        initialUserMessage: {
+          content: preparedPrompt.text,
+          eventContent: config.prompt,
+          originalContent: preparedPrompt.originalText,
+        },
         maxIterations: config.maxIterations,
         messageHistory,
+        modelId: agentManager.getModelId(),
         onTodoReminder: async () => {
           const incompleteTodos = await getIncompleteTodos();
           if (incompleteTodos.length === 0) {
@@ -122,8 +117,6 @@ const headlessCommand = defineCommand({
             message: buildTodoContinuationUserMessage(incompleteTodos),
           };
         },
-        stream: (messages: unknown[]) =>
-          agentManager.stream(messages as ModelMessage[]),
       });
     } catch (error) {
       emit({

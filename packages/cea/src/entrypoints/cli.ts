@@ -5,6 +5,7 @@ import {
   type CommandContext,
   MessageHistory,
   parseCommand,
+  type RunnableAgent,
   SessionManager,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
@@ -25,7 +26,7 @@ import {
   Spacer,
   Text,
 } from "@mariozechner/pi-tui";
-import type { FinishReason, ModelMessage } from "ai";
+import type { FinishReason } from "ai";
 import { defineCommand, runMain } from "citty";
 import { agentManager } from "../agent";
 import {
@@ -181,10 +182,6 @@ registerCommand(createToolFallbackCommand());
 registerCommand(createTranslateCommand());
 registerCommand(createCompactCommand(() => messageHistory));
 
-const toModelMessages = (messages: unknown[]): ModelMessage[] => {
-  return messages as ModelMessage[];
-};
-
 const createTranslationPreprocessor = () => {
   return async (
     input: string,
@@ -221,11 +218,12 @@ const createTranslationPreprocessor = () => {
   };
 };
 
-const buildAgentStreamWithTodoContinuation = () => {
+const buildAgentStreamWithTodoContinuation = (): RunnableAgent => {
   return {
-    stream: async (messages: unknown[], opts?: unknown) => {
-      const preparedMessages = toModelMessages(messages);
-      const stream = await agentManager.stream(preparedMessages, opts as never);
+    stream: async (opts) => {
+      const stream = await agentManager.stream(opts.messages, {
+        abortSignal: opts.abortSignal,
+      });
 
       const continuationDecision = (async (): Promise<{
         finishReason: FinishReason;

@@ -40,6 +40,13 @@ export interface Agent {
   stream(opts: AgentStreamOptions): AgentStreamResult;
 }
 
+/** Shared runtime stream surface consumed by shell packages. */
+export interface RunnableAgent {
+  stream(
+    opts: AgentStreamOptions
+  ): AgentStreamResult | Promise<AgentStreamResult>;
+}
+
 /** Options passed to {@link Agent.stream} for a single turn. */
 export interface AgentStreamOptions {
   abortSignal?: AbortSignal;
