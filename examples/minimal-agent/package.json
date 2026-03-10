@@ -11,6 +11,7 @@
     "@ai-sdk-tool/harness": "workspace:*",
     "@ai-sdk-tool/tui": "workspace:*",
     "@ai-sdk-tool/headless": "workspace:*",
+    "@friendliai/ai-provider": "^1.1.4",
     "citty": "^0.2.1"
   },
   "devDependencies": {

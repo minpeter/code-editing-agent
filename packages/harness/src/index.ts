@@ -34,6 +34,12 @@ export type {
   MessageHistoryOptions,
 } from "./message-history";
 export { MessageHistory } from "./message-history";
+export type { MessageTextOptions } from "./message-text";
+export {
+  getLastMessageText,
+  getLastUserText,
+  getMessageText,
+} from "./message-text";
 export type { MiddlewareConfig } from "./middleware";
 export { buildMiddlewareChain } from "./middleware";
 export type { AgentPaths, AgentPathsOptions } from "./paths";

@@ -1,5 +1,4 @@
 import {
-  type AgentConfig,
   type AgentStreamResult,
   createAgent,
   MessageHistory,
@@ -8,84 +7,54 @@ import {
 } from "@ai-sdk-tool/harness";
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
 import { createAgentTUI } from "@ai-sdk-tool/tui";
+import {
+  createFriendli,
+  type FriendliAIProvider,
+} from "@friendliai/ai-provider";
 import { defineCommand, runMain } from "citty";
 
-function getLastUserText(messages: ModelMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const msg = messages[i];
-    if (msg.role !== "user") {
-      continue;
-    }
-    if (typeof msg.content === "string") {
-      return msg.content;
-    }
-    if (Array.isArray(msg.content)) {
-      const text = msg.content
-        .filter(
-          (p): p is { type: "text"; text: string } =>
-            typeof p === "object" &&
-            p !== null &&
-            "type" in p &&
-            p.type === "text" &&
-            "text" in p &&
-            typeof p.text === "string"
-        )
-        .map((p) => p.text)
-        .join(" ")
-        .trim();
-      if (text) {
-        return text;
-      }
-    }
+const DEFAULT_MODEL_ID = "zai-org/GLM-5";
+const DEFAULT_SYSTEM_PROMPT =
+  "You are a minimal FriendliAI example agent. Be concise and helpful.";
+
+function getFriendliToken(): string {
+  const token = process.env.FRIENDLI_TOKEN?.trim();
+  if (!token) {
+    throw new Error(
+      "FRIENDLI_TOKEN is not set. Export FRIENDLI_TOKEN to run the minimal agent example."
+    );
   }
-  return "";
+
+  return token;
 }
 
-function createEchoStream(messages: ModelMessage[]): AgentStreamResult {
-  const userText = getLastUserText(messages) || "(empty input)";
-  const reply = `Echo: ${userText}`;
-  const usage = Promise.resolve({
-    inputTokens: 0,
-    inputTokenDetails: {
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      noCacheTokens: 0,
-    },
-    outputTokens: 0,
-    outputTokenDetails: {
-      reasoningTokens: 0,
-      textTokens: 0,
-    },
-    raw: undefined,
-    totalTokens: 0,
-  }) as AgentStreamResult["usage"];
+function createFriendliProvider(): FriendliAIProvider {
+  return createFriendli({
+    apiKey: getFriendliToken(),
+    baseURL: process.env.FRIENDLI_BASE_URL?.trim() || "serverless",
+    includeUsage: true,
+  });
+}
 
-  return {
-    fullStream: new ReadableStream<unknown>({
-      start(controller) {
-        controller.enqueue({ type: "text-delta", text: reply });
-        controller.enqueue({ type: "finish-step", finishReason: "stop" });
-        controller.close();
-      },
-    }) as unknown as AgentStreamResult["fullStream"],
-    finishReason: Promise.resolve("stop") as AgentStreamResult["finishReason"],
-    response: Promise.resolve({
-      id: "echo-response",
-      timestamp: new Date(),
-      modelId: "mock-echo",
-      messages: [{ role: "assistant", content: reply }],
-    } as unknown) as AgentStreamResult["response"],
-    totalUsage: usage as AgentStreamResult["totalUsage"],
-    usage,
-  };
+function resolveModelId(cliModel?: string): string {
+  return (
+    cliModel?.trim() || process.env.FRIENDLI_MODEL?.trim() || DEFAULT_MODEL_ID
+  );
 }
 
 const main = defineCommand({
-  meta: { name: "minimal-agent", description: "Minimal echo agent example" },
+  meta: {
+    name: "minimal-agent",
+    description: "Minimal FriendliAI-backed agent example",
+  },
   args: {
     headless: {
       type: "boolean",
       description: "Run in headless JSONL mode",
+    },
+    model: {
+      type: "string",
+      description: "Override the Friendli model ID",
     },
     prompt: {
       type: "string",
@@ -96,16 +65,15 @@ const main = defineCommand({
     const messageHistory = new MessageHistory();
     const sessionManager = new SessionManager("minimal-agent");
     const sessionId = sessionManager.initialize();
-
-    const baseAgent = createAgent({
-      model: {} as AgentConfig["model"],
-      instructions: "You are a minimal echo agent.",
+    const selectedModelId = resolveModelId(args.model);
+    const friendli = createFriendliProvider();
+    const agent = createAgent({
+      model: friendli(selectedModelId),
+      instructions: DEFAULT_SYSTEM_PROMPT,
     });
-
-    const echoAgent = {
-      config: baseAgent.config,
+    const runtimeAgent = {
       stream: (messages: unknown[]): Promise<AgentStreamResult> =>
-        Promise.resolve(createEchoStream(messages as ModelMessage[])),
+        Promise.resolve(agent.stream({ messages: messages as ModelMessage[] })),
     };
 
     if (args.headless) {
@@ -127,20 +95,20 @@ const main = defineCommand({
       await runHeadless({
         sessionId,
         emitEvent,
-        getModelId: () => "mock-echo",
+        getModelId: () => selectedModelId,
         messageHistory,
         maxIterations: 1,
-        stream: (messages) => echoAgent.stream(messages as ModelMessage[]),
+        stream: runtimeAgent.stream,
       });
       return;
     }
 
     await createAgentTUI({
-      agent: echoAgent,
+      agent: runtimeAgent,
       messageHistory,
       header: {
         title: "Minimal Agent",
-        subtitle: `Session: ${sessionId}`,
+        subtitle: `${selectedModelId} • ${sessionId}`,
       },
     });
 
