@@ -50,6 +50,7 @@ const ANSI_BG_GRAY = "\x1b[100m";
 const ANSI_CYAN = "\x1b[36m";
 const ANSI_BRIGHT_CYAN = "\x1b[96m";
 const ANSI_GRAY = "\x1b[90m";
+const ANSI_RED = "\x1b[31m";
 const CTRL_C_ETX = "\u0003";
 const CTRL_C_EXIT_WINDOW_MS = 500;
 
@@ -520,7 +521,17 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       ]);
 
       if (streamInterruptRequested || streamAbortController.signal.aborted) {
-        addSystemMessage(chatContainer, "[agent] Stream interrupted by user.");
+        addChatComponent(
+          chatContainer,
+          new Text(
+            style(
+              ANSI_RED,
+              "■ interrupted - tell the model what to do differently."
+            ),
+            1,
+            0
+          )
+        );
         tui.requestRender();
         return "interrupted";
       }
@@ -531,7 +542,17 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         : "completed";
     } catch (error) {
       if (streamInterruptRequested || streamAbortController.signal.aborted) {
-        addSystemMessage(chatContainer, "[agent] Stream interrupted by user.");
+        addChatComponent(
+          chatContainer,
+          new Text(
+            style(
+              ANSI_RED,
+              "■ interrupted - tell the model what to do differently."
+            ),
+            1,
+            0
+          )
+        );
         tui.requestRender();
         return "interrupted";
       }
