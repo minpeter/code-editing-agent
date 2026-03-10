@@ -90,6 +90,13 @@ const style = (prefix: string, text: string): string => {
   return `${prefix}${text}${ANSI_RESET}`;
 };
 
+const formatTokens = (n: number): string => {
+  if (n >= 1000) {
+    return `${(n / 1000).toFixed(1)}k`;
+  }
+  return String(n);
+};
+
 const buildCurrentIndicatorLabel = (
   label: string,
   isCurrent: boolean
@@ -899,23 +906,20 @@ const mainCommand = defineCommand({
         messageHistory,
         skills,
         commands: createCliCommands(),
+        footer: {
+          get text() {
+            const contextUsage = messageHistory.getContextUsage();
+            if (!contextUsage) {
+              return undefined;
+            }
+            return `Context: ${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
+          },
+        },
         header: {
           title: "Code Editing Agent",
           get subtitle() {
             const modelInfo = `${agentManager.getProvider()}/${agentManager.getModelId()}`;
-            const sessionInfo = `Session: ${sessionManager.getId()}`;
-            const contextUsage = messageHistory.getContextUsage();
-            if (!contextUsage) {
-              return `${modelInfo}\n${sessionInfo}`;
-            }
-            const formatTokens = (n: number): string => {
-              if (n >= 1000) {
-                return `${(n / 1000).toFixed(1)}k`;
-              }
-              return String(n);
-            };
-            const contextInfo = `Context: ${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
-            return `${modelInfo} | ${contextInfo}\n${sessionInfo}`;
+            return `${modelInfo}\nSession: ${sessionManager.getId()}`;
           },
         },
         theme: {

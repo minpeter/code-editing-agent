@@ -22,6 +22,17 @@ function createMockStream(responseMessages: ModelMessage[]): AgentStreamResult {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
+}
+
 describe("runHeadless", () => {
   it("adds and emits the initial user message via headless bootstrap", async () => {
     const events: Array<{ content?: string; type: string }> = [];
@@ -76,5 +87,125 @@ describe("runHeadless", () => {
     });
 
     expect(events.some((event) => event.type === "user")).toBe(false);
+  });
+
+  it("does not block a small follow-up while speculative compaction is still running", async () => {
+    const summarizeDeferred = createDeferred<string>();
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        keepRecentTokens: 260,
+        maxTokens: 600,
+        reserveTokens: 200,
+        summarizeFn: async () => await summarizeDeferred.promise,
+      },
+    });
+    history.setContextLimit(600);
+
+    let streamCallCount = 0;
+    let secondCallMessages: ModelMessage[] = [];
+    const secondCallSeen = createDeferred<void>();
+
+    const runPromise = runHeadless({
+      agent: {
+        stream: ({ messages }) => {
+          streamCallCount += 1;
+          if (streamCallCount === 2) {
+            secondCallMessages = messages;
+            secondCallSeen.resolve();
+          }
+
+          return createMockStream([
+            {
+              role: "assistant",
+              content: streamCallCount === 1 ? "a".repeat(1000) : "done",
+            },
+          ]);
+        },
+      },
+      initialUserMessage: {
+        content: "u".repeat(300),
+      },
+      messageHistory: history,
+      modelId: "mock-model",
+      onTodoReminder: async () => {
+        if (streamCallCount === 1) {
+          return { hasReminder: true, message: "ok" };
+        }
+        return { hasReminder: false, message: null };
+      },
+      sessionId: "session-small-follow-up",
+    });
+
+    await Promise.race([
+      secondCallSeen.promise,
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("second stream call did not start")),
+          500
+        )
+      ),
+    ]);
+
+    expect(secondCallMessages[0]?.role).not.toBe("system");
+
+    summarizeDeferred.resolve("Prepared summary");
+    await runPromise;
+  });
+
+  it("waits for speculative compaction before a large follow-up that would exceed the limit", async () => {
+    const summarizeDeferred = createDeferred<string>();
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        keepRecentTokens: 260,
+        maxTokens: 600,
+        reserveTokens: 200,
+        summarizeFn: async () => await summarizeDeferred.promise,
+      },
+    });
+    history.setContextLimit(600);
+
+    let streamCallCount = 0;
+    let secondCallMessages: ModelMessage[] = [];
+
+    const runPromise = runHeadless({
+      agent: {
+        stream: ({ messages }) => {
+          streamCallCount += 1;
+          if (streamCallCount === 2) {
+            secondCallMessages = messages;
+          }
+
+          return createMockStream([
+            {
+              role: "assistant",
+              content: streamCallCount === 1 ? "a".repeat(1000) : "done",
+            },
+          ]);
+        },
+      },
+      initialUserMessage: {
+        content: "u".repeat(300),
+      },
+      messageHistory: history,
+      modelId: "mock-model",
+      onTodoReminder: async () => {
+        if (streamCallCount === 1) {
+          return { hasReminder: true, message: "x".repeat(500) };
+        }
+        return { hasReminder: false, message: null };
+      },
+      sessionId: "session-large-follow-up",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(streamCallCount).toBe(1);
+
+    summarizeDeferred.resolve("Prepared summary");
+    await runPromise;
+
+    expect(streamCallCount).toBe(2);
+    expect(secondCallMessages[0]?.role).toBe("system");
   });
 });

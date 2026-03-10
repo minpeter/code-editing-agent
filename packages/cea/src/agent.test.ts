@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { MessageHistory } from "@ai-sdk-tool/harness";
 import { agentManager, selectTranslationReasoningMode } from "./agent";
 
 describe("AgentManager translation state", () => {
@@ -49,5 +50,28 @@ describe("AgentManager translation reasoning selection", () => {
     agentManager.setReasoningMode("interleaved");
 
     expect(agentManager.getTranslationReasoningMode()).toBe("on");
+  });
+});
+
+describe("AgentManager compaction config", () => {
+  beforeEach(() => {
+    agentManager.resetForTesting();
+  });
+
+  it("supports one-turn-early speculative compaction with the compact test model", () => {
+    agentManager.setProvider("friendli");
+    agentManager.setModelId("test-compact");
+
+    const compaction = agentManager.buildCompactionConfig();
+    const history = new MessageHistory({ compaction });
+    history.setContextLimit(agentManager.getModelTokenLimits().contextLength);
+    history.addUserMessage("hello");
+    history.updateActualUsage({ totalTokens: 1100 });
+
+    expect(compaction.maxTokens).toBe(2048);
+    expect(compaction.reserveTokens).toBe(512);
+    expect(compaction.keepRecentTokens).toBe(Math.floor(2048 * 0.3));
+    expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
+    expect(history.needsCompaction()).toBe(false);
   });
 });

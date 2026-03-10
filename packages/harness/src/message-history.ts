@@ -847,7 +847,15 @@ export class MessageHistory {
 
     const baseRevision = this.revision;
     const clone = this.cloneForSpeculativeCompaction();
-    await clone.getMessagesForLLMAsync(options);
+    const allowPruning =
+      options?.allowPruning ?? options?.phase !== "intermediate-step";
+    await clone.compact({
+      allowPruning,
+      onSummaryDelta: options?.onSummaryDelta,
+      summarizeFn: options?.summarizeFn,
+      phase: options?.phase,
+    });
+    clone.setPendingCompaction(false);
 
     return {
       actualUsage: cloneActualUsage(clone.actualUsage),
