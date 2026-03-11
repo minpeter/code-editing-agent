@@ -33,7 +33,10 @@ export interface HeadlessRunnerConfig {
 
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const emitEvent = config.emitEvent ?? defaultEmitEvent;
-  let globalIterationCount = 0;
+  let totalIterationCount = 0;
+  type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
+  type StreamTurnResult = Awaited<ReturnType<typeof processStream>>;
+  type StreamUsage = StreamTurnResult["usage"];
   let speculativeCompactionJob: {
     discarded: boolean;
     prepared: Awaited<
@@ -96,6 +99,96 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     }
 
     return null;
+  };
+
+  const hasReachedMaxIterations = (): boolean => {
+    totalIterationCount += 1;
+
+    if (
+      config.maxIterations === undefined ||
+      totalIterationCount <= config.maxIterations
+    ) {
+      return false;
+    }
+
+    emitEvent({
+      timestamp: new Date().toISOString(),
+      type: "error",
+      sessionId: config.sessionId,
+      error: `Max iterations (${config.maxIterations}) reached`,
+    });
+    return true;
+  };
+
+  const applyPendingMessages = (pendingMessages: ModelMessage[]): void => {
+    applyReadySpeculativeCompaction();
+    if (pendingMessages.length > 0) {
+      config.messageHistory.addModelMessages(pendingMessages);
+    }
+  };
+
+  const updateUsage = (usage: StreamUsage): void => {
+    if (!usage) {
+      return;
+    }
+
+    config.messageHistory.updateActualUsage(usage);
+    if (!process.env.DEBUG_TOKENS) {
+      return;
+    }
+
+    const input =
+      usage.promptTokens ?? (usage as Record<string, unknown>).inputTokens ?? 0;
+    const output =
+      usage.completionTokens ??
+      (usage as Record<string, unknown>).outputTokens ??
+      0;
+    const total = usage.totalTokens ?? (input as number) + (output as number);
+    console.error(
+      `[debug:headless] total_tokens=${total} (input=${input}, output=${output})`
+    );
+  };
+
+  const runSingleTurn = async (
+    phase: "new-turn" | "intermediate-step"
+  ): Promise<{
+    pendingMessages: ModelMessage[];
+    shouldContinue: boolean;
+    usage: StreamUsage;
+  }> => {
+    let pendingMessages: ModelMessage[] = [];
+
+    const readyCompactionResult = applyReadySpeculativeCompaction();
+    if (readyCompactionResult.stale) {
+      startSpeculativeCompaction();
+    }
+
+    await blockAtHardContextLimit(0, phase);
+
+    const messages = config.messageHistory.getMessagesForLLM();
+    startSpeculativeCompaction();
+    const maxOutputTokens =
+      config.messageHistory.getRecommendedMaxOutputTokens(messages);
+    const stream = await config.agent.stream({
+      messages,
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
+    });
+    const processStreamResult = await processStream({
+      emitEvent,
+      modelId: config.modelId,
+      onMessages: (messages) => {
+        pendingMessages = messages;
+      },
+      sessionId: config.sessionId,
+      shouldContinue: shouldContinueManualToolLoop,
+      stream,
+    });
+
+    return {
+      pendingMessages,
+      shouldContinue: processStreamResult.shouldContinue,
+      usage: processStreamResult.usage,
+    };
   };
 
   const blockAtHardContextLimit = async (
@@ -230,97 +323,37 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     );
   };
 
-  const processAgentResponse = async (): Promise<void> => {
-    let phase: "new-turn" | "intermediate-step" = "new-turn";
+  const processAgentResponse =
+    async (): Promise<ProcessAgentResponseResult> => {
+      let phase: "new-turn" | "intermediate-step" = "new-turn";
 
-    while (true) {
-      globalIterationCount += 1;
-
-      if (
-        config.maxIterations !== undefined &&
-        globalIterationCount > config.maxIterations
-      ) {
-        emitEvent({
-          timestamp: new Date().toISOString(),
-          type: "error",
-          sessionId: config.sessionId,
-          error: `Max iterations (${config.maxIterations}) reached`,
-        });
-        break;
-      }
-
-      let pendingMessages: ModelMessage[] = [];
-
-      const readyCompactionResult = applyReadySpeculativeCompaction();
-      if (readyCompactionResult.stale) {
-        startSpeculativeCompaction();
-      }
-
-      await blockAtHardContextLimit(0, phase);
-
-      const messages = config.messageHistory.getMessagesForLLM();
-      startSpeculativeCompaction();
-      const maxOutputTokens =
-        config.messageHistory.getRecommendedMaxOutputTokens(messages);
-      const stream = await config.agent.stream({
-        messages,
-        ...(maxOutputTokens ? { maxOutputTokens } : {}),
-      });
-      const processStreamResult = await processStream({
-        emitEvent,
-        modelId: config.modelId,
-        onMessages: (messages) => {
-          pendingMessages = messages;
-        },
-        sessionId: config.sessionId,
-        shouldContinue: shouldContinueManualToolLoop,
-        stream,
-      });
-
-      applyReadySpeculativeCompaction();
-      if (pendingMessages.length > 0) {
-        config.messageHistory.addModelMessages(pendingMessages);
-      }
-
-      if (processStreamResult.usage) {
-        config.messageHistory.updateActualUsage(processStreamResult.usage);
-        if (process.env.DEBUG_TOKENS) {
-          const input =
-            processStreamResult.usage.promptTokens ??
-            (processStreamResult.usage as Record<string, unknown>)
-              .inputTokens ??
-            0;
-          const output =
-            processStreamResult.usage.completionTokens ??
-            (processStreamResult.usage as Record<string, unknown>)
-              .outputTokens ??
-            0;
-          const total =
-            processStreamResult.usage.totalTokens ??
-            (input as number) + (output as number);
-          console.error(
-            `[debug:headless] total_tokens=${total} (input=${input}, output=${output})`
-          );
+      while (true) {
+        if (hasReachedMaxIterations()) {
+          return "max-iterations-reached";
         }
-      }
 
-      if (!processStreamResult.shouldContinue) {
+        const { pendingMessages, shouldContinue, usage } =
+          await runSingleTurn(phase);
+        applyPendingMessages(pendingMessages);
+        updateUsage(usage);
+
+        if (!shouldContinue) {
+          startSpeculativeCompaction();
+          return "completed";
+        }
+
         startSpeculativeCompaction();
-        return;
+        phase = "intermediate-step";
       }
-
-      startSpeculativeCompaction();
-      phase = "intermediate-step";
-    }
-  };
+    };
 
   if (config.initialUserMessage) {
     await enqueueUserMessage(config.initialUserMessage);
   }
 
-  await processAgentResponse();
+  const initialRunResult = await processAgentResponse();
 
-  if (!config.onTodoReminder) {
+  if (initialRunResult === "max-iterations-reached" || !config.onTodoReminder) {
     return;
   }
 
@@ -350,6 +383,9 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     }
 
     await enqueueUserMessage({ content: reminderMessage });
-    await processAgentResponse();
+    const reminderRunResult = await processAgentResponse();
+    if (reminderRunResult === "max-iterations-reached") {
+      break;
+    }
   }
 }

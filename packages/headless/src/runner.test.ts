@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import type { AgentStreamResult, ModelMessage } from "@ai-sdk-tool/harness";
 import { MessageHistory } from "@ai-sdk-tool/harness";
 import { runHeadless } from "./runner";
+import type { TrajectoryEvent } from "./types";
 
 function createMockStream(
   responseMessages: ModelMessage[],
@@ -77,6 +78,23 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve, reject };
+}
+
+async function waitForCondition(
+  condition: () => boolean,
+  timeoutMs = 500,
+  intervalMs = 5
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (condition()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error("Condition was not met before timeout");
 }
 
 describe("runHeadless", () => {
@@ -407,16 +425,15 @@ describe("runHeadless", () => {
       sessionId: "session-stale-refire",
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitForCondition(
+      () => streamCallCount === 1 && prepareCallCount === 1
+    );
     expect(streamCallCount).toBe(1);
     expect(prepareSpeculativeCompaction).toHaveBeenCalledTimes(1);
 
     firstPreparedDeferred.resolve({ id: "stale" });
 
-    await Promise.race([
-      new Promise((resolve) => setTimeout(resolve, 20)),
-      secondCallSeen.promise,
-    ]);
+    await waitForCondition(() => prepareCallCount === 2);
 
     expect(streamCallCount).toBe(1);
     expect(prepareSpeculativeCompaction).toHaveBeenCalledTimes(2);
@@ -469,5 +486,41 @@ describe("runHeadless", () => {
     expect(new Set(eventTypes)).toEqual(
       new Set(["user", "tool_call", "tool_result", "assistant"])
     );
+  });
+
+  it("stops todo continuation after hitting the global max iteration budget", async () => {
+    const events: TrajectoryEvent[] = [];
+    let streamCallCount = 0;
+    let todoReminderCalls = 0;
+
+    await runHeadless({
+      agent: {
+        stream: () => {
+          streamCallCount += 1;
+          return createMockStream([{ role: "assistant", content: "done" }]);
+        },
+      },
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: {
+        content: "initial",
+      },
+      maxIterations: 1,
+      messageHistory: new MessageHistory(),
+      modelId: "mock-model",
+      onTodoReminder: () => {
+        todoReminderCalls += 1;
+        return Promise.resolve({
+          hasReminder: true,
+          message: `follow-up-${todoReminderCalls}`,
+        });
+      },
+      sessionId: "session-max-iterations-global",
+    });
+
+    expect(streamCallCount).toBe(1);
+    expect(todoReminderCalls).toBe(1);
+    expect(events.filter((event) => event.type === "error")).toHaveLength(1);
   });
 });

@@ -60,7 +60,7 @@ await runHeadless({
 | `stream` | `(messages) => Promise<AgentStreamResult>` | yes | Agent stream function |
 | `messageHistory` | `MessageHistory` | yes | Conversation history instance |
 | `getModelId` | `() => string` | yes | Returns current model ID |
-| `maxIterations` | `number` | no | Max loop iterations before emitting an error event |
+| `maxIterations` | `number` | no | Total iteration budget across the entire headless run, including TODO reminder turns, before emitting an error event |
 | `emitEvent` | `(event) => void` | no | Custom event sink; defaults to `console.log(JSON.stringify(event))` |
 | `onTodoReminder` | `() => Promise<{ hasReminder, message }>` | no | Hook for TODO continuation after main loop |
 
