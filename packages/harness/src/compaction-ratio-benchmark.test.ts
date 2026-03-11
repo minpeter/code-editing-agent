@@ -292,7 +292,7 @@ describeIfApi("speculativeStartRatio benchmark", () => {
     console.log(`\n${"=".repeat(90)}`);
     console.log("  SPECULATIVE START RATIO BENCHMARK");
     console.log(
-      `  Context: ${CONTEXT_LIMIT} tokens | Reserve: ${RESERVE_TOKENS} | KeepRecent: ${KEEP_RECENT}`
+      `  ${CONTEXT_LIMIT} tokens | Reserve: ${RESERVE_TOKENS} | KeepRecent: ${KEEP_RECENT}`
     );
     console.log(`  Model: ${OPENAI_MODEL} | Turns: ${userMessages.length}`);
     console.log("=".repeat(90));

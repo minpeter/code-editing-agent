@@ -22,7 +22,7 @@ await createAgentTUI({
   agent,           // { stream(messages, opts?): Promise<AgentStreamResult> }
   messageHistory,  // MessageHistory from @ai-sdk-tool/harness
   header: { title: "My Agent", subtitle: "model: gpt-4o" },
-  footer: { text: "Context: 12.4k/128.0k (10%)" },
+  footer: { text: "12.4k/128.0k (10%)" },
   commands,        // Command[] — optional, defaults to registered commands
   skills,          // SkillInfo[] — for autocomplete
   toolRenderers,   // ToolRendererMap — custom per-tool rendering
