@@ -1,4 +1,5 @@
 import { generateText, type ModelMessage } from "ai";
+import { estimateTokens } from "./message-history";
 
 type GenerateTextModel = Parameters<typeof generateText>[0]["model"];
 
@@ -104,7 +105,11 @@ There may be additional summarization instructions provided in the included cont
 
 IMPORTANT: Do NOT use any tools. You MUST respond with ONLY the <summary>...</summary> block as your text output.`;
 
+const COMPACT_COMPACTION_PROMPT =
+  "Summarize this conversation concisely. Preserve: key topics, decisions, user requests, and current state. Output only the summary text, no tags or formatting.";
+
 export interface ModelSummarizerOptions {
+  contextLimit?: number;
   instructions?: string | (() => string | Promise<string>);
   /**
    * @deprecated No longer used. Iterative compaction is handled within the user turn.
@@ -124,13 +129,75 @@ function extractSummaryFromResponse(text: string): string {
   return match ? match[1].trim() : text.trim();
 }
 
+function extractMessageText(message: ModelMessage): string {
+  if (typeof message.content === "string") {
+    return message.content;
+  }
+  if (!Array.isArray(message.content)) {
+    return "";
+  }
+  return message.content
+    .map((part) => {
+      if (typeof part === "object" && part !== null) {
+        if (part.type === "text") {
+          return (part as { text: string }).text;
+        }
+        if (part.type === "tool-call") {
+          return JSON.stringify(part);
+        }
+        if (part.type === "tool-result") {
+          return JSON.stringify(part);
+        }
+      }
+      return "";
+    })
+    .join(" ");
+}
+
+function estimateMessagesTokens(messages: ModelMessage[]): number {
+  return messages.reduce(
+    (total, msg) => total + estimateTokens(extractMessageText(msg)),
+    0
+  );
+}
+
+function truncateMessagesToTokenBudget(
+  messages: ModelMessage[],
+  maxTokens: number
+): ModelMessage[] {
+  if (messages.length === 0) {
+    return messages;
+  }
+
+  let totalTokens = estimateMessagesTokens(messages);
+  if (totalTokens <= maxTokens) {
+    return messages;
+  }
+
+  const result = [...messages];
+  while (totalTokens > maxTokens && result.length > 1) {
+    const dropped = result.shift();
+    if (dropped) {
+      totalTokens -= estimateTokens(extractMessageText(dropped));
+    }
+  }
+
+  return result;
+}
+
+const DEFAULT_SUMMARIZER_MAX_OUTPUT = 4096;
+const MIN_SUMMARIZER_OUTPUT_TOKENS = 64;
+const SMALL_CONTEXT_THRESHOLD = 4096;
+
 export function createModelSummarizer(
   model: GenerateTextModel,
   options?: ModelSummarizerOptions
 ): (messages: ModelMessage[], previousSummary?: string) => Promise<string> {
-  const compactionPrompt = options?.prompt ?? DEFAULT_COMPACTION_USER_PROMPT;
-  const maxOutputTokens = options?.maxOutputTokens ?? 4096;
+  const fullPrompt = options?.prompt ?? DEFAULT_COMPACTION_USER_PROMPT;
+  const configuredMaxOutput =
+    options?.maxOutputTokens ?? DEFAULT_SUMMARIZER_MAX_OUTPUT;
   const instructionsSource = options?.instructions;
+  const contextLimit = options?.contextLimit ?? 0;
 
   return async (
     messages: ModelMessage[],
@@ -139,6 +206,12 @@ export function createModelSummarizer(
     if (messages.length === 0) {
       return "## Summary\nNo conversation history to summarize.\n\n## Context\n- (none)\n\n## Current State\n- (none)";
     }
+
+    const useCompactPrompt =
+      contextLimit > 0 && contextLimit < SMALL_CONTEXT_THRESHOLD;
+    const compactionPrompt = useCompactPrompt
+      ? COMPACT_COMPACTION_PROMPT
+      : fullPrompt;
 
     let userTurnContent: string;
     if (previousSummary) {
@@ -156,15 +229,48 @@ export function createModelSummarizer(
         ? await instructionsSource()
         : instructionsSource;
 
+    let messagesToSend = messages;
+    let maxOutputTokens = configuredMaxOutput;
+
+    if (contextLimit > 0) {
+      const systemTokens = systemPrompt ? estimateTokens(systemPrompt) : 0;
+      const promptTokens = estimateTokens(userTurnContent);
+      const fixedInputTokens = systemTokens + promptTokens;
+
+      maxOutputTokens = Math.max(
+        MIN_SUMMARIZER_OUTPUT_TOKENS,
+        Math.min(
+          configuredMaxOutput,
+          Math.floor((contextLimit - fixedInputTokens) * 0.4)
+        )
+      );
+
+      const messageBudget = contextLimit - fixedInputTokens - maxOutputTokens;
+      if (messageBudget > 0) {
+        messagesToSend = truncateMessagesToTokenBudget(messages, messageBudget);
+      } else {
+        messagesToSend = messages.slice(-1);
+      }
+    }
+
     const result = await generateText({
       model,
       ...(systemPrompt ? { system: systemPrompt } : {}),
       messages: [
-        ...messages,
+        ...messagesToSend,
         { role: "user" as const, content: userTurnContent },
       ],
       maxOutputTokens,
     });
+
+    if (result.usage && process.env.DEBUG_TOKENS) {
+      const input = result.usage.inputTokens ?? 0;
+      const output = result.usage.outputTokens ?? 0;
+      const total = result.usage.totalTokens ?? input + output;
+      console.error(
+        `[debug:summarizer] total_tokens=${total} (input=${input}, output=${output}, msgs=${messagesToSend.length}/${messages.length})`
+      );
+    }
 
     const text = result.text.trim();
 

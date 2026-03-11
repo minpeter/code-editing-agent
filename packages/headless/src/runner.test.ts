@@ -364,6 +364,9 @@ describe("runHeadless", () => {
           streamCallCount >= 1 && !compactionApplied && prepareCallCount < 2
         );
       },
+      getRecommendedMaxOutputTokens() {
+        return undefined;
+      },
       // biome-ignore lint/suspicious/noEmptyBlockStatements: mock stub
       updateActualUsage() {},
     } as unknown as MessageHistory;

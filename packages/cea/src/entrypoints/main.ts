@@ -3,6 +3,7 @@
 import {
   type Command,
   type CommandContext,
+  estimateTokens,
   MessageHistory,
   parseCommand,
   type RunnableAgent,
@@ -243,6 +244,7 @@ const buildAgentStreamWithTodoContinuation = (): RunnableAgent => {
     stream: async (opts) => {
       const stream = await agentManager.stream(opts.messages, {
         abortSignal: opts.abortSignal,
+        maxOutputTokens: opts.maxOutputTokens,
       });
 
       const continuationDecision = (async (): Promise<{
@@ -301,11 +303,13 @@ const buildAgentStreamWithTodoContinuation = (): RunnableAgent => {
   };
 };
 
-const updateCompactionForCurrentModel = (): void => {
+const updateCompactionForCurrentModel = async (): Promise<void> => {
   messageHistory.updateCompaction(agentManager.buildCompactionConfig());
   messageHistory.setContextLimit(
     agentManager.getModelTokenLimits().contextLength
   );
+  const instructions = await agentManager.getInstructions();
+  messageHistory.setSystemPromptTokens(estimateTokens(instructions));
 };
 
 const wrapCommand = (
@@ -329,7 +333,7 @@ const createCliCommands = (): Command[] => {
       return wrapCommand(command, async (context, original) => {
         const result = await original(context);
         if (result.success) {
-          updateCompactionForCurrentModel();
+          await updateCompactionForCurrentModel();
         }
         return result;
       });
@@ -339,7 +343,7 @@ const createCliCommands = (): Command[] => {
       return wrapCommand(command, async (context, original) => {
         const result = await original(context);
         if (result.success) {
-          updateCompactionForCurrentModel();
+          await updateCompactionForCurrentModel();
         }
         return result;
       });
@@ -426,7 +430,7 @@ const mainCommand = defineCommand({
     }
     agentManager.setToolFallbackMode(config.toolFallbackMode);
     agentManager.setTranslationEnabled(config.translateUserPrompts);
-    updateCompactionForCurrentModel();
+    await updateCompactionForCurrentModel();
 
     const promptArg = (
       args as SharedArgs & { prompt?: string; "max-iterations"?: string }
@@ -461,7 +465,10 @@ const mainCommand = defineCommand({
       try {
         await runHeadless({
           agent: {
-            stream: (opts) => agentManager.stream(opts.messages),
+            stream: (opts) =>
+              agentManager.stream(opts.messages, {
+                maxOutputTokens: opts.maxOutputTokens,
+              }),
           },
           sessionId: sessionManager.getId(),
           emitEvent,
@@ -890,7 +897,7 @@ const mainCommand = defineCommand({
       }
 
       const result = applyModelSelection(selectedModel);
-      updateCompactionForCurrentModel();
+      await updateCompactionForCurrentModel();
       if (result.message) {
         hooks.showMessage(result.message);
       }

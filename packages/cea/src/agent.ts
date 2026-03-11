@@ -54,7 +54,10 @@ const TRANSLATION_MAX_OUTPUT_TOKENS = 4000;
 
 type ProviderOptions = AiProviderOptions | undefined;
 
-export type AgentStreamOptions = Pick<HarnessAgentStreamOptions, "abortSignal">;
+export type AgentStreamOptions = Pick<
+  HarnessAgentStreamOptions,
+  "abortSignal" | "maxOutputTokens"
+>;
 export type AgentStreamResult = HarnessAgentStreamResult;
 
 export type ProviderType = "friendli" | "anthropic";
@@ -406,7 +409,10 @@ export class AgentManager {
     );
     const summarizeFn = createModelSummarizer(
       this.getProviderModel(this.modelId, this.provider),
-      { instructions: () => this.getInstructions() }
+      {
+        instructions: () => this.getInstructions(),
+        contextLimit: contextLength,
+      }
     );
     return {
       enabled: true,
@@ -558,7 +564,20 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
     messages: ModelMessage[],
     options: AgentStreamOptions = {}
   ): Promise<AgentStreamResult> {
-    const { model, providerOptions, maxOutputTokens } = this.buildModel();
+    const {
+      model,
+      providerOptions,
+      maxOutputTokens: providerMaxOutputTokens,
+    } = this.buildModel();
+
+    // Use the smaller of caller's budget and provider cap.
+    // Caller budget comes from harness context-window enforcement;
+    // provider cap comes from model-specific limits.
+    const effectiveMaxOutputTokens =
+      options.maxOutputTokens != null
+        ? Math.min(options.maxOutputTokens, providerMaxOutputTokens)
+        : providerMaxOutputTokens;
+
     const preparedMessages =
       this.provider === "friendli"
         ? applyFriendliInterleavedField(
@@ -578,9 +597,9 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
 
     return agent.stream({
       messages: preparedMessages,
-      ...options,
+      abortSignal: options.abortSignal,
       providerOptions,
-      maxOutputTokens,
+      maxOutputTokens: effectiveMaxOutputTokens,
     });
   }
 }

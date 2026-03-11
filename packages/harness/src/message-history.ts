@@ -683,6 +683,7 @@ export class MessageHistory {
   private pendingCompaction = false;
   private actualUsage: ActualTokenUsage | null = null;
   private contextLimit = 0;
+  private systemPromptTokens = 0;
   private revision = 0;
 
   constructor(options?: MessageHistoryOptions) {
@@ -770,6 +771,42 @@ export class MessageHistory {
 
   getContextLimit(): number {
     return this.contextLimit;
+  }
+
+  setSystemPromptTokens(tokens: number): void {
+    this.systemPromptTokens = Math.max(0, tokens);
+  }
+
+  getSystemPromptTokens(): number {
+    return this.systemPromptTokens;
+  }
+
+  getRecommendedMaxOutputTokens(
+    messagesForLLM?: ModelMessage[]
+  ): number | undefined {
+    if (this.contextLimit <= 0) {
+      return undefined;
+    }
+
+    let estimatedInputTokens: number;
+    if (messagesForLLM) {
+      estimatedInputTokens =
+        this.systemPromptTokens + estimateMessagesTokens(messagesForLLM);
+    } else {
+      const summaryTokens = this.summaries.reduce(
+        (total, s) => total + s.summaryTokens,
+        0
+      );
+      const messageTokens = estimateMessagesTokens(this.toModelMessages());
+      estimatedInputTokens =
+        this.systemPromptTokens + summaryTokens + messageTokens;
+    }
+
+    const remaining = this.contextLimit - estimatedInputTokens;
+    const SAFETY_MARGIN = 0.85;
+    const MIN_OUTPUT = 32;
+
+    return Math.max(MIN_OUTPUT, Math.floor(remaining * SAFETY_MARGIN));
   }
 
   private invalidateActualUsage(): void {
@@ -1243,23 +1280,107 @@ export class MessageHistory {
   getMessagesForLLM(): ModelMessage[] {
     const modelMessages = this.toModelMessages();
 
+    let result: ModelMessage[];
+
     if (this.summaries.length === 0) {
-      return modelMessages;
+      result = modelMessages;
+    } else {
+      const combinedSummary = this.summaries
+        .map((s) => `---\n${sanitizeSummaryText(s.summary)}`)
+        .join("\n");
+
+      const systemMessage: ModelMessage = {
+        role: "system",
+        content: `${SYSTEM_CONTEXT_PREFIX}\n${combinedSummary}`,
+      };
+
+      result = [systemMessage, ...modelMessages];
     }
 
-    // Combine summaries into a single system message
-    // Each summary is already sanitized during creation, but we double-check here
-    const combinedSummary = this.summaries
-      .map((s) => `---\n${sanitizeSummaryText(s.summary)}`)
-      .join("\n");
+    if (this.contextLimit > 0) {
+      result = this.truncateToContextBudget(result);
+    }
 
-    // Use sanitized prefix constant to prevent injection through prefix
-    const systemMessage: ModelMessage = {
-      role: "system",
-      content: `${SYSTEM_CONTEXT_PREFIX}\n${combinedSummary}`,
-    };
+    return result;
+  }
 
-    return [systemMessage, ...modelMessages];
+  private truncateToContextBudget(messages: ModelMessage[]): ModelMessage[] {
+    const reserveTokens =
+      this.compaction.reserveTokens ?? DEFAULT_COMPACTION_RESERVE;
+    const SAFETY_MARGIN = 0.85;
+    const maxMessageTokens = Math.floor(
+      (this.contextLimit - reserveTokens - this.systemPromptTokens) *
+        SAFETY_MARGIN
+    );
+
+    if (maxMessageTokens <= 0) {
+      const last = messages.at(-1);
+      return last ? [last] : [];
+    }
+
+    let totalTokens = estimateMessagesTokens(messages);
+    if (totalTokens <= maxMessageTokens) {
+      return messages;
+    }
+
+    const result = [...messages];
+
+    // Skip system messages initially — try dropping non-system messages first
+    let dropIndex = 0;
+    while (dropIndex < result.length && result[dropIndex].role === "system") {
+      dropIndex++;
+    }
+
+    while (totalTokens > maxMessageTokens && dropIndex < result.length - 1) {
+      const dropped = result[dropIndex];
+      totalTokens -= estimateTokens(extractMessageText(dropped));
+      result.splice(dropIndex, 1);
+
+      while (
+        dropIndex < result.length - 1 &&
+        result[dropIndex].role === "tool"
+      ) {
+        totalTokens -= estimateTokens(extractMessageText(result[dropIndex]));
+        result.splice(dropIndex, 1);
+      }
+
+      if (
+        dropIndex < result.length &&
+        hasToolCalls(result[dropIndex]) &&
+        (dropIndex + 1 >= result.length ||
+          result[dropIndex + 1].role !== "tool")
+      ) {
+        totalTokens -= estimateTokens(extractMessageText(result[dropIndex]));
+        result.splice(dropIndex, 1);
+      }
+    }
+
+    // If still over budget and there's an oversized system summary, truncate it
+    if (totalTokens > maxMessageTokens && result.length > 0) {
+      const systemIdx = result.findIndex((m) => m.role === "system");
+      if (systemIdx !== -1) {
+        const systemMsg = result[systemIdx];
+        const systemText =
+          typeof systemMsg.content === "string" ? systemMsg.content : "";
+        const systemTokens = estimateTokens(systemText);
+        const otherTokens = totalTokens - systemTokens;
+        const allowedSystemTokens = Math.max(0, maxMessageTokens - otherTokens);
+
+        if (allowedSystemTokens <= 0) {
+          // System message has no budget — remove it entirely
+          totalTokens -= systemTokens;
+          result.splice(systemIdx, 1);
+        } else if (allowedSystemTokens < systemTokens) {
+          // Truncate system message to fit budget
+          const charBudget = allowedSystemTokens * LATIN_CHARS_PER_TOKEN;
+          const truncated = `${systemText.slice(0, charBudget)}... [truncated]`;
+          result[systemIdx] = { role: "system", content: truncated };
+          totalTokens = otherTokens + estimateTokens(truncated);
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

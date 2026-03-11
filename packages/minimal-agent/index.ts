@@ -2,6 +2,7 @@ import {
   type Command,
   createAgent,
   createModelSummarizer,
+  estimateTokens,
   MessageHistory,
   SessionManager,
 } from "@ai-sdk-tool/harness";
@@ -19,8 +20,8 @@ import { z } from "zod";
 const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 const DEFAULT_SYSTEM_PROMPT =
   "You are a minimal FriendliAI example agent. Be concise and helpful.";
-const COMPACTION_CONTEXT_TOKENS = 600;
-const COMPACTION_MAX_OUTPUT_TOKENS = 200;
+const COMPACTION_CONTEXT_TOKENS = 2000;
+const COMPACTION_MAX_OUTPUT_TOKENS = 500;
 const LOCAL_COMMANDS: Command[] = [
   {
     name: "new",
@@ -62,7 +63,9 @@ function createCompactionConfig(model: LanguageModel) {
     keepRecentTokens: COMPACTION_MAX_OUTPUT_TOKENS,
     maxTokens: COMPACTION_CONTEXT_TOKENS,
     reserveTokens: COMPACTION_MAX_OUTPUT_TOKENS,
-    summarizeFn: createModelSummarizer(model),
+    summarizeFn: createModelSummarizer(model, {
+      contextLimit: COMPACTION_CONTEXT_TOKENS,
+    }),
   } as const;
 }
 
@@ -113,6 +116,7 @@ const main = defineCommand({
       compaction,
     });
     messageHistory.setContextLimit(compaction.maxTokens);
+    messageHistory.setSystemPromptTokens(estimateTokens(DEFAULT_SYSTEM_PROMPT));
 
     const agent = createAgent({
       model,

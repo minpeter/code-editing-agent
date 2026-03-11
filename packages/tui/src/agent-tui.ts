@@ -1063,9 +1063,12 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     streamInterruptRequested = false;
 
     try {
+      const maxOutputTokens =
+        config.messageHistory.getRecommendedMaxOutputTokens(messagesForLLM);
       const stream = await config.agent.stream({
         messages: messagesForLLM,
         abortSignal: streamAbortController.signal,
+        ...(maxOutputTokens ? { maxOutputTokens } : {}),
       });
 
       let hasClearedStreamingLoader = false;
@@ -1098,6 +1101,15 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         stream.finishReason,
         stream.usage,
       ]);
+
+      if (usage && process.env.DEBUG_TOKENS) {
+        const input = usage.inputTokens ?? 0;
+        const output = usage.outputTokens ?? 0;
+        const total = usage.totalTokens ?? input + output;
+        console.error(
+          `[debug:tui] total_tokens=${total} (input=${input}, output=${output})`
+        );
+      }
 
       if (streamInterruptRequested || streamAbortController.signal.aborted) {
         addChatComponent(

@@ -260,7 +260,12 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
 
       const messages = config.messageHistory.getMessagesForLLM();
       startSpeculativeCompaction();
-      const stream = await config.agent.stream({ messages });
+      const maxOutputTokens =
+        config.messageHistory.getRecommendedMaxOutputTokens(messages);
+      const stream = await config.agent.stream({
+        messages,
+        ...(maxOutputTokens ? { maxOutputTokens } : {}),
+      });
       const processStreamResult = await processStream({
         emitEvent,
         modelId: config.modelId,
@@ -279,6 +284,24 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
 
       if (processStreamResult.usage) {
         config.messageHistory.updateActualUsage(processStreamResult.usage);
+        if (process.env.DEBUG_TOKENS) {
+          const input =
+            processStreamResult.usage.promptTokens ??
+            (processStreamResult.usage as Record<string, unknown>)
+              .inputTokens ??
+            0;
+          const output =
+            processStreamResult.usage.completionTokens ??
+            (processStreamResult.usage as Record<string, unknown>)
+              .outputTokens ??
+            0;
+          const total =
+            processStreamResult.usage.totalTokens ??
+            (input as number) + (output as number);
+          console.error(
+            `[debug:headless] total_tokens=${total} (input=${input}, output=${output})`
+          );
+        }
       }
 
       if (!processStreamResult.shouldContinue) {
