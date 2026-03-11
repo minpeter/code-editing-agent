@@ -384,7 +384,7 @@ export function discardAllSpeculativeCompactionJobsCore(params: {
 export function applyReadySpeculativeCompactionCore(params: {
   applyPreparedCompaction: (prepared: PreparedCompaction) => {
     applied: boolean;
-    reason: "applied" | "noop" | "stale";
+    reason: "applied" | "noop" | "stale" | "rejected";
   };
   discardAllJobs: () => void;
   discardJob: (job: SpeculativeCompactionJob) => void;
@@ -413,6 +413,10 @@ export function applyReadySpeculativeCompactionCore(params: {
       continue;
     }
 
+    if (result.reason === "rejected") {
+      continue;
+    }
+
     if (result.reason === "applied") {
       params.discardAllJobs();
       applied = true;
@@ -428,7 +432,7 @@ export async function blockAtHardContextLimitCore(params: {
   additionalTokens: number;
   applyPreparedCompaction: (prepared: PreparedCompaction) => {
     applied: boolean;
-    reason: "applied" | "noop" | "stale";
+    reason: "applied" | "noop" | "stale" | "rejected";
   };
   applyReadySpeculativeCompaction: () => { applied: boolean; stale: boolean };
   getLatestRunningSpeculativeCompaction: () => SpeculativeCompactionJob | null;
@@ -687,6 +691,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     additionalTokens: number,
     phase: "new-turn" | "intermediate-step"
   ): Promise<void> => {
+    const needsBlocking = config.messageHistory.isAtHardContextLimit(
+      additionalTokens,
+      { phase }
+    );
+    if (needsBlocking) {
+      showLoader("Compacting...");
+    }
+
     await blockAtHardContextLimitCore({
       additionalTokens,
       phase,
@@ -707,6 +719,9 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       },
     });
 
+    if (needsBlocking) {
+      clearStatus();
+    }
     updateHeader();
     tui.requestRender();
   };
@@ -1195,9 +1210,19 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       return true;
     }
 
+    const parsedForLoader = parseCommand(commandInput);
+    const isCompactCommand = parsedForLoader?.name === "compact";
+    if (isCompactCommand) {
+      showLoader("Compacting...");
+    }
+
     const commandResult =
       (await executeLocalCommand(commandInput)) ??
       (await executeCommand(commandInput));
+
+    if (isCompactCommand) {
+      clearStatus();
+    }
 
     if (isSkillCommandResult(commandResult)) {
       addUserMessage(chatContainer, markdownTheme, trimmed);

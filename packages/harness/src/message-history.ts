@@ -280,6 +280,7 @@ export interface PreparedCompaction {
   messages: Message[];
   pendingCompaction: boolean;
   phase: "intermediate-step" | "new-turn";
+  rejected: boolean;
   summaries: CompactionSummary[];
   tokenDelta: number;
 }
@@ -929,6 +930,7 @@ export class MessageHistory {
       messages: clone.messages.map(cloneMessage),
       pendingCompaction: clone.pendingCompaction,
       phase: options?.phase ?? "new-turn",
+      rejected: clone.lastCompactionRejected,
       summaries: clone.summaries.map(cloneCompactionSummary),
       tokenDelta: Math.max(0, preCompactionTokens - postCompactionTokens),
     };
@@ -936,7 +938,7 @@ export class MessageHistory {
 
   applyPreparedCompaction(prepared: PreparedCompaction): {
     applied: boolean;
-    reason: "applied" | "noop" | "stale";
+    reason: "applied" | "noop" | "stale" | "rejected";
   } {
     if (
       prepared.contextLimitAtCreation !== this.getContextLimit() ||
@@ -967,6 +969,10 @@ export class MessageHistory {
       )
     ) {
       return { applied: false, reason: "stale" };
+    }
+
+    if (prepared.rejected) {
+      return { applied: false, reason: "rejected" };
     }
 
     if (!prepared.didChange) {

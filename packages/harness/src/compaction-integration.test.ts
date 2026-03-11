@@ -898,6 +898,61 @@ describe("compaction integration with model-specific configs", () => {
       const prepared = await firstJob!;
       expect(prepared).not.toBeNull();
     });
+
+    it("prepareSpeculativeCompaction marks rejected when summary grows tokens", async () => {
+      const history = new MessageHistory({
+        compaction: {
+          enabled: true,
+          maxTokens: 1000,
+          reserveTokens: 100,
+          keepRecentTokens: 220,
+        },
+      });
+
+      history.addUserMessage(`old_1_${makeContent(120)}`);
+      history.addUserMessage(`old_2_${makeContent(120)}`);
+      history.addUserMessage(`keep_${makeContent(60)}`);
+
+      const prepared = await history.prepareSpeculativeCompaction({
+        phase: "new-turn",
+        summarizeFn: async () => makeContent(500),
+      });
+
+      expect(prepared).not.toBeNull();
+      // biome-ignore lint/style/noNonNullAssertion: prepared is asserted non-null above
+      expect(prepared!.rejected).toBe(true);
+    });
+
+    it("applyPreparedCompaction returns rejected for rejected prepared job", () => {
+      const history = new MessageHistory({
+        compaction: {
+          enabled: true,
+          maxTokens: 1000,
+          reserveTokens: 100,
+          keepRecentTokens: 200,
+        },
+      });
+      history.setContextLimit(1000);
+
+      const result = history.applyPreparedCompaction({
+        actualUsage: null,
+        baseMessageIds: [],
+        baseRevision: 0,
+        baseSummaryIds: [],
+        compactionMaxTokensAtCreation: 1000,
+        contextLimitAtCreation: 1000,
+        didChange: true,
+        keepRecentTokensAtCreation: 200,
+        messages: [],
+        pendingCompaction: false,
+        phase: "new-turn",
+        rejected: true,
+        summaries: [],
+        tokenDelta: 0,
+      });
+
+      expect(result).toEqual({ applied: false, reason: "rejected" });
+    });
   });
 
   describe("CJK token estimation", () => {

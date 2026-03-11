@@ -15,9 +15,11 @@ function createPreparedCompaction(id: string): PreparedCompaction {
     compactionMaxTokensAtCreation: 1000,
     contextLimitAtCreation: 1000,
     didChange: true,
+    keepRecentTokensAtCreation: 0,
     messages: [],
     pendingCompaction: false,
     phase: "new-turn",
+    rejected: false,
     summaries: [
       {
         createdAt: new Date(),
@@ -28,6 +30,7 @@ function createPreparedCompaction(id: string): PreparedCompaction {
         tokensBefore: 100,
       },
     ],
+    tokenDelta: 0,
   };
 }
 
@@ -137,6 +140,39 @@ describe("agent-tui compaction core", () => {
     expect(result.stale).toBe(true);
     expect(result.applied).toBe(false);
     expect(refireCalls).toBe(1);
+  });
+
+  it("treats rejected prepared compaction as noop without stale refire", () => {
+    const jobs = [
+      {
+        discarded: false,
+        id: "rejected-1",
+        phase: "new-turn" as const,
+        prepared: createPreparedCompaction("rejected-1"),
+        promise: Promise.resolve(),
+        state: "completed" as const,
+      },
+    ];
+
+    let refireCalls = 0;
+
+    const result = applyReadySpeculativeCompactionCore({
+      jobs,
+      applyPreparedCompaction: () => ({ applied: false, reason: "rejected" }),
+      discardJob: (job) => {
+        job.discarded = true;
+      },
+      discardAllJobs: () => {
+        throw new Error("should not discard all jobs for rejected result");
+      },
+      onStale: () => {
+        refireCalls += 1;
+      },
+    });
+
+    expect(result).toEqual({ applied: false, stale: false });
+    expect(refireCalls).toBe(0);
+    expect(jobs[0]?.discarded).toBe(true);
   });
 
   it("discards all speculative jobs for /clear behavior", () => {
