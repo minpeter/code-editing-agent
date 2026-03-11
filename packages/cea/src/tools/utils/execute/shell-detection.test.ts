@@ -20,6 +20,15 @@ function removeFakeShell(shellPath: string): void {
   rmSync(dirname(shellPath), { recursive: true, force: true });
 }
 
+function restoreShell(originalShell: string | undefined): void {
+  if (originalShell === undefined) {
+    Reflect.deleteProperty(process.env, "SHELL");
+    return;
+  }
+
+  process.env.SHELL = originalShell;
+}
+
 function getFallbackCandidates(): string[] {
   if (platform() === "darwin") {
     return ["/bin/zsh", "/bin/bash", "/bin/sh"];
@@ -60,7 +69,7 @@ describe("shell detection", () => {
       const shell = getShell();
       expect(shell).toBe(fakeShell);
     } finally {
-      process.env.SHELL = originalShell;
+      restoreShell(originalShell);
       resetCacheForTesting();
       removeFakeShell(fakeShell);
     }
@@ -83,7 +92,7 @@ describe("shell detection", () => {
       expect(shell).not.toBe(fakeRejectedShell);
       expect(existsSync(shell)).toBe(true);
     } finally {
-      process.env.SHELL = originalShell;
+      restoreShell(originalShell);
       resetCacheForTesting();
       removeFakeShell(fakeRejectedShell);
     }
