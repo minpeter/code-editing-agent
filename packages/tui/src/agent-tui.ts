@@ -1234,12 +1234,15 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       showLoader("Compacting...");
     }
 
-    const commandResult =
-      (await executeLocalCommand(commandInput)) ??
-      (await executeCommand(commandInput));
-
-    if (isCompactCommand) {
-      clearStatus();
+    let commandResult;
+    try {
+      commandResult =
+        (await executeLocalCommand(commandInput)) ??
+        (await executeCommand(commandInput));
+    } finally {
+      if (isCompactCommand) {
+        clearStatus();
+      }
     }
 
     if (isSkillCommandResult(commandResult)) {
