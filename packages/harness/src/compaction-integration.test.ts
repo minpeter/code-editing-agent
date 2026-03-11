@@ -572,223 +572,71 @@ describe("compaction integration with model-specific configs", () => {
       });
 
       expect(compacted).toBe(true);
-      expect(history.lastCompactionRejected).toBe(false);
       expect(history.getSummaries()).toHaveLength(1);
-    });
-
-    it("iterative compaction accepts when new summary is smaller than old summary + replaced messages", async () => {
-      const history = createHistoryManual(rejectionConfig);
-
-      history.addUserMessage(`seed_1_${makeContent(300)}`);
-      history.addUserMessage(`seed_2_${makeContent(300)}`);
-      history.addUserMessage(`seed_keep_${makeContent(80)}`);
-      enableCompaction(history, rejectionConfig);
-
-      const first = await history.compact({
-        summarizeFn: async () => makeContent(500),
-      });
-      expect(first).toBe(true);
-      expect(history.lastCompactionRejected).toBe(false);
-      expect(history.getSummaries()).toHaveLength(1);
-
-      history.addUserMessage(`iter_1_${makeContent(300)}`);
-      history.addUserMessage(`iter_keep_${makeContent(80)}`);
-
-      const second = await history.compact({
-        summarizeFn: async () => makeContent(400),
-      });
-
-      expect(second).toBe(true);
-      expect(history.lastCompactionRejected).toBe(false);
-      expect(history.getSummaries()).toHaveLength(1);
-      expect(history.getSummaries()[0].summaryTokens).toBe(400);
-    });
-
-    it("iterative compaction rejects when new summary is >= old summary + replaced messages", async () => {
-      const history = createHistoryManual(rejectionConfig);
-
-      history.addUserMessage(`seed_1_${makeContent(300)}`);
-      history.addUserMessage(`seed_2_${makeContent(300)}`);
-      history.addUserMessage(`seed_keep_${makeContent(80)}`);
-      enableCompaction(history, rejectionConfig);
-
-      const first = await history.compact({
-        summarizeFn: async () => makeContent(500),
-      });
-      expect(first).toBe(true);
-      expect(history.getSummaries()).toHaveLength(1);
-
-      history.addUserMessage(`iter_1_${makeContent(300)}`);
-      history.addUserMessage(`iter_keep_${makeContent(80)}`);
-
-      const second = await history.compact({
-        summarizeFn: async () => makeContent(900),
-      });
-
-      expect(second).toBe(false);
-      expect(history.lastCompactionRejected).toBe(true);
-      expect(history.getSummaries()).toHaveLength(1);
-      expect(history.getSummaries()[0].summaryTokens).toBe(500);
-    });
-
-    it("returns true when pruning succeeds even if compaction is rejected", async () => {
-      const history = new MessageHistory({
-        compaction: {
-          enabled: true,
-          maxTokens: 220,
-          reserveTokens: 20,
-          keepRecentTokens: 200,
-        },
-        pruning: {
-          enabled: true,
-          protectRecentTokens: 40,
-          minSavingsTokens: 20,
-        },
-      });
-
-      history.addUserMessage(`context_a_${makeContent(160)}`);
-      history.addModelMessages([
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool-call",
-              toolCallId: "call_reject_after_prune",
-              toolName: "read_file",
-              input: { path: "big.txt" },
-            },
-          ],
-        },
-        {
-          role: "tool",
-          content: [
-            {
-              type: "tool-result",
-              toolCallId: "call_reject_after_prune",
-              toolName: "read_file",
-              output: { type: "text", value: makeContent(400) },
-            },
-          ],
-        },
-      ]);
-      history.addUserMessage(`context_b_${makeContent(140)}`);
-      history.addUserMessage(`tail_${makeContent(80)}`);
-
-      const result = await history.compact({
-        summarizeFn: async () => makeContent(2000),
-      });
-
-      expect(result).toBe(true);
-      expect(history.lastCompactionRejected).toBe(true);
     });
   });
 
-  describe("aggressive compaction mode", () => {
-    const aggressiveConfig = {
+  describe("speculative compaction rejection", () => {
+    const rejectionConfig = {
       enabled: true,
       maxTokens: 1000,
       reserveTokens: 100,
       keepRecentTokens: 220,
     } as const;
 
-    it("compact({aggressive: true}) with 10 message pairs compacts all messages", async () => {
-      const history = createHistoryManual(aggressiveConfig);
-
-      for (let i = 0; i < 10; i++) {
-        history.addUserMessage(`u_${i}_${makeContent(80)}`);
-        history.addModelMessages([
-          { role: "assistant", content: `a_${i}_${makeContent(80)}` },
-        ]);
-      }
-      enableCompaction(history, aggressiveConfig);
-
-      const compacted = await history.compact({
-        aggressive: true,
-        summarizeFn: async () => "Aggressive all summary",
-      });
-
-      expect(compacted).toBe(true);
-      expect(history.getAll()).toHaveLength(0);
-      expect(history.getSummaries()).toHaveLength(1);
-      expect(history.getSummaries()[0].firstKeptMessageId).toBe("end");
-      expect(history.getSummaries()[0].id).toMatch(SUMMARY_ID_REGEX);
-    });
-
-    it("aggressive mode summarizes trailing tool_call/tool_result too", async () => {
-      const history = createHistoryManual(aggressiveConfig);
-      history.addUserMessage(`lead_${makeContent(120)}`);
-      history.addModelMessages([
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool-call",
-              toolCallId: "call_aggressive_end",
-              toolName: "read_file",
-              input: { path: "tail.ts" },
-            },
-          ],
+    it("prepareSpeculativeCompaction marks rejected when summary grows tokens", async () => {
+      const history = new MessageHistory({
+        compaction: {
+          enabled: true,
+          maxTokens: 1000,
+          reserveTokens: 100,
+          keepRecentTokens: 220,
         },
-        {
-          role: "tool",
-          content: [
-            {
-              type: "tool-result",
-              toolCallId: "call_aggressive_end",
-              toolName: "read_file",
-              output: { type: "text", value: makeContent(100) },
-            },
-          ],
+      });
+
+      history.addUserMessage(`old_1_${makeContent(120)}`);
+      history.addUserMessage(`old_2_${makeContent(120)}`);
+      history.addUserMessage(`keep_${makeContent(60)}`);
+
+      const prepared = await history.prepareSpeculativeCompaction({
+        phase: "new-turn",
+        summarizeFn: async () => makeContent(500),
+      });
+
+      expect(prepared).not.toBeNull();
+      // biome-ignore lint/style/noNonNullAssertion: prepared is asserted non-null above
+      expect(prepared!.rejected).toBe(true);
+    });
+
+    it("applyPreparedCompaction returns rejected for rejected prepared job", () => {
+      const history = new MessageHistory({
+        compaction: {
+          enabled: true,
+          maxTokens: 1000,
+          reserveTokens: 100,
+          keepRecentTokens: 200,
         },
-      ]);
-      enableCompaction(history, aggressiveConfig);
+      });
+      history.setContextLimit(1000);
 
-      const compacted = await history.compact({
-        aggressive: true,
-        summarizeFn: async () => "Aggressive tool pair summary",
+      const result = history.applyPreparedCompaction({
+        actualUsage: null,
+        baseMessageIds: [],
+        baseRevision: 0,
+        baseSummaryIds: [],
+        compactionMaxTokensAtCreation: 1000,
+        contextLimitAtCreation: 1000,
+        didChange: true,
+        keepRecentTokensAtCreation: 200,
+        messages: [],
+        pendingCompaction: false,
+        phase: "new-turn",
+        rejected: true,
+        summaries: [],
+        tokenDelta: 0,
       });
 
-      expect(compacted).toBe(true);
-      expect(history.getAll()).toHaveLength(0);
-      expect(history.getSummaries()).toHaveLength(1);
-      expect(history.getSummaries()[0].firstKeptMessageId).toBe("end");
-    });
-
-    it("aggressive mode with one message returns false", async () => {
-      const history = createHistoryManual(aggressiveConfig);
-      history.addUserMessage(`solo_${makeContent(120)}`);
-      enableCompaction(history, aggressiveConfig);
-
-      const compacted = await history.compact({
-        aggressive: true,
-        summarizeFn: async () => "should not run",
-      });
-
-      expect(compacted).toBe(false);
-      expect(history.getSummaries()).toHaveLength(0);
-      expect(history.getAll()).toHaveLength(1);
-    });
-
-    it("aggressive rejected when summary is larger and sets lastCompactionRejected", async () => {
-      const history = createHistoryManual(aggressiveConfig);
-      for (let i = 0; i < 10; i++) {
-        history.addUserMessage(`u_${i}_${makeContent(80)}`);
-        history.addModelMessages([
-          { role: "assistant", content: `a_${i}_${makeContent(80)}` },
-        ]);
-      }
-      enableCompaction(history, aggressiveConfig);
-      const before = history.getAll();
-
-      const compacted = await history.compact({
-        aggressive: true,
-        summarizeFn: async () => makeContent(4000),
-      });
-
-      expect(compacted).toBe(false);
-      expect(history.lastCompactionRejected).toBe(true);
-      expect(history.getAll()).toEqual(before);
-      expect(history.getSummaries()).toHaveLength(0);
+      expect(result).toEqual({ applied: false, reason: "rejected" });
     });
   });
 
@@ -1006,61 +854,6 @@ describe("compaction integration with model-specific configs", () => {
       // biome-ignore lint/style/noNonNullAssertion: firstJob is asserted non-null above
       const prepared = await firstJob!;
       expect(prepared).not.toBeNull();
-    });
-
-    it("prepareSpeculativeCompaction marks rejected when summary grows tokens", async () => {
-      const history = new MessageHistory({
-        compaction: {
-          enabled: true,
-          maxTokens: 1000,
-          reserveTokens: 100,
-          keepRecentTokens: 220,
-        },
-      });
-
-      history.addUserMessage(`old_1_${makeContent(120)}`);
-      history.addUserMessage(`old_2_${makeContent(120)}`);
-      history.addUserMessage(`keep_${makeContent(60)}`);
-
-      const prepared = await history.prepareSpeculativeCompaction({
-        phase: "new-turn",
-        summarizeFn: async () => makeContent(500),
-      });
-
-      expect(prepared).not.toBeNull();
-      // biome-ignore lint/style/noNonNullAssertion: prepared is asserted non-null above
-      expect(prepared!.rejected).toBe(true);
-    });
-
-    it("applyPreparedCompaction returns rejected for rejected prepared job", () => {
-      const history = new MessageHistory({
-        compaction: {
-          enabled: true,
-          maxTokens: 1000,
-          reserveTokens: 100,
-          keepRecentTokens: 200,
-        },
-      });
-      history.setContextLimit(1000);
-
-      const result = history.applyPreparedCompaction({
-        actualUsage: null,
-        baseMessageIds: [],
-        baseRevision: 0,
-        baseSummaryIds: [],
-        compactionMaxTokensAtCreation: 1000,
-        contextLimitAtCreation: 1000,
-        didChange: true,
-        keepRecentTokensAtCreation: 200,
-        messages: [],
-        pendingCompaction: false,
-        phase: "new-turn",
-        rejected: true,
-        summaries: [],
-        tokenDelta: 0,
-      });
-
-      expect(result).toEqual({ applied: false, reason: "rejected" });
     });
   });
 

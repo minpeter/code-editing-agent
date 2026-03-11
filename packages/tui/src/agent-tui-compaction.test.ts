@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { expect, it } from "bun:test";
 import type { PreparedCompaction } from "@ai-sdk-tool/harness";
 import {
   applyReadySpeculativeCompactionCore,

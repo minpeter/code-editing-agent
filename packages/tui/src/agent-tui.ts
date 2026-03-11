@@ -436,7 +436,10 @@ export async function blockAtHardContextLimitCore(params: {
     applied: boolean;
     reason: "applied" | "noop" | "stale" | "rejected";
   };
-  applyReadySpeculativeCompaction: () => { applied: boolean; stale: boolean };
+  applyReadySpeculativeCompaction: () => {
+    applied: boolean;
+    stale: boolean;
+  };
   getLatestRunningSpeculativeCompaction: () => SpeculativeCompactionJob | null;
   isAtHardContextLimit: (
     additionalTokens: number,
@@ -579,16 +582,16 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   tui.addChild(footerContainer);
   tui.setFocus(editor);
 
-  let shouldExit = false;
-  let activeStreamController: AbortController | null = null;
-  let streamInterruptRequested = false;
-  let inputResolver: null | ((value: string | null) => void) = null;
-  let lastCtrlCPressAt = 0;
+  const shouldExit = false;
+  const activeStreamController: AbortController | null = null;
+  const streamInterruptRequested = false;
+  const inputResolver: null | ((value: string | null) => void) = null;
+  const lastCtrlCPressAt = 0;
   let foregroundStatus: StatusSpinner | null = null;
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
   const speculativeCompactionJobs: SpeculativeCompactionJob[] = [];
-  let speculativeCompactionJobCounter = 0;
-  let commandInputListenerActive = false;
+  const speculativeCompactionJobCounter = 0;
+  const commandInputListenerActive = false;
 
   const createStatusSpinner = (message: string): StatusSpinner => {
     return new StatusSpinner(

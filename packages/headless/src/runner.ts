@@ -64,10 +64,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       return { applied: false, stale: false };
     }
 
-    const result: {
-      applied: boolean;
-      reason: "applied" | "noop" | "stale" | "rejected";
-    } = config.messageHistory.applyPreparedCompaction(
+    const result = config.messageHistory.applyPreparedCompaction(
       speculativeCompactionJob.prepared
     );
     discardSpeculativeCompactionJob();
