@@ -201,6 +201,27 @@ describe("executeReadFile", () => {
       ).rejects.toThrow();
     });
 
+    it("explains cwd resolution for missing relative files", async () => {
+      const originalCwd = process.cwd();
+      const repoDir = mkdtempSync(join(tmpdir(), "read-missing-relative-"));
+      const nestedDir = join(repoDir, "nested");
+
+      try {
+        mkdirSync(nestedDir);
+        process.chdir(nestedDir);
+        const currentCwd = process.cwd();
+
+        await expect(executeReadFile({ path: "README.md" })).rejects.toThrow(
+          `File not found: 'README.md' (resolved to '${join(currentCwd, "README.md")}' from working directory '${currentCwd}')`
+        );
+      } finally {
+        process.chdir(originalCwd);
+        if (existsSync(repoDir)) {
+          rmSync(repoDir, { recursive: true });
+        }
+      }
+    });
+
     it("respects .ignore and .fdignore by default", async () => {
       const isolatedDir = mkdtempSync(join(tmpdir(), "read-ignore-"));
       try {
