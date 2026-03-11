@@ -1234,7 +1234,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       showLoader("Compacting...");
     }
 
-    let commandResult;
+    let commandResult: CommandResult | null | undefined;
     try {
       commandResult =
         (await executeLocalCommand(commandInput)) ??
