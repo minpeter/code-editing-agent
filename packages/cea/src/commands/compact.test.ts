@@ -94,4 +94,69 @@ describe("compact command", () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain("summarizer is not configured");
   });
+
+  it("compacts aggressively and reports token stats", async () => {
+    let summarizeCalls = 0;
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 2048,
+        reserveTokens: 512,
+        summarizeFn: () => {
+          summarizeCalls += 1;
+          return summarizeFn();
+        },
+      },
+    });
+    for (let i = 0; i < 20; i++) {
+      history.addUserMessage(`Tell me about computing. ${"x".repeat(200)}`);
+      history.addModelMessages([
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: `Computing evolved. ${"y".repeat(200)}` },
+          ],
+        },
+      ]);
+    }
+    const result = await exec(history);
+    expect(result.success).toBe(true);
+    expect(summarizeCalls).toBeGreaterThan(0);
+    // With aggressive mode, all messages should be compacted
+    expect(result.message).toContain("→");
+    expect(result.message).toContain("messages");
+  });
+
+  it("shows rejection message when summary would increase tokens", async () => {
+    // A summarizeFn that always produces a larger summary
+    const expandingSummarizeFn = () =>
+      Promise.resolve(
+        "## Summary\n" +
+          "This is a very very long summary that is definitely longer than the original messages. " +
+          "It contains lots of extra details that make it expand significantly. " +
+          "This should cause the compaction to be rejected because it would increase token count. " +
+          "More content here to make it even longer and ensure rejection happens."
+      );
+
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 2048,
+        reserveTokens: 512,
+        summarizeFn: expandingSummarizeFn,
+      },
+    });
+    // Add a few short messages
+    history.addUserMessage("hi");
+    history.addModelMessages([{ role: "assistant", content: "hello" }]);
+    history.addUserMessage("how are you?");
+    history.addModelMessages([{ role: "assistant", content: "good thanks" }]);
+
+    const result = await exec(history);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("skipped");
+    expect(result.message).toContain("tokens");
+    expect(result.message).toContain("Original preserved");
+  });
 });

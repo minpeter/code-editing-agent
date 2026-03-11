@@ -40,9 +40,17 @@ export const createCompactCommand = (
     const summaryIdBefore = history.getSummaries()[0]?.id ?? null;
 
     const compacted = await history.compact({
+      aggressive: true,
       allowPruning: false,
       summarizeFn,
     });
+
+    if (history.lastCompactionRejected) {
+      return {
+        success: true,
+        message: `✗ Compaction skipped: generated summary would be larger than original messages (${tokensBefore.toLocaleString()} tokens, ${messageCount} messages). Original preserved.`,
+      };
+    }
 
     if (!compacted) {
       return {
