@@ -174,6 +174,8 @@ describeIfApi("speculativeStartRatio benchmark", () => {
       resolved: PreparedCompaction | null;
       done: boolean;
     } | null = null;
+    let pendingSpeculativePromise: Promise<PreparedCompaction | null> | null =
+      null;
 
     const triggerTokens: number[] = [];
 
@@ -196,9 +198,10 @@ describeIfApi("speculativeStartRatio benchmark", () => {
         metrics.wastedPreparations++;
       }
       pendingSpeculative = null;
+      pendingSpeculativePromise = null;
     };
 
-    const startSpeculative = async (turn: number): Promise<void> => {
+    const startSpeculative = (turn: number): void => {
       if (pendingSpeculative) {
         return;
       }
@@ -227,7 +230,7 @@ describeIfApi("speculativeStartRatio benchmark", () => {
         });
 
       pendingSpeculative = spec;
-      await spec.promise;
+      pendingSpeculativePromise = spec.promise;
     };
 
     for (let turn = 0; turn < userMessages.length; turn++) {
@@ -242,6 +245,7 @@ describeIfApi("speculativeStartRatio benchmark", () => {
           tokensBefore - history.getEstimatedTokens()
         );
         pendingSpeculative = null;
+        pendingSpeculativePromise = null;
       }
 
       // Phase 2: add user message (mirrors headless addUserMessage)
@@ -249,7 +253,7 @@ describeIfApi("speculativeStartRatio benchmark", () => {
 
       // Phase 3: apply speculative + start new before LLM call (mirrors processAgentResponse L257-265)
       tryApplySpeculative();
-      await startSpeculative(turn);
+      startSpeculative(turn);
 
       // Phase 4: stream to LLM
       const stream = agent.stream({
@@ -270,10 +274,13 @@ describeIfApi("speculativeStartRatio benchmark", () => {
       }
 
       // Phase 6: start speculative for next turn (mirrors L288/292)
-      await startSpeculative(turn);
+      startSpeculative(turn);
     }
 
-    tryApplySpeculative();
+    if (pendingSpeculativePromise) {
+      await pendingSpeculativePromise;
+      tryApplySpeculative();
+    }
 
     metrics.finalTokens = history.getEstimatedTokens();
     metrics.finalMessages = history.getAll().length;
