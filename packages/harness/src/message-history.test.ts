@@ -1720,3 +1720,157 @@ describe("computeSpeculativeStartRatio", () => {
     }
   });
 });
+
+describe("truncateToContextBudget tool sequence validity", () => {
+  it("does not return orphaned tool messages when budget is extremely small", () => {
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 100,
+        reserveTokens: 10,
+        keepRecentTokens: 20,
+        summarizeFn: async () => "Summary",
+      },
+    });
+    history.setContextLimit(50);
+
+    history.addUserMessage("Hello");
+    history.addModelMessages([
+      {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool-call" as const,
+            toolCallId: "tc1",
+            toolName: "test_tool",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            toolCallId: "tc1",
+            toolName: "test_tool",
+            output: { type: "text" as const, value: "output" },
+          },
+        ],
+      },
+    ]);
+
+    const messages = history.getMessagesForLLM();
+
+    for (const msg of messages) {
+      if (msg.role === "tool") {
+        const idx = messages.indexOf(msg);
+        expect(idx).toBeGreaterThan(0);
+        const prev = messages[idx - 1];
+        expect(prev.role).toBe("assistant");
+      }
+    }
+  });
+
+  it("does not return dangling assistant tool-calls after extreme truncation", () => {
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 100,
+        reserveTokens: 10,
+        keepRecentTokens: 20,
+        summarizeFn: async () => "Summary",
+      },
+    });
+    history.setContextLimit(30);
+
+    for (let i = 0; i < 3; i++) {
+      history.addUserMessage(`Question ${i}`);
+      history.addModelMessages([
+        {
+          role: "assistant" as const,
+          content: [
+            {
+              type: "tool-call" as const,
+              toolCallId: `tc${i}`,
+              toolName: "tool",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "tool" as const,
+          content: [
+            {
+              type: "tool-result" as const,
+              toolCallId: `tc${i}`,
+              toolName: "tool",
+              output: { type: "text" as const, value: "x".repeat(100) },
+            },
+          ],
+        },
+      ]);
+    }
+
+    const messages = history.getMessagesForLLM();
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (
+        msg.role === "assistant" &&
+        Array.isArray(msg.content) &&
+        msg.content.some((p: { type: string }) => p.type === "tool-call")
+      ) {
+        expect(i + 1).toBeLessThan(messages.length);
+        expect(messages[i + 1].role).toBe("tool");
+      }
+    }
+  });
+
+  it("returns empty array when budget allows nothing and last message is tool", () => {
+    const history = new MessageHistory({
+      compaction: {
+        enabled: true,
+        maxTokens: 100,
+        reserveTokens: 999,
+        keepRecentTokens: 20,
+        summarizeFn: async () => "Summary",
+      },
+    });
+    history.setContextLimit(10);
+
+    history.addModelMessages([
+      {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool-call" as const,
+            toolCallId: "tc1",
+            toolName: "test_tool",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            toolCallId: "tc1",
+            toolName: "test_tool",
+            output: { type: "text" as const, value: "output" },
+          },
+        ],
+      },
+    ]);
+
+    const messages = history.getMessagesForLLM();
+
+    const toolMessages = messages.filter((m) => m.role === "tool");
+    for (const toolMsg of toolMessages) {
+      const idx = messages.indexOf(toolMsg);
+      expect(idx).toBeGreaterThan(0);
+      expect(messages[idx - 1].role).toBe("assistant");
+    }
+  });
+});

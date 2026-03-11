@@ -1035,7 +1035,7 @@ export async function safeAtomicWriteFile(
   try {
     const stats = await lstat(targetPath);
     existed = true;
-    originalMode = stats.mode & 0o7777;
+    originalMode = Number.parseInt(stats.mode.toString(8).slice(-4), 8);
     // Belt-and-suspenders: reject symlinks even after assertWriteSafety
     if (stats.isSymbolicLink()) {
       throw new Error(

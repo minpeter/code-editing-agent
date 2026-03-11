@@ -66,14 +66,22 @@ class StatusSpinner extends Text {
   private readonly frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   private currentFrame = 0;
   private intervalId: NodeJS.Timeout | null = null;
+  private readonly tui: TUI;
+  private readonly spinnerColorFn: (text: string) => string;
+  private readonly messageColorFn: (text: string) => string;
+  private message: string;
 
   constructor(
-    private readonly tui: TUI,
-    private readonly spinnerColorFn: (text: string) => string,
-    private readonly messageColorFn: (text: string) => string,
-    private message: string
+    tui: TUI,
+    spinnerColorFn: (text: string) => string,
+    messageColorFn: (text: string) => string,
+    message: string
   ) {
     super("", 1, 0);
+    this.tui = tui;
+    this.spinnerColorFn = spinnerColorFn;
+    this.messageColorFn = messageColorFn;
+    this.message = message;
     this.start();
   }
 
@@ -146,9 +154,11 @@ class FooterStatusBar extends Text {
   private intervalId: NodeJS.Timeout | null = null;
   private entries: FooterStatusEntry[] = [];
   private rightText: string | undefined;
+  private readonly tui: TUI;
 
-  constructor(private readonly tui: TUI) {
+  constructor(tui: TUI) {
     super("", 1, 0);
+    this.tui = tui;
     this.start();
   }
 
@@ -1052,6 +1062,74 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     return messagesForLLM;
   };
 
+  const createStreamingLoaderClearer = (): (() => void) => {
+    let hasClearedStreamingLoader = false;
+
+    return () => {
+      if (hasClearedStreamingLoader) {
+        return;
+      }
+      hasClearedStreamingLoader = true;
+      clearStatus();
+    };
+  };
+
+  const addInterruptedMessage = (): void => {
+    addChatComponent(
+      chatContainer,
+      new Text(
+        style(
+          ANSI_RED,
+          "■ interrupted - tell the model what to do differently."
+        ),
+        1,
+        0
+      )
+    );
+    tui.requestRender();
+  };
+
+  const addAbnormalFinishReasonMessage = (finishReason: string): void => {
+    if (finishReason === "stop") {
+      return;
+    }
+
+    addChatComponent(
+      chatContainer,
+      new Text(
+        style(
+          ANSI_RED,
+          `■ response ended abnormally (finish reason: ${finishReason})`
+        ),
+        1,
+        0
+      )
+    );
+    tui.requestRender();
+  };
+
+  const logStreamUsage = (
+    usage:
+      | {
+          inputTokens?: number;
+          outputTokens?: number;
+          totalTokens?: number;
+        }
+      | null
+      | undefined
+  ): void => {
+    if (!(usage && process.env.DEBUG_TOKENS)) {
+      return;
+    }
+
+    const input = usage.inputTokens ?? 0;
+    const output = usage.outputTokens ?? 0;
+    const total = usage.totalTokens ?? input + output;
+    console.error(
+      `[debug:tui] total_tokens=${total} (input=${input}, output=${output})`
+    );
+  };
+
   const runSingleStreamTurn = async (
     phase: "new-turn" | "intermediate-step"
   ): Promise<"completed" | "continue" | "interrupted"> => {
@@ -1071,14 +1149,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         ...(maxOutputTokens ? { maxOutputTokens } : {}),
       });
 
-      let hasClearedStreamingLoader = false;
-      const clearStreamingLoader = (): void => {
-        if (hasClearedStreamingLoader) {
-          return;
-        }
-        hasClearedStreamingLoader = true;
-        clearStatus();
-      };
+      const clearStreamingLoader = createStreamingLoaderClearer();
 
       await renderAgentStream(
         stream.fullStream as AsyncIterable<unknown>,
@@ -1102,28 +1173,10 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         stream.usage,
       ]);
 
-      if (usage && process.env.DEBUG_TOKENS) {
-        const input = usage.inputTokens ?? 0;
-        const output = usage.outputTokens ?? 0;
-        const total = usage.totalTokens ?? input + output;
-        console.error(
-          `[debug:tui] total_tokens=${total} (input=${input}, output=${output})`
-        );
-      }
+      logStreamUsage(usage);
 
       if (streamInterruptRequested || streamAbortController.signal.aborted) {
-        addChatComponent(
-          chatContainer,
-          new Text(
-            style(
-              ANSI_RED,
-              "■ interrupted - tell the model what to do differently."
-            ),
-            1,
-            0
-          )
-        );
-        tui.requestRender();
+        addInterruptedMessage();
         return "interrupted";
       }
 
@@ -1136,36 +1189,12 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         return "continue";
       }
 
-      if (finishReason !== "stop") {
-        addChatComponent(
-          chatContainer,
-          new Text(
-            style(
-              ANSI_RED,
-              `■ response ended abnormally (finish reason: ${finishReason})`
-            ),
-            1,
-            0
-          )
-        );
-        tui.requestRender();
-      }
+      addAbnormalFinishReasonMessage(finishReason);
 
       return "completed";
     } catch (error) {
       if (streamInterruptRequested || streamAbortController.signal.aborted) {
-        addChatComponent(
-          chatContainer,
-          new Text(
-            style(
-              ANSI_RED,
-              "■ interrupted - tell the model what to do differently."
-            ),
-            1,
-            0
-          )
-        );
-        tui.requestRender();
+        addInterruptedMessage();
         return "interrupted";
       }
 

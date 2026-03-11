@@ -577,13 +577,6 @@ describe("compaction integration with model-specific configs", () => {
   });
 
   describe("speculative compaction rejection", () => {
-    const rejectionConfig = {
-      enabled: true,
-      maxTokens: 1000,
-      reserveTokens: 100,
-      keepRecentTokens: 220,
-    } as const;
-
     it("prepareSpeculativeCompaction marks rejected when summary grows tokens", async () => {
       const history = new MessageHistory({
         compaction: {

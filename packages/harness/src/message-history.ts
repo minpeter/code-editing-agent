@@ -138,6 +138,107 @@ function estimateMessagesTokens(messages: ModelMessage[]): number {
   }, 0);
 }
 
+function removeToolMessagesAtIndex(
+  messages: ModelMessage[],
+  startIndex: number,
+  totalTokens: number
+): number {
+  let nextTotalTokens = totalTokens;
+
+  while (
+    startIndex < messages.length - 1 &&
+    messages[startIndex].role === "tool"
+  ) {
+    nextTotalTokens -= estimateTokens(extractMessageText(messages[startIndex]));
+    messages.splice(startIndex, 1);
+  }
+
+  return nextTotalTokens;
+}
+
+function removeDanglingToolCallAtIndex(
+  messages: ModelMessage[],
+  index: number,
+  totalTokens: number
+): number {
+  if (
+    index >= messages.length ||
+    !hasToolCalls(messages[index]) ||
+    (index + 1 < messages.length && messages[index + 1].role === "tool")
+  ) {
+    return totalTokens;
+  }
+
+  const nextTotalTokens =
+    totalTokens - estimateTokens(extractMessageText(messages[index]));
+  messages.splice(index, 1);
+  return nextTotalTokens;
+}
+
+function truncateSystemMessageToBudget(
+  messages: ModelMessage[],
+  totalTokens: number,
+  maxMessageTokens: number
+): number {
+  const systemIdx = messages.findIndex((m) => m.role === "system");
+  if (systemIdx === -1) {
+    return totalTokens;
+  }
+
+  const systemMessage = messages[systemIdx];
+  const systemText =
+    typeof systemMessage.content === "string" ? systemMessage.content : "";
+  const systemTokens = estimateTokens(systemText);
+  const otherTokens = totalTokens - systemTokens;
+  const allowedSystemTokens = Math.max(0, maxMessageTokens - otherTokens);
+
+  if (allowedSystemTokens <= 0) {
+    messages.splice(systemIdx, 1);
+    return totalTokens - systemTokens;
+  }
+
+  if (allowedSystemTokens >= systemTokens) {
+    return totalTokens;
+  }
+
+  const charBudget = allowedSystemTokens * LATIN_CHARS_PER_TOKEN;
+  const truncated = `${systemText.slice(0, charBudget)}... [truncated]`;
+  messages[systemIdx] = { role: "system", content: truncated };
+  return otherTokens + estimateTokens(truncated);
+}
+
+function ensureValidToolSequence(messages: ModelMessage[]): ModelMessage[] {
+  while (messages.length > 0 && messages[0].role === "tool") {
+    messages.shift();
+  }
+
+  let i = 1;
+  while (i < messages.length) {
+    if (messages[i].role === "tool") {
+      const prev = messages[i - 1];
+      if (prev.role !== "assistant" || !hasToolCalls(prev)) {
+        messages.splice(i, 1);
+        continue;
+      }
+    }
+    i++;
+  }
+
+  i = 0;
+  while (i < messages.length) {
+    if (hasToolCalls(messages[i])) {
+      const nextIdx = i + 1;
+      if (nextIdx >= messages.length || messages[nextIdx].role !== "tool") {
+        messages.splice(i, 1);
+        continue;
+      }
+    }
+    i++;
+  }
+
+  return messages;
+}
+
 /**
  * Check if a message contains tool-call parts.
  */
@@ -1316,7 +1417,7 @@ export class MessageHistory {
 
     if (maxMessageTokens <= 0) {
       const last = messages.at(-1);
-      return last ? [last] : [];
+      return ensureValidToolSequence(last ? [last] : []);
     }
 
     let totalTokens = estimateMessagesTokens(messages);
@@ -1326,7 +1427,6 @@ export class MessageHistory {
 
     const result = [...messages];
 
-    // Skip system messages initially — try dropping non-system messages first
     let dropIndex = 0;
     while (dropIndex < result.length && result[dropIndex].role === "system") {
       dropIndex++;
@@ -1337,51 +1437,23 @@ export class MessageHistory {
       totalTokens -= estimateTokens(extractMessageText(dropped));
       result.splice(dropIndex, 1);
 
-      while (
-        dropIndex < result.length - 1 &&
-        result[dropIndex].role === "tool"
-      ) {
-        totalTokens -= estimateTokens(extractMessageText(result[dropIndex]));
-        result.splice(dropIndex, 1);
-      }
-
-      if (
-        dropIndex < result.length &&
-        hasToolCalls(result[dropIndex]) &&
-        (dropIndex + 1 >= result.length ||
-          result[dropIndex + 1].role !== "tool")
-      ) {
-        totalTokens -= estimateTokens(extractMessageText(result[dropIndex]));
-        result.splice(dropIndex, 1);
-      }
+      totalTokens = removeToolMessagesAtIndex(result, dropIndex, totalTokens);
+      totalTokens = removeDanglingToolCallAtIndex(
+        result,
+        dropIndex,
+        totalTokens
+      );
     }
 
-    // If still over budget and there's an oversized system summary, truncate it
     if (totalTokens > maxMessageTokens && result.length > 0) {
-      const systemIdx = result.findIndex((m) => m.role === "system");
-      if (systemIdx !== -1) {
-        const systemMsg = result[systemIdx];
-        const systemText =
-          typeof systemMsg.content === "string" ? systemMsg.content : "";
-        const systemTokens = estimateTokens(systemText);
-        const otherTokens = totalTokens - systemTokens;
-        const allowedSystemTokens = Math.max(0, maxMessageTokens - otherTokens);
-
-        if (allowedSystemTokens <= 0) {
-          // System message has no budget — remove it entirely
-          totalTokens -= systemTokens;
-          result.splice(systemIdx, 1);
-        } else if (allowedSystemTokens < systemTokens) {
-          // Truncate system message to fit budget
-          const charBudget = allowedSystemTokens * LATIN_CHARS_PER_TOKEN;
-          const truncated = `${systemText.slice(0, charBudget)}... [truncated]`;
-          result[systemIdx] = { role: "system", content: truncated };
-          totalTokens = otherTokens + estimateTokens(truncated);
-        }
-      }
+      totalTokens = truncateSystemMessageToBudget(
+        result,
+        totalTokens,
+        maxMessageTokens
+      );
     }
 
-    return result;
+    return ensureValidToolSequence(result);
   }
 
   /**

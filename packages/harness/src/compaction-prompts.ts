@@ -185,6 +185,96 @@ function truncateMessagesToTokenBudget(
   return result;
 }
 
+function buildCompactionPrompt(
+  contextLimit: number,
+  fullPrompt: string
+): string {
+  return contextLimit > 0 && contextLimit < SMALL_CONTEXT_THRESHOLD
+    ? COMPACT_COMPACTION_PROMPT
+    : fullPrompt;
+}
+
+function buildUserTurnContent(
+  previousSummary: string | undefined,
+  compactionPrompt: string
+): string {
+  if (!previousSummary) {
+    return compactionPrompt;
+  }
+
+  const escapedSummary = previousSummary.replace(
+    PREVIOUS_SUMMARY_CLOSE_TAG_REGEX,
+    "[/previous-summary]"
+  );
+
+  return `<previous-summary>\n${escapedSummary}\n</previous-summary>\n\n${compactionPrompt}`;
+}
+
+async function resolveSystemPrompt(
+  instructionsSource: ModelSummarizerOptions["instructions"]
+): Promise<string | undefined> {
+  if (typeof instructionsSource === "function") {
+    return await instructionsSource();
+  }
+
+  return instructionsSource;
+}
+
+function resolveSummarizerInputs(
+  messages: ModelMessage[],
+  userTurnContent: string,
+  systemPrompt: string | undefined,
+  configuredMaxOutput: number,
+  contextLimit: number
+): {
+  maxOutputTokens: number;
+  messagesToSend: ModelMessage[];
+} {
+  if (contextLimit <= 0) {
+    return {
+      maxOutputTokens: configuredMaxOutput,
+      messagesToSend: messages,
+    };
+  }
+
+  const systemTokens = systemPrompt ? estimateTokens(systemPrompt) : 0;
+  const promptTokens = estimateTokens(userTurnContent);
+  const fixedInputTokens = systemTokens + promptTokens;
+  const maxOutputTokens = Math.max(
+    MIN_SUMMARIZER_OUTPUT_TOKENS,
+    Math.min(
+      configuredMaxOutput,
+      Math.floor((contextLimit - fixedInputTokens) * 0.4)
+    )
+  );
+  const messageBudget = contextLimit - fixedInputTokens - maxOutputTokens;
+
+  return {
+    maxOutputTokens,
+    messagesToSend:
+      messageBudget > 0
+        ? truncateMessagesToTokenBudget(messages, messageBudget)
+        : messages.slice(-1),
+  };
+}
+
+function logSummarizerUsage(
+  usage: Awaited<ReturnType<typeof generateText>>["usage"],
+  sentMessages: number,
+  totalMessages: number
+): void {
+  if (!(usage && process.env.DEBUG_TOKENS)) {
+    return;
+  }
+
+  const input = usage.inputTokens ?? 0;
+  const output = usage.outputTokens ?? 0;
+  const total = usage.totalTokens ?? input + output;
+  console.error(
+    `[debug:summarizer] total_tokens=${total} (input=${input}, output=${output}, msgs=${sentMessages}/${totalMessages})`
+  );
+}
+
 const DEFAULT_SUMMARIZER_MAX_OUTPUT = 4096;
 const MIN_SUMMARIZER_OUTPUT_TOKENS = 64;
 const SMALL_CONTEXT_THRESHOLD = 4096;
@@ -207,51 +297,19 @@ export function createModelSummarizer(
       return "## Summary\nNo conversation history to summarize.\n\n## Context\n- (none)\n\n## Current State\n- (none)";
     }
 
-    const useCompactPrompt =
-      contextLimit > 0 && contextLimit < SMALL_CONTEXT_THRESHOLD;
-    const compactionPrompt = useCompactPrompt
-      ? COMPACT_COMPACTION_PROMPT
-      : fullPrompt;
-
-    let userTurnContent: string;
-    if (previousSummary) {
-      const escapedSummary = previousSummary.replace(
-        PREVIOUS_SUMMARY_CLOSE_TAG_REGEX,
-        "[/previous-summary]"
-      );
-      userTurnContent = `<previous-summary>\n${escapedSummary}\n</previous-summary>\n\n${compactionPrompt}`;
-    } else {
-      userTurnContent = compactionPrompt;
-    }
-
-    const systemPrompt =
-      typeof instructionsSource === "function"
-        ? await instructionsSource()
-        : instructionsSource;
-
-    let messagesToSend = messages;
-    let maxOutputTokens = configuredMaxOutput;
-
-    if (contextLimit > 0) {
-      const systemTokens = systemPrompt ? estimateTokens(systemPrompt) : 0;
-      const promptTokens = estimateTokens(userTurnContent);
-      const fixedInputTokens = systemTokens + promptTokens;
-
-      maxOutputTokens = Math.max(
-        MIN_SUMMARIZER_OUTPUT_TOKENS,
-        Math.min(
-          configuredMaxOutput,
-          Math.floor((contextLimit - fixedInputTokens) * 0.4)
-        )
-      );
-
-      const messageBudget = contextLimit - fixedInputTokens - maxOutputTokens;
-      if (messageBudget > 0) {
-        messagesToSend = truncateMessagesToTokenBudget(messages, messageBudget);
-      } else {
-        messagesToSend = messages.slice(-1);
-      }
-    }
+    const compactionPrompt = buildCompactionPrompt(contextLimit, fullPrompt);
+    const userTurnContent = buildUserTurnContent(
+      previousSummary,
+      compactionPrompt
+    );
+    const systemPrompt = await resolveSystemPrompt(instructionsSource);
+    const { maxOutputTokens, messagesToSend } = resolveSummarizerInputs(
+      messages,
+      userTurnContent,
+      systemPrompt,
+      configuredMaxOutput,
+      contextLimit
+    );
 
     const result = await generateText({
       model,
@@ -263,14 +321,7 @@ export function createModelSummarizer(
       maxOutputTokens,
     });
 
-    if (result.usage && process.env.DEBUG_TOKENS) {
-      const input = result.usage.inputTokens ?? 0;
-      const output = result.usage.outputTokens ?? 0;
-      const total = result.usage.totalTokens ?? input + output;
-      console.error(
-        `[debug:summarizer] total_tokens=${total} (input=${input}, output=${output}, msgs=${messagesToSend.length}/${messages.length})`
-      );
-    }
+    logSummarizerUsage(result.usage, messagesToSend.length, messages.length);
 
     const text = result.text.trim();
 
