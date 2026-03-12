@@ -175,7 +175,7 @@ export class BaseToolCallView extends Container {
   private outputDenied = false;
   private parsedInput: unknown;
   private pendingSpinnerFrameIndex = 0;
-  private pendingSpinnerInterval: Timer | null = null;
+  private pendingSpinnerInterval: ReturnType<typeof setInterval> | null = null;
   private pendingTemplate: string | null = null;
   private prettyBlockActive = false;
   private readBlock: Container | null = null;
