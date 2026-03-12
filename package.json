@@ -6,8 +6,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --filter=plugsuits",
-    "start": "turbo run start --filter=plugsuits",
-    "headless": "turbo run start --filter=plugsuits -- --prompt",
+    "headless": "node --conditions=@ai-sdk-tool/source --import tsx packages/cea/src/entrypoints/main.ts --prompt",
     "test": "turbo run test",
     "typecheck": "pnpm run typecheck:root && turbo run typecheck",
     "typecheck:root": "tsc --noEmit -p tsconfig.root.json",

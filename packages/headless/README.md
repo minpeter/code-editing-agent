@@ -297,7 +297,7 @@ await runHeadless({
 
 ```bash
 # Run headless and filter only assistant events
-pnpm start -- --prompt "Fix the bug" | grep '"type":"assistant"' | jq .content
+pnpm run headless -- "Fix the bug" | grep '"type":"assistant"' | jq .content
 ```
 
 ```typescript

@@ -20,7 +20,6 @@ From the workspace root:
 ```bash
 pnpm --filter @plugsuits/minimal-agent dev
 pnpm --filter @plugsuits/minimal-agent build
-pnpm --filter @plugsuits/minimal-agent start
 ```
 
 ## Workflows
@@ -31,15 +30,14 @@ Run from source in watch mode during development:
 pnpm --filter @plugsuits/minimal-agent dev
 ```
 
-Build and run the compiled output:
+Build the package output:
 
 ```bash
 pnpm --filter @plugsuits/minimal-agent build
-pnpm --filter @plugsuits/minimal-agent start
 ```
 
-Run in headless mode with a prompt:
+Run headless mode directly from source:
 
 ```bash
-pnpm --filter @plugsuits/minimal-agent start -- --prompt "Summarize this repository"
+node --conditions=@ai-sdk-tool/source --import tsx packages/minimal-agent/index.ts --prompt "Summarize this repository"
 ```

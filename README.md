@@ -55,7 +55,7 @@ pnpm dlx plugsuits
 git clone https://github.com/minpeter/plugsuits.git
 cd plugsuits
 pnpm install
-pnpm start
+pnpm dev
 ```
 
 ## Usage
@@ -63,7 +63,7 @@ pnpm start
 ### Interactive mode
 
 ```
-$ pnpm start
+$ pnpm dev
 
 Chat with AI (model: LGAI-EXAONE/K-EXAONE-236B-A23B)
 Use '/help' for commands, 'ctrl-c' to quit
@@ -86,7 +86,7 @@ Available commands:
 ### Headless mode
 
 ```bash
-pnpm start -- --prompt "Fix the type error in src/index.ts"
+pnpm run headless -- "Fix the type error in src/index.ts"
 ```
 
 Outputs structured JSONL events (`user`, `tool_call`, `tool_result`, `assistant`, `error`) for programmatic consumption.
@@ -123,8 +123,8 @@ plugsuits/
 
 ```bash
 pnpm install         # Install dependencies
-pnpm start           # Interactive TUI
-pnpm start -- --prompt "Fix the bug"  # Headless JSONL mode
+pnpm dev             # Interactive TUI (source mode)
+pnpm run headless -- "Fix the bug"  # Headless JSONL mode
 pnpm test            # Run all tests
 pnpm run typecheck   # Type check all packages
 pnpm run check       # Lint — non-mutating

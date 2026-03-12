@@ -105,7 +105,7 @@ pnpm run lint           # Lint — auto-fix
 pnpm run test           # Run all tests
 
 # CEA-specific (from packages/cea or via workspace scripts)
-pnpm run start         # Interactive TUI
+pnpm run dev           # Interactive TUI
 pnpm run headless -- "<task>"   # Headless JSONL mode
 ```
 
