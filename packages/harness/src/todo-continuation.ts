@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { SessionManager } from "./session.js";
 
 export interface TodoItem {
@@ -86,11 +86,10 @@ export class TodoContinuation {
     }
 
     const sessionId = this.sessionManager.getId();
-    const todoPath = join(
-      process.cwd(),
-      this.config.todoDir,
-      `${sessionId}.json`
-    );
+    const todoBaseDir = isAbsolute(this.config.todoDir)
+      ? this.config.todoDir
+      : join(process.cwd(), this.config.todoDir);
+    const todoPath = join(todoBaseDir, `${sessionId}.json`);
 
     try {
       await stat(todoPath);
