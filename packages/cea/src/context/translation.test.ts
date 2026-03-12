@@ -93,8 +93,12 @@ describe("isNonEnglish", () => {
     expect(isNonEnglish("")).toBe(false);
   });
 
-  it("returns true for accented Latin text", () => {
-    expect(isNonEnglish("café")).toBe(true);
+  it("returns false for accented Latin text", () => {
+    expect(isNonEnglish("café")).toBe(false);
+  });
+
+  it("returns false for emoji in otherwise English text", () => {
+    expect(isNonEnglish("fix bug 😀")).toBe(false);
   });
 });
 

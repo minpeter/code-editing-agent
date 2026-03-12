@@ -26,12 +26,21 @@ export interface TranslationAgentManager {
   getTranslationModelConfig(): TranslationModelConfig;
 }
 
-const hasNonAsciiCharacter = (text: string): boolean => {
+const LETTER_OR_MARK_REGEX = /[\p{Letter}\p{Mark}]/u;
+const LATIN_OR_INHERITED_SCRIPT_REGEX =
+  /[\p{Script=Latin}\p{Script=Inherited}]/u;
+
+const hasNonLatinLetterOrMark = (text: string): boolean => {
   for (const char of text) {
-    const code = char.codePointAt(0);
-    if (code !== undefined && code > 0x7f) {
-      return true;
+    if (!LETTER_OR_MARK_REGEX.test(char)) {
+      continue;
     }
+
+    if (LATIN_OR_INHERITED_SCRIPT_REGEX.test(char)) {
+      continue;
+    }
+
+    return true;
   }
 
   return false;
@@ -103,7 +112,7 @@ export const isNonEnglish = (text: string): boolean => {
     return false;
   }
 
-  return hasNonAsciiCharacter(text);
+  return hasNonLatinLetterOrMark(text);
 };
 
 export const translateToEnglish = async (
