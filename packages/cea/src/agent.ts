@@ -214,7 +214,7 @@ const getProviderOptions = (
   const thinkingEnabled = reasoningMode !== "off";
   const effectiveMaxTokens = getEffectiveMaxOutputTokens(modelId, provider);
 
-  const getAnthropicProviderOptions = () => {
+  const getAnthropicProviderOptions = (): ProviderOptions => {
     if (!thinkingEnabled) {
       return undefined;
     }
