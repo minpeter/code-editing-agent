@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { platform, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { beforeEach, describe, expect, test } from "vitest";
 import {
   getShell,
   getShellArgs,

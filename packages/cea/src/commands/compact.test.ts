@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
 import { MessageHistory } from "@ai-sdk-tool/harness";
+import { describe, expect, it } from "vitest";
 import { createCompactCommand } from "./compact";
 
 const exec = (history: MessageHistory) =>

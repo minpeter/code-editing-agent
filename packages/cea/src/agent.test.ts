@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from "bun:test";
 import {
   computeSpeculativeStartRatio,
+  type createModelSummarizer,
   MessageHistory,
 } from "@ai-sdk-tool/harness";
+import { beforeEach, describe, expect, it } from "vitest";
 import { agentManager, selectTranslationReasoningMode } from "./agent";
 
 describe("AgentManager translation state", () => {
@@ -64,6 +65,14 @@ describe("AgentManager compaction config", () => {
   it("uses dynamically computed speculative ratio based on context and reserve", () => {
     agentManager.setProvider("friendli");
     agentManager.setModelId("test-compact");
+
+    const mutableAgentManager = agentManager as unknown as {
+      getProviderModel(
+        modelId: string,
+        provider: string
+      ): Parameters<typeof createModelSummarizer>[0];
+    };
+    mutableAgentManager.getProviderModel = () => ({}) as never;
 
     const compaction = agentManager.buildCompactionConfig();
     const contextLength = agentManager.getModelTokenLimits().contextLength;

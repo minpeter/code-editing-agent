@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@ai-sdk-tool/harness";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { TODO_DIR } from "../../context/paths";
 import { executeTodoWrite } from "./todo-write";
 
 const testDir = join(tmpdir(), "cea-todos");
@@ -82,8 +83,8 @@ describe("executeTodoWrite", () => {
     expect(result).toContain("Detailed description here");
   });
 
-  test("rejects empty content", () => {
-    expect(
+  test("rejects empty content", async () => {
+    await expect(
       executeTodoWrite({
         todos: [
           {
@@ -100,7 +101,6 @@ describe("executeTodoWrite", () => {
 
 describe("TODO_DIR location", () => {
   test("TODO_DIR is in system tmpdir, not process.cwd()", () => {
-    const { TODO_DIR } = require("../../context/paths");
     expect(TODO_DIR).not.toContain(process.cwd());
     expect(TODO_DIR).toContain(tmpdir());
   });

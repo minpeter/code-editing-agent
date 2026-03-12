@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { type Command, createHelpCommand } from "@ai-sdk-tool/harness";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { agentManager } from "../agent";
 import {
   DEFAULT_TOOL_FALLBACK_MODE,
