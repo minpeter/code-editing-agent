@@ -1,33 +1,42 @@
-import type { PreparedCompaction } from "@ai-sdk-tool/harness";
-import { describe, expect, it } from "vitest";
 import {
-  applyReadySpeculativeCompactionCore,
-  blockAtHardContextLimitCore,
-  discardAllSpeculativeCompactionJobsCore,
-} from "./agent-tui";
+  applyReadyCompactionCore,
+  blockAtHardLimitCore,
+  discardAllJobsCore,
+  type PreparedCompaction,
+} from "@ai-sdk-tool/harness";
+import { describe, expect, it } from "vitest";
 
 function createPreparedCompaction(id: string): PreparedCompaction {
   return {
     actualUsage: null,
     baseMessageIds: [],
     baseRevision: 0,
-    baseSummaryIds: [],
+    baseSegmentIds: [],
     compactionMaxTokensAtCreation: 1000,
     contextLimitAtCreation: 1000,
     didChange: true,
     keepRecentTokensAtCreation: 0,
-    messages: [],
     pendingCompaction: false,
     phase: "new-turn",
     rejected: false,
-    summaries: [
+    segments: [
       {
         createdAt: new Date(),
-        firstKeptMessageId: "end",
-        id,
-        summary: "summary",
-        summaryTokens: 10,
-        tokensBefore: 100,
+        endMessageId: "end",
+        estimatedTokens: 10,
+        id: `segment_summary_${id}`,
+        messageCount: 0,
+        messageIds: [],
+        messages: [],
+        startMessageId: id,
+        summary: {
+          createdAt: new Date(),
+          firstKeptMessageId: "end",
+          id,
+          summary: "summary",
+          summaryTokens: 10,
+          tokensBefore: 100,
+        },
       },
     ],
     tokenDelta: 0,
@@ -39,7 +48,7 @@ describe("agent-tui compaction core", () => {
     let prepareCalls = 0;
     let applyReadyCalls = 0;
 
-    await blockAtHardContextLimitCore({
+    await blockAtHardLimitCore({
       additionalTokens: 50,
       phase: "new-turn",
       isAtHardContextLimit: () => false,
@@ -49,7 +58,7 @@ describe("agent-tui compaction core", () => {
         return Promise.resolve(null);
       },
       applyPreparedCompaction: () => ({ applied: false, reason: "noop" }),
-      applyReadySpeculativeCompaction: () => {
+      applyReadyCompaction: () => {
         applyReadyCalls += 1;
         return { applied: false, stale: false };
       },
@@ -77,7 +86,7 @@ describe("agent-tui compaction core", () => {
       }),
     };
 
-    await blockAtHardContextLimitCore({
+    await blockAtHardLimitCore({
       additionalTokens: 100,
       phase: "intermediate-step",
       isAtHardContextLimit: () => atHardLimit,
@@ -86,7 +95,7 @@ describe("agent-tui compaction core", () => {
         throw new Error("should wait existing running job first");
       },
       applyPreparedCompaction: () => ({ applied: true, reason: "applied" }),
-      applyReadySpeculativeCompaction: () => {
+      applyReadyCompaction: () => {
         applyReadyCalls += 1;
         return { applied: true, stale: false };
       },
@@ -121,7 +130,7 @@ describe("agent-tui compaction core", () => {
 
     let refireCalls = 0;
 
-    const result = applyReadySpeculativeCompactionCore({
+    const result = applyReadyCompactionCore({
       jobs,
       applyPreparedCompaction: () => ({ applied: false, reason: "stale" }),
       discardJob: (job) => {
@@ -156,7 +165,7 @@ describe("agent-tui compaction core", () => {
 
     let refireCalls = 0;
 
-    const result = applyReadySpeculativeCompactionCore({
+    const result = applyReadyCompactionCore({
       jobs,
       applyPreparedCompaction: () => ({ applied: false, reason: "rejected" }),
       discardJob: (job) => {
@@ -190,7 +199,7 @@ describe("agent-tui compaction core", () => {
     let refireCalls = 0;
     let rejectedCalls = 0;
 
-    const result = applyReadySpeculativeCompactionCore({
+    const result = applyReadyCompactionCore({
       jobs,
       applyPreparedCompaction: () => ({ applied: false, reason: "rejected" }),
       discardJob: (job) => {
@@ -234,7 +243,7 @@ describe("agent-tui compaction core", () => {
     ];
 
     let discardedCount = 0;
-    discardAllSpeculativeCompactionJobsCore({
+    discardAllJobsCore({
       jobs,
       discardJob: (job) => {
         job.discarded = true;

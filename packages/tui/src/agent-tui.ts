@@ -2,13 +2,13 @@ import {
   type Command,
   type CommandAction,
   type CommandResult,
+  CompactionOrchestrator,
   estimateTokens,
   executeCommand,
   isCommand,
   isSkillCommandResult,
   type MessageHistory,
   type ModelMessage,
-  type PreparedCompaction,
   parseCommand,
   type RunnableAgent,
   type SkillInfo,
@@ -371,159 +371,6 @@ export interface AgentTUIConfig {
   toolRenderers?: ToolRendererMap;
 }
 
-interface SpeculativeCompactionJob {
-  discarded: boolean;
-  id: string;
-  phase: "new-turn";
-  prepared: PreparedCompaction | null;
-  promise: Promise<void>;
-  state: "completed" | "failed" | "running";
-}
-
-type CompactionPhase = "new-turn" | "intermediate-step";
-
-export function discardAllSpeculativeCompactionJobsCore(params: {
-  discardJob: (job: SpeculativeCompactionJob) => void;
-  jobs: SpeculativeCompactionJob[];
-}): void {
-  for (const job of [...params.jobs]) {
-    params.discardJob(job);
-  }
-}
-
-export function applyReadySpeculativeCompactionCore(params: {
-  applyPreparedCompaction: (prepared: PreparedCompaction) => {
-    applied: boolean;
-    reason: "applied" | "noop" | "stale" | "rejected";
-  };
-  discardAllJobs: () => void;
-  discardJob: (job: SpeculativeCompactionJob) => void;
-  jobs: SpeculativeCompactionJob[];
-  onStale: () => void;
-  onRejected?: () => void;
-}): { applied: boolean; stale: boolean } {
-  let applied = false;
-  let stale = false;
-  let didRefire = false;
-
-  for (let i = params.jobs.length - 1; i >= 0; i--) {
-    const job = params.jobs[i];
-    if (job.discarded || job.state !== "completed" || !job.prepared) {
-      continue;
-    }
-
-    const result = params.applyPreparedCompaction(job.prepared);
-    params.discardJob(job);
-
-    if (result.reason === "stale") {
-      stale = true;
-      if (!didRefire) {
-        params.onStale();
-        didRefire = true;
-      }
-      continue;
-    }
-
-    if (result.reason === "rejected") {
-      params.onRejected?.();
-      continue;
-    }
-
-    if (result.reason === "applied") {
-      params.discardAllJobs();
-      applied = true;
-    }
-    break;
-  }
-
-  return { applied, stale };
-}
-
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: hard-limit blocking requires multiple retry branches
-export async function blockAtHardContextLimitCore(params: {
-  additionalTokens: number;
-  applyPreparedCompaction: (prepared: PreparedCompaction) => {
-    applied: boolean;
-    reason: "applied" | "noop" | "stale" | "rejected";
-  };
-  applyReadySpeculativeCompaction: () => {
-    applied: boolean;
-    stale: boolean;
-  };
-  getLatestRunningSpeculativeCompaction: () => SpeculativeCompactionJob | null;
-  isAtHardContextLimit: (
-    additionalTokens: number,
-    options: { phase: CompactionPhase }
-  ) => boolean;
-  phase: CompactionPhase;
-  prepareSpeculativeCompaction: (
-    phase: CompactionPhase
-  ) => Promise<PreparedCompaction | null>;
-  warnHardLimitStillExceeded: () => void;
-}): Promise<void> {
-  if (
-    !params.isAtHardContextLimit(params.additionalTokens, {
-      phase: params.phase,
-    })
-  ) {
-    return;
-  }
-
-  const attemptPhases: CompactionPhase[] = [params.phase, "new-turn"];
-
-  for (let attempt = 0; attempt < attemptPhases.length; attempt++) {
-    if (
-      !params.isAtHardContextLimit(params.additionalTokens, {
-        phase: params.phase,
-      })
-    ) {
-      return;
-    }
-
-    const runningJob = params.getLatestRunningSpeculativeCompaction();
-    if (runningJob) {
-      await runningJob.promise;
-    } else {
-      const prepared = await params.prepareSpeculativeCompaction(
-        attemptPhases[attempt]
-      );
-      if (prepared) {
-        const result = params.applyPreparedCompaction(prepared);
-        if (result.reason === "stale" && attempt === 0) {
-          const retryPrepared =
-            await params.prepareSpeculativeCompaction("new-turn");
-          if (retryPrepared) {
-            params.applyPreparedCompaction(retryPrepared);
-          }
-          break;
-        }
-        // Treat "rejected" as terminal - no retry with different phase
-        if (result.reason === "rejected") {
-          break;
-        }
-      }
-    }
-
-    const readyResult = params.applyReadySpeculativeCompaction();
-    if (readyResult.stale && attempt === 0) {
-      const retryPrepared =
-        await params.prepareSpeculativeCompaction("new-turn");
-      if (retryPrepared) {
-        params.applyPreparedCompaction(retryPrepared);
-      }
-      break;
-    }
-  }
-
-  if (
-    params.isAtHardContextLimit(params.additionalTokens, {
-      phase: params.phase,
-    })
-  ) {
-    params.warnHardLimitStillExceeded();
-  }
-}
-
 export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const markdownTheme =
     config.theme?.markdownTheme ?? createDefaultMarkdownTheme();
@@ -599,8 +446,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   let lastCtrlCPressAt = 0;
   let foregroundStatus: StatusSpinner | null = null;
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
-  const speculativeCompactionJobs: SpeculativeCompactionJob[] = [];
-  let speculativeCompactionJobCounter = 0;
   let commandInputListenerActive = false;
 
   const createStatusSpinner = (message: string): StatusSpinner => {
@@ -639,24 +484,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   ): void => {
     backgroundStatuses.set(id, { message: text, state });
     renderFooterStatuses();
-  };
-
-  const discardSpeculativeCompactionJob = (
-    job: SpeculativeCompactionJob
-  ): void => {
-    job.discarded = true;
-    clearBackgroundStatus(job.id);
-    const index = speculativeCompactionJobs.indexOf(job);
-    if (index !== -1) {
-      speculativeCompactionJobs.splice(index, 1);
-    }
-  };
-
-  const discardAllSpeculativeCompactionJobs = (): void => {
-    discardAllSpeculativeCompactionJobsCore({
-      jobs: speculativeCompactionJobs,
-      discardJob: discardSpeculativeCompactionJob,
-    });
   };
 
   const clearStatus = (): void => {
@@ -703,31 +530,9 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     return detail;
   };
 
-  const applyReadySpeculativeCompaction = (): {
-    applied: boolean;
-    stale: boolean;
-  } => {
-    let appliedTokenDelta = 0;
-    let baseMessageCount = 0;
-    let newMessageCount = 0;
-    const result = applyReadySpeculativeCompactionCore({
-      jobs: speculativeCompactionJobs,
-      applyPreparedCompaction: (prepared) => {
-        appliedTokenDelta = prepared.tokenDelta;
-        baseMessageCount = prepared.baseMessageIds.length;
-        newMessageCount = prepared.messages.length;
-        return config.messageHistory.applyPreparedCompaction(prepared);
-      },
-      discardJob: discardSpeculativeCompactionJob,
-      discardAllJobs: discardAllSpeculativeCompactionJobs,
-      onStale: () => startSpeculativeCompaction(),
-      onRejected: () => {
-        addCompactionNotice("↻ Compaction skipped (no token reduction)");
-      },
-    });
-
-    if (result.applied) {
-      const saved = Math.abs(appliedTokenDelta);
+  const compactionOrchestrator = new CompactionOrchestrator({
+    onApplied: ({ baseMessageCount, newMessageCount, tokenDelta }) => {
+      const saved = Math.abs(tokenDelta);
       const usage = config.messageHistory.getContextUsage();
       const after = usage ? `${usage.used}` : "?";
       const summarizedCount = baseMessageCount - newMessageCount;
@@ -735,83 +540,57 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       addCompactionNotice(`↻ Compacted: ${detail}`);
       updateHeader();
       tui.requestRender();
-    }
-
-    return result;
-  };
-
-  const getLatestRunningSpeculativeCompaction =
-    (): SpeculativeCompactionJob | null => {
-      for (let i = speculativeCompactionJobs.length - 1; i >= 0; i--) {
-        const job = speculativeCompactionJobs[i];
-        if (!job.discarded && job.state === "running") {
-          return job;
-        }
+    },
+    onBlockingChange: (blocking) => {
+      if (blocking) {
+        showLoader("Compacting...");
+        return;
       }
-      return null;
-    };
+
+      clearStatus();
+      updateHeader();
+      tui.requestRender();
+    },
+    onError: (message, error) => {
+      console.error(`${message}:`, error);
+    },
+    onJobStatus: (id, message, state) => {
+      if (state === "running") {
+        setBackgroundStatus(id, message, "running");
+      } else {
+        clearBackgroundStatus(id);
+      }
+      updateHeader();
+      tui.requestRender();
+    },
+    onRejected: () => {
+      addCompactionNotice("↻ Compaction skipped (no token reduction)");
+      updateHeader();
+      tui.requestRender();
+    },
+    onStillExceeded: () => {
+      addCompactionNotice(
+        "↻ Compaction: context limit still tight after retries — older messages were condensed, some detail may be lost"
+      );
+      updateHeader();
+      tui.requestRender();
+    },
+  });
+
+  const applyReadySpeculativeCompaction = (): {
+    applied: boolean;
+    stale: boolean;
+  } => compactionOrchestrator.applyReady(config.messageHistory);
 
   const blockAtHardContextLimit = async (
     additionalTokens: number,
     phase: "new-turn" | "intermediate-step"
   ): Promise<void> => {
-    const needsBlocking = config.messageHistory.isAtHardContextLimit(
+    await compactionOrchestrator.blockAtHardLimit(
+      config.messageHistory,
       additionalTokens,
-      { phase }
+      phase
     );
-    if (needsBlocking) {
-      showLoader("Compacting...");
-    }
-
-    let lastAppliedDelta = 0;
-    let didApply = false;
-    let lastReason = "noop" as string;
-    let lastBaseMessageCount = 0;
-    let lastNewMessageCount = 0;
-    await blockAtHardContextLimitCore({
-      additionalTokens,
-      phase,
-      isAtHardContextLimit: (tokens, options) =>
-        config.messageHistory.isAtHardContextLimit(tokens, options),
-      getLatestRunningSpeculativeCompaction,
-      prepareSpeculativeCompaction: (attemptPhase) =>
-        config.messageHistory.prepareSpeculativeCompaction({
-          phase: attemptPhase,
-        }),
-      applyPreparedCompaction: (prepared) => {
-        lastAppliedDelta = prepared.tokenDelta;
-        lastBaseMessageCount = prepared.baseMessageIds.length;
-        lastNewMessageCount = prepared.messages.length;
-        const result = config.messageHistory.applyPreparedCompaction(prepared);
-        lastReason = result.reason;
-        if (result.reason === "applied") {
-          didApply = true;
-        }
-        return result;
-      },
-      applyReadySpeculativeCompaction,
-      warnHardLimitStillExceeded: () => {
-        addCompactionNotice(
-          "↻ Compaction: context limit still tight after retries — older messages were condensed, some detail may be lost"
-        );
-      },
-    });
-
-    if (needsBlocking) {
-      clearStatus();
-      if (didApply) {
-        const saved = Math.abs(lastAppliedDelta);
-        const usage = config.messageHistory.getContextUsage();
-        const after = usage ? `${usage.used}` : "?";
-        const summarizedCount = lastBaseMessageCount - lastNewMessageCount;
-        const detail = buildCompactionDetail(saved, after, summarizedCount);
-        addCompactionNotice(`↻ Compacted: ${detail}`);
-      } else if (lastReason === "rejected") {
-        addCompactionNotice("↻ Compaction skipped (no token reduction)");
-      }
-    }
-    updateHeader();
-    tui.requestRender();
   };
 
   const blockOnlyIfAtHardContextLimit = async (
@@ -821,55 +600,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   };
 
   const startSpeculativeCompaction = (): void => {
-    applyReadySpeculativeCompaction();
-    if (
-      speculativeCompactionJobs.some(
-        (job) =>
-          !job.discarded &&
-          (job.state === "running" || job.state === "completed")
-      )
-    ) {
-      return;
-    }
-
-    if (!config.messageHistory.shouldStartSpeculativeCompactionForNextTurn()) {
-      return;
-    }
-
-    const jobId = `background-compaction-${++speculativeCompactionJobCounter}`;
-    const job: SpeculativeCompactionJob = {
-      discarded: false,
-      id: jobId,
-      phase: "new-turn",
-      prepared: null,
-      promise: Promise.resolve(),
-      state: "running",
-    };
-
-    setBackgroundStatus(jobId, "Compacting...", "running");
-
-    job.promise = (async () => {
-      try {
-        job.prepared = await config.messageHistory.prepareSpeculativeCompaction(
-          {
-            phase: "new-turn",
-          }
-        );
-        job.state = "completed";
-
-        if (!job.discarded) {
-          clearBackgroundStatus(jobId);
-          updateHeader();
-          tui.requestRender();
-        }
-      } catch (error) {
-        job.state = "failed";
-        clearBackgroundStatus(jobId);
-        console.error("Speculative compaction failed:", error);
-      }
-    })();
-
-    speculativeCompactionJobs.push(job);
+    compactionOrchestrator.startSpeculative(config.messageHistory);
   };
 
   const cancelActiveStream = (): boolean => {
@@ -885,7 +616,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const requestExit = (): void => {
     shouldExit = true;
     cancelActiveStream();
-    discardAllSpeculativeCompactionJobs();
+    compactionOrchestrator.discardAll();
     clearStatus();
     if (inputResolver) {
       const resolve = inputResolver;
@@ -1306,7 +1037,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     if (commandResult.action.type === "new-session") {
-      discardAllSpeculativeCompactionJobs();
+      compactionOrchestrator.discardAll();
       config.messageHistory.clear();
       chatContainer.clear();
       addNewSessionMessage(chatContainer);
@@ -1458,7 +1189,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       }
     }
   } finally {
-    discardAllSpeculativeCompactionJobs();
+    compactionOrchestrator.discardAll();
     clearStatus();
     footerStatusBar.stop();
     const pendingResolver: unknown = inputResolver;
