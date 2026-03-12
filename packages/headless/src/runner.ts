@@ -4,6 +4,7 @@ import type {
   RunnableAgent,
 } from "@ai-sdk-tool/harness";
 import {
+  CompactionOrchestrator,
   estimateTokens,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
@@ -37,75 +38,26 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
   type StreamTurnResult = Awaited<ReturnType<typeof processStream>>;
   type StreamUsage = StreamTurnResult["usage"];
-  let speculativeCompactionJob: {
-    discarded: boolean;
-    prepared: Awaited<
-      ReturnType<MessageHistory["prepareSpeculativeCompaction"]>
-    >;
-    promise: Promise<void>;
-    state: "completed" | "failed" | "running";
-  } | null = null;
-  // No clear path in headless runner — if clear is introduced, add: speculativeCompactionJob = null
-
-  const discardSpeculativeCompactionJob = (): void => {
-    if (speculativeCompactionJob) {
-      speculativeCompactionJob.discarded = true;
-      speculativeCompactionJob = null;
-    }
-  };
-
-  const applyReadySpeculativeCompaction = (): {
-    applied: boolean;
-    stale: boolean;
-  } => {
-    if (
-      !speculativeCompactionJob ||
-      speculativeCompactionJob.discarded ||
-      speculativeCompactionJob.state !== "completed" ||
-      !speculativeCompactionJob.prepared
-    ) {
-      return { applied: false, stale: false };
-    }
-
-    const result = config.messageHistory.applyPreparedCompaction(
-      speculativeCompactionJob.prepared
-    );
-    discardSpeculativeCompactionJob();
-
-    if (result.reason === "stale") {
-      startSpeculativeCompaction();
-      return { applied: false, stale: true };
-    }
-
-    if (result.reason === "rejected") {
-      console.error(
-        "[compaction] Compaction rejected: summary would not reduce tokens"
-      );
-      return { applied: false, stale: false };
-    }
-
-    if (result.reason === "applied") {
+  const compactionOrchestrator = new CompactionOrchestrator({
+    onApplied: () => {
       console.error(
         "[compaction] Applied: context reduced, some older messages were summarized"
       );
-    }
-
-    return { applied: result.reason === "applied", stale: false };
-  };
-
-  const getLatestRunningSpeculativeCompaction = (): NonNullable<
-    typeof speculativeCompactionJob
-  > | null => {
-    if (
-      speculativeCompactionJob &&
-      !speculativeCompactionJob.discarded &&
-      speculativeCompactionJob.state === "running"
-    ) {
-      return speculativeCompactionJob;
-    }
-
-    return null;
-  };
+    },
+    onError: (message, error) => {
+      console.error(`${message} in headless runner:`, error);
+    },
+    onRejected: () => {
+      console.error(
+        "[compaction] Compaction rejected: summary would not reduce tokens"
+      );
+    },
+    onStillExceeded: () => {
+      console.warn(
+        "[compaction] Hard limit still exceeded after retries — some context may be lost due to small context window. Proceeding with truncated context."
+      );
+    },
+  });
 
   const hasReachedMaxIterations = (): boolean => {
     totalIterationCount += 1;
@@ -127,7 +79,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   };
 
   const applyPendingMessages = (pendingMessages: ModelMessage[]): void => {
-    applyReadySpeculativeCompaction();
+    compactionOrchestrator.applyReady(config.messageHistory);
     if (pendingMessages.length > 0) {
       config.messageHistory.addModelMessages(pendingMessages);
     }
@@ -164,7 +116,9 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   }> => {
     let pendingMessages: ModelMessage[] = [];
 
-    const readyCompactionResult = applyReadySpeculativeCompaction();
+    const readyCompactionResult = compactionOrchestrator.applyReady(
+      config.messageHistory
+    );
     if (readyCompactionResult.stale) {
       startSpeculativeCompaction();
     }
@@ -200,60 +154,18 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const blockAtHardContextLimit = async (
     additionalTokens: number,
     phase: "new-turn" | "intermediate-step"
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: hard-limit blocking logic requires multiple retry branches
   ): Promise<void> => {
-    if (
-      !config.messageHistory.isAtHardContextLimit(additionalTokens, { phase })
-    ) {
-      return;
-    }
-
-    // Maximum 2 blocking attempts to avoid infinite loops
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      if (
-        !config.messageHistory.isAtHardContextLimit(additionalTokens, { phase })
-      ) {
-        return;
-      }
-
-      const runningJob = getLatestRunningSpeculativeCompaction();
-      if (runningJob) {
-        await runningJob.promise;
-      } else {
-        // No running job — prepare and apply directly
-        const prepared =
-          await config.messageHistory.prepareSpeculativeCompaction({
-            phase: "new-turn",
-          });
-
-        if (prepared) {
-          const result =
-            config.messageHistory.applyPreparedCompaction(prepared);
-          if (result.reason === "stale" && attempt === 0) {
-            // Stale on direct apply — start a fresh speculative job and retry
-            startSpeculativeCompaction();
-            continue;
-          }
-        }
-      }
-
-      // Apply any completed speculative job (handles stale via re-fire inside)
-      applyReadySpeculativeCompaction();
-    }
-
-    if (
-      config.messageHistory.isAtHardContextLimit(additionalTokens, { phase })
-    ) {
-      console.warn(
-        "[compaction] Hard limit still exceeded after 2 compaction attempts — some context may be lost due to small context window. Proceeding with truncated context."
-      );
-    }
+    await compactionOrchestrator.blockAtHardLimit(
+      config.messageHistory,
+      additionalTokens,
+      phase
+    );
   };
 
   const waitForSpeculativeCompactionIfNeeded = async (
     content: string
   ): Promise<void> => {
-    applyReadySpeculativeCompaction();
+    compactionOrchestrator.applyReady(config.messageHistory);
 
     if (
       !config.messageHistory.isAtHardContextLimit(estimateTokens(content), {
@@ -267,46 +179,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   };
 
   const startSpeculativeCompaction = (): void => {
-    applyReadySpeculativeCompaction();
-    if (
-      speculativeCompactionJob &&
-      !speculativeCompactionJob.discarded &&
-      speculativeCompactionJob.state !== "failed"
-    ) {
-      return;
-    }
-
-    if (!config.messageHistory.shouldStartSpeculativeCompactionForNextTurn()) {
-      return;
-    }
-
-    discardSpeculativeCompactionJob();
-
-    const job: NonNullable<typeof speculativeCompactionJob> = {
-      discarded: false,
-      prepared: null,
-      promise: Promise.resolve(),
-      state: "running",
-    };
-
-    job.promise = (async () => {
-      try {
-        job.prepared = await config.messageHistory.prepareSpeculativeCompaction(
-          {
-            phase: "new-turn",
-          }
-        );
-        job.state = "completed";
-      } catch (error) {
-        job.state = "failed";
-        console.error(
-          "Speculative compaction failed in headless runner:",
-          error
-        );
-      }
-    })();
-
-    speculativeCompactionJob = job;
+    compactionOrchestrator.startSpeculative(config.messageHistory);
   };
 
   const enqueueUserMessage = async (

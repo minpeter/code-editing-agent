@@ -115,10 +115,11 @@ Manages conversation history with configurable limits, compaction, and automatic
 import { MessageHistory } from "@ai-sdk-tool/harness";
 
 const history = new MessageHistory({
-  maxMessages: 50,          // Max messages to keep (default: unlimited)
-  compactionConfig: {       // Optional: summarize old messages instead of dropping
-    summarize: async (messages) => "Summary of earlier conversation...",
-    triggerRatio: 0.8,      // Compact when 80% full
+  maxMessages: 50,          // Max messages to keep (default: 1000)
+  compaction: {
+    enabled: true,
+    summarizeFn: async (messages) => "Summary of earlier conversation...",
+    speculativeStartRatio: 0.8,
   },
 });
 
@@ -127,16 +128,21 @@ history.addUserMessage("Hello!");
 history.addModelMessages(responseMessages);
 
 // Get messages for the next API call
-const messages = history.toModelMessages();
+const messages = history.getMessagesForLLM();
 
-// Enforce the limit (called automatically, but can be called manually)
-history.enforceLimit();
+// Optional explicit compaction APIs
+const prepared = await history.prepareSpeculativeCompaction({ phase: "new-turn" });
+if (prepared) {
+  history.applyPreparedCompaction(prepared);
+}
+await history.compact();
 ```
 
 **Key behaviors:**
-- `enforceLimit()` trims the history to `maxMessages`, always preserving the first message (system context)
-- After trimming, orphaned `tool` role messages (without a preceding `assistant` tool-call) are automatically removed to prevent provider errors
-- `performCompaction()` summarizes old messages using the provided `summarize` function before trimming
+- `addUserMessage()` and `addModelMessages()` enforce `maxMessages` automatically
+- `getMessagesForLLM()` returns summary-prefixed messages suitable for the next model call
+- `prepareSpeculativeCompaction()`, `applyPreparedCompaction()`, and `compact()` are the supported compaction entrypoints
+- invalid tool-call/tool-result sequences are cleaned up automatically during trimming and compaction
 
 ---
 
@@ -379,7 +385,11 @@ const summarize = createModelSummarizer({
 
 const history = new MessageHistory({
   maxMessages: 100,
-  compactionConfig: { triggerRatio: 0.8, summarize },
+  compaction: {
+    enabled: true,
+    speculativeStartRatio: 0.8,
+    summarizeFn: summarize,
+  },
 });
 ```
 
@@ -455,15 +465,24 @@ const agent = createAgent({
 ```typescript
 const history = new MessageHistory({
   maxMessages: 100,
-  compactionConfig: {
-    triggerRatio: 0.8, // Compact when 80 messages reached
-    summarize: async (messages) => {
+  compaction: {
+    enabled: true,
+    speculativeStartRatio: 0.8,
+    summarizeFn: async (messages) => {
       // Use your model to summarize
       const summary = await generateSummary(messages);
       return summary;
     },
   },
 });
+
+const prepared = await history.prepareSpeculativeCompaction({
+  phase: "new-turn",
+});
+
+if (prepared) {
+  history.applyPreparedCompaction(prepared);
+}
 ```
 
 ### Abort signal for cancellation

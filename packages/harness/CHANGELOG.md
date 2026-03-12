@@ -12,13 +12,13 @@
 
 - 902ded6: Improve compaction reliability, token estimation, and tool-pair handling
 
-  - Remove fire-and-forget compaction race condition — use explicit `compact()` or `getMessagesForLLMAsync()`
+  - Remove fire-and-forget compaction race condition — use explicit `compact()` or prepared compaction via `prepareSpeculativeCompaction()` / `applyPreparedCompaction()`
   - Add CJK token estimation (Korean/Chinese/Japanese: ~1.5 chars/token vs Latin ~4 chars/token)
   - Fix splitIndex edge cases for single-message and boundary scenarios
   - Preserve tool-call/tool-result pairs during compaction
   - Improve default summarizer with conversation turn grouping
   - Add `needsCompaction()` for synchronous threshold checking
-  - Add `getMessagesForLLMAsync()` for async compaction + message retrieval
+  - Keep `getMessagesForLLMAsync()` as a deprecated compatibility wrapper around `getMessagesForLLM()`
   - Add E2E test suite for real model compaction validation
 
 ## 0.2.1
