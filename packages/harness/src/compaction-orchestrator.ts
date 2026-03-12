@@ -53,7 +53,6 @@ export function applyReadyCompactionCore(params: {
   discardAllJobs: () => void;
   discardJob: (job: SpeculativeCompactionJob) => void;
   jobs: SpeculativeCompactionJob[];
-  onRejected?: () => void;
   onStale: () => void;
 }): { applied: boolean; stale: boolean } {
   let applied = false;
@@ -62,7 +61,7 @@ export function applyReadyCompactionCore(params: {
 
   for (let i = params.jobs.length - 1; i >= 0; i--) {
     const job = params.jobs[i];
-    if (!job || job.discarded || job.state !== "completed" || !job.prepared) {
+    if (job.discarded || job.state !== "completed" || !job.prepared) {
       continue;
     }
 
@@ -79,7 +78,6 @@ export function applyReadyCompactionCore(params: {
     }
 
     if (result.reason === "rejected") {
-      params.onRejected?.();
       continue;
     }
 
@@ -134,7 +132,7 @@ export async function blockAtHardLimitCore(params: {
       await runningJob.promise;
     } else {
       const prepared = await params.prepareSpeculativeCompaction(
-        attemptPhases[attempt] ?? "new-turn"
+        attemptPhases[attempt]
       );
       if (prepared) {
         const result = params.applyPreparedCompaction(prepared);
@@ -144,7 +142,7 @@ export async function blockAtHardLimitCore(params: {
         }
 
         if (result.reason === "rejected") {
-          return "stop";
+          return "continue";
         }
       }
     }
@@ -196,7 +194,7 @@ export class CompactionOrchestrator {
   getLatestRunningSpeculativeCompaction(): SpeculativeCompactionJob | null {
     for (let i = this.jobs.length - 1; i >= 0; i -= 1) {
       const job = this.jobs[i];
-      if (job && !job.discarded && job.state === "running") {
+      if (!job.discarded && job.state === "running") {
         return job;
       }
     }
@@ -224,7 +222,6 @@ export class CompactionOrchestrator {
       discardAllJobs: () => {
         this.discardAll();
       },
-      onRejected: this.callbacks.onRejected,
       onStale: () => {
         this.startSpeculative(history);
       },

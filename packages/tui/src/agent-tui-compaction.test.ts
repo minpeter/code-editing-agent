@@ -197,7 +197,6 @@ describe("agent-tui compaction core", () => {
     ];
 
     let refireCalls = 0;
-    let rejectedCalls = 0;
 
     const result = applyReadyCompactionCore({
       jobs,
@@ -211,14 +210,10 @@ describe("agent-tui compaction core", () => {
       onStale: () => {
         refireCalls += 1;
       },
-      onRejected: () => {
-        rejectedCalls += 1;
-      },
     });
 
     expect(result).toEqual({ applied: false, stale: false });
     expect(refireCalls).toBe(0);
-    expect(rejectedCalls).toBe(1);
     expect(jobs[0]?.discarded).toBe(true);
   });
 

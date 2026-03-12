@@ -131,6 +131,36 @@ describe("compaction orchestrator", () => {
     expect(jobs.every((job) => job.discarded)).toBe(true);
   });
 
+  it("retries new-turn preparation after intermediate-step rejection", async () => {
+    const prepareCalls: Array<"new-turn" | "intermediate-step"> = [];
+
+    await blockAtHardLimitCore({
+      additionalTokens: 100,
+      phase: "intermediate-step",
+      isAtHardContextLimit: () => prepareCalls.length < 2,
+      getLatestRunningSpeculativeCompaction: () => null,
+      prepareSpeculativeCompaction: (phase) => {
+        prepareCalls.push(phase);
+        return Promise.resolve(createPreparedCompaction(phase));
+      },
+      applyPreparedCompaction: (prepared) => {
+        return {
+          applied: prepared.segments[0]?.id === "segment_summary_new-turn",
+          reason:
+            prepared.segments[0]?.id === "segment_summary_new-turn"
+              ? "applied"
+              : "rejected",
+        };
+      },
+      applyReadyCompaction: () => ({ applied: false, stale: false }),
+      warnHardLimitStillExceeded: () => {
+        throw new Error("should not warn after new-turn retry succeeds");
+      },
+    });
+
+    expect(prepareCalls).toEqual(["intermediate-step", "new-turn"]);
+  });
+
   it("starts speculative compaction and reports job status", async () => {
     const history = new MessageHistory();
     const prepared = createPreparedCompaction("prepared-1");
