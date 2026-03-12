@@ -1207,16 +1207,16 @@ export class MessageHistory {
     }
 
     const hasExactRevisionMatch = prepared.baseRevision === this.revision;
+    const materializedMessages = this.getMaterializedMessages();
     const hasMatchingSegmentPrefix =
       this.segments.length >= prepared.baseSegmentIds.length &&
       prepared.baseSegmentIds.every(
         (segmentId, index) => this.segments[index]?.id === segmentId
       );
     const hasMatchingMessagePrefix =
-      this.getMaterializedMessages().length >= prepared.baseMessageIds.length &&
+      materializedMessages.length >= prepared.baseMessageIds.length &&
       prepared.baseMessageIds.every(
-        (messageId, index) =>
-          this.getMaterializedMessages()[index]?.id === messageId
+        (messageId, index) => materializedMessages[index]?.id === messageId
       );
 
     if (
@@ -1238,7 +1238,7 @@ export class MessageHistory {
 
     const appendedMessages = hasExactRevisionMatch
       ? []
-      : this.getMaterializedMessages()
+      : materializedMessages
           .slice(prepared.baseMessageIds.length)
           .map(cloneMessage);
 
