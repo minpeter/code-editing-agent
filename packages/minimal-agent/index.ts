@@ -19,7 +19,7 @@ import { z } from "zod";
 
 const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 const DEFAULT_SYSTEM_PROMPT =
-  "You are a minimal FriendliAI example agent. Be concise and helpful.";
+  "You are a minimal example agent. Be concise and helpful.";
 const COMPACTION_CONTEXT_TOKENS = 2000;
 const COMPACTION_MAX_OUTPUT_TOKENS = 500;
 const LOCAL_COMMANDS: Command[] = [
