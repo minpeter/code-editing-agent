@@ -1,6 +1,7 @@
 import {
   type Command,
   type CommandContext,
+  CompactionOrchestrator,
   estimateTokens,
   MessageHistory,
   parseCommand,
@@ -172,6 +173,7 @@ const createEditorTheme = (): EditorTheme => {
 };
 
 const messageHistory = new MessageHistory();
+const compactionOrchestrator = new CompactionOrchestrator(messageHistory);
 const sessionManagerScope = globalThis as typeof globalThis & {
   __ceaSessionManager?: SessionManager;
 };
@@ -199,7 +201,7 @@ registerCommand(createClearCommand());
 registerCommand(createReasoningModeCommand());
 registerCommand(createToolFallbackCommand());
 registerCommand(createTranslateCommand());
-registerCommand(createCompactCommand(() => messageHistory));
+registerCommand(createCompactCommand(() => compactionOrchestrator));
 
 const createTranslationPreprocessor = () => {
   return async (
