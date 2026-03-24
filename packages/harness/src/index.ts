@@ -70,13 +70,7 @@ export { runAgentLoop } from "./loop";
 export type {
   ActualTokenUsage,
   CompactionConfig,
-  CompactionSegment,
-  CompactionSummary,
-  ContextUsage,
-  Message,
   MessageHistoryOptions,
-  PreparedCompaction,
-  PreparedCompactionSegment,
 } from "./message-history";
 /**
  * @deprecated Use CheckpointHistory instead

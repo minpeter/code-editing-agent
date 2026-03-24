@@ -6,7 +6,17 @@ import {
   needsCompactionFromUsage,
   shouldStartSpeculativeCompaction,
 } from "./compaction-policy";
-import type { CheckpointMessage } from "./compaction-types";
+import type {
+  ActualTokenUsage,
+  CheckpointMessage,
+  CompactionConfig,
+  CompactionSegment,
+  CompactionSummary,
+  ContextUsage,
+  Message,
+  PreparedCompaction,
+  PreparedCompactionSegment,
+} from "./compaction-types";
 import {
   estimateTokens,
   extractMessageText,
@@ -369,148 +379,20 @@ function trimTrailingNewlines(message: ModelMessage): ModelMessage {
   return { ...message, content: newContent };
 }
 
-export interface Message {
-  createdAt: Date;
-  id: string;
-  modelMessage: ModelMessage;
-  originalContent?: string;
-}
-
 /**
  * Actual token usage reported by the API after a streaming turn.
  * Preferred over character-based estimation for compaction decisions.
  */
-export interface ActualTokenUsage {
-  completionTokens: number;
-  promptTokens: number;
-  totalTokens: number;
-  updatedAt: Date;
-}
-
-/**
- * Snapshot of context utilization for display purposes.
- * Returned by `getContextUsage()`.
- */
-export interface ContextUsage {
-  limit: number;
-  percentage: number;
-  remaining: number;
-  source: "actual" | "estimated";
-  used: number;
-}
-
-/**
- * Summary entry representing a compacted batch of messages.
- */
-export interface CompactionSummary {
-  createdAt: Date;
-  /** ID of the first message that was kept after this summary */
-  firstKeptMessageId: string;
-  id: string;
-  summary: string;
-  /** Estimated tokens in the summary */
-  summaryTokens: number;
-  /** Estimated tokens before compaction */
-  tokensBefore: number;
-}
-
-export interface CompactionSegment {
-  createdAt: Date;
-  endMessageId: string;
-  estimatedTokens: number;
-  id: string;
-  messageCount: number;
-  messageIds: string[];
-  messages: Message[];
-  startMessageId: string;
-  summary: CompactionSummary | null;
-}
-
-export interface PreparedCompactionSegment {
-  createdAt: Date;
-  endMessageId: string;
-  estimatedTokens: number;
-  id: string;
-  messageCount: number;
-  messageIds: string[];
-  messages: Message[];
-  startMessageId: string;
-  summary: CompactionSummary | null;
-}
-
-export interface PreparedCompaction {
-  actualUsage: ActualTokenUsage | null;
-  baseMessageIds: string[];
-  baseRevision: number;
-  baseSegmentIds: string[];
-  compactionMaxTokensAtCreation: number;
-  contextLimitAtCreation: number;
-  didChange: boolean;
-  keepRecentTokensAtCreation: number;
-  pendingCompaction: boolean;
-  phase: "intermediate-step" | "new-turn";
-  rejected: boolean;
-  segments: PreparedCompactionSegment[];
-  tokenDelta: number;
-}
-
-/**
- * Configuration for the incremental compaction feature.
- */
-export interface CompactionConfig {
-  /**
-   * Enable incremental compaction. When enabled, older messages are
-   * summarized when context exceeds token thresholds.
-   * @default false
-   */
-  enabled?: boolean;
-
-  /**
-   * Number of recent tokens to preserve from compaction.
-   * These messages are always kept in full form.
-   * @default 2000
-   */
-  keepRecentTokens?: number;
-
-  /**
-   * Maximum total tokens before triggering compaction.
-   * When exceeded, older messages will be summarized.
-   * @default 8000
-   */
-  maxTokens?: number;
-
-  /**
-   * Reserve tokens for the response. Compaction triggers when
-   * (totalTokens + reserveTokens) > maxTokens.
-   * @default 2000
-   */
-  reserveTokens?: number;
-
-  /**
-   * Optional ratio for starting speculative/background compaction early.
-   * When set, speculative compaction starts once current usage reaches
-   * `maxTokens * speculativeStartRatio`.
-   *
-   * If omitted or invalid, the fallback heuristic is used:
-   * `maxTokens - 2 * reserveTokens`.
-   *
-   * For sub-8k contexts, omit this field and let the fallback heuristic
-   * handle it. See {@link computeSpeculativeStartRatio} for details.
-   */
-  speculativeStartRatio?: number;
-
-  /**
-   * Custom function to summarize a batch of messages.
-   * If not provided, an improved extraction-based fallback is used.
-   *
-   * @param messages - The messages to summarize
-   * @param previousSummary - Optional previous summary to build upon (iterative compaction)
-   */
-  summarizeFn?: (
-    messages: ModelMessage[],
-    previousSummary?: string
-  ) => Promise<string>;
-}
+// Re-export types from compaction-types for backwards compatibility
+export type {
+  ActualTokenUsage,
+  CompactionConfig,
+  CompactionSegment,
+  CompactionSummary,
+  ContextUsage,
+  PreparedCompaction,
+  PreparedCompactionSegment,
+} from "./compaction-types";
 
 export interface MessageHistoryOptions {
   /**

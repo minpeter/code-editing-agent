@@ -279,7 +279,7 @@ export class CheckpointHistory {
   updateActualUsage(usage: ActualTokenUsage): void {
     this.actualUsage = {
       ...usage,
-      updatedAt: Date.now(),
+      updatedAt: new Date(),
     };
     this.revision += 1;
   }

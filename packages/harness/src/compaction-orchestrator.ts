@@ -4,8 +4,7 @@ import {
   needsCompactionFromUsage,
   shouldStartSpeculativeCompaction,
 } from "./compaction-policy";
-import type { CompactionResult } from "./compaction-types";
-import type { PreparedCompaction } from "./message-history";
+import type { CompactionResult, PreparedCompaction } from "./compaction-types";
 import { estimateTokens } from "./token-utils";
 
 export interface SpeculativeCompactionJob {

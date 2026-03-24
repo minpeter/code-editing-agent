@@ -1,5 +1,14 @@
 import type { ModelMessage } from "ai";
 
+// Forward declaration types for messages that reference Message
+// (Message is defined in message-history.ts to avoid circular imports)
+export interface Message {
+  createdAt: Date;
+  id: string;
+  modelMessage: ModelMessage;
+  originalContent?: string;
+}
+
 // --- Core Message Types ---
 
 /** A CheckpointMessage extends ModelMessage with tracking metadata */
@@ -72,10 +81,10 @@ export interface PreparedCompactionV2 {
 // --- Token Tracking ---
 
 export interface ActualTokenUsage {
-  completionTokens?: number;
-  promptTokens?: number;
-  totalTokens?: number;
-  updatedAt?: number;
+  completionTokens: number;
+  promptTokens: number;
+  totalTokens: number;
+  updatedAt: Date;
 }
 
 export interface ContextUsage {
@@ -123,3 +132,57 @@ export interface CheckpointLine {
 }
 
 export type SessionFileLine = SessionHeaderLine | MessageLine | CheckpointLine;
+
+// --- Compaction Summary and Segments ---
+
+export interface CompactionSummary {
+  createdAt: Date;
+  /** ID of the first message that was kept after this summary */
+  firstKeptMessageId: string;
+  id: string;
+  summary: string;
+  /** Estimated tokens in the summary */
+  summaryTokens: number;
+  /** Estimated tokens before compaction */
+  tokensBefore: number;
+}
+
+export interface CompactionSegment {
+  createdAt: Date;
+  endMessageId: string;
+  estimatedTokens: number;
+  id: string;
+  messageCount: number;
+  messageIds: string[];
+  messages: Message[];
+  startMessageId: string;
+  summary: CompactionSummary | null;
+}
+
+export interface PreparedCompactionSegment {
+  createdAt: Date;
+  endMessageId: string;
+  estimatedTokens: number;
+  id: string;
+  messageCount: number;
+  messageIds: string[];
+  messages: Message[];
+  startMessageId: string;
+  summary: CompactionSummary | null;
+}
+
+export interface PreparedCompaction {
+  actualUsage: ActualTokenUsage | null;
+  baseMessageIds: string[];
+  baseRevision: number;
+  baseSegmentIds: string[];
+  compactionMaxTokensAtCreation: number;
+  contextLimitAtCreation: number;
+  didChange: boolean;
+  keepRecentTokensAtCreation: number;
+  pendingCompaction: boolean;
+  phase: "intermediate-step" | "new-turn";
+  rejected: boolean;
+  segments: PreparedCompactionSegment[];
+  tokenDelta: number;
+}
