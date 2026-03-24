@@ -1,7 +1,10 @@
 export type { LanguageModelUsage } from "ai";
 export { createAgent } from "./agent";
 export type { CheckpointHistoryOptions } from "./checkpoint-history";
-export { CheckpointHistory } from "./checkpoint-history";
+export {
+  CheckpointHistory,
+  isContextOverflowError,
+} from "./checkpoint-history";
 export type {
   Command,
   CommandAction,
@@ -48,6 +51,7 @@ export {
 } from "./compaction-policy";
 export type { ModelSummarizerOptions } from "./compaction-prompts";
 export {
+  buildSummaryInput,
   createModelSummarizer,
   DEFAULT_COMPACTION_USER_PROMPT,
   DEFAULT_SUMMARIZATION_PROMPT,

@@ -2,6 +2,7 @@ import type { ModelMessage } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { describe, expect, it } from "vitest";
 import {
+  buildSummaryInput,
   createModelSummarizer,
   DEFAULT_COMPACTION_USER_PROMPT,
   DEFAULT_SUMMARIZATION_PROMPT,
@@ -55,6 +56,166 @@ function extractSystemContent(callPrompt: any[]): string {
 }
 
 describe("compaction-prompts", () => {
+  describe("buildSummaryInput", () => {
+    it("returns empty string for empty messages and no structured state", () => {
+      const input = buildSummaryInput([]);
+      expect(input).toBe("");
+    });
+
+    it("includes todo list when provided", () => {
+      const input = buildSummaryInput([], {
+        structuredState: {
+          todos: [
+            { content: "Done task", status: "completed" },
+            { content: "Pending task", status: "pending" },
+            { content: "In progress", status: "in_progress" },
+            { content: "Cancelled task", status: "cancelled" },
+          ],
+        },
+      });
+
+      expect(input).toContain("## Current Task List");
+      expect(input).toContain("[x] Done task");
+      expect(input).toContain("[ ] Pending task");
+      expect(input).toContain("[→] In progress");
+      expect(input).toContain("[✗] Cancelled task");
+    });
+
+    it("includes metadata when provided", () => {
+      const input = buildSummaryInput([], {
+        structuredState: {
+          metadata: {
+            sessionId: "session-123",
+            iterationCount: 5,
+          },
+        },
+      });
+
+      expect(input).toContain("## Session Metadata");
+      expect(input).toContain('sessionId: "session-123"');
+      expect(input).toContain("iterationCount: 5");
+    });
+
+    it("no extra sections when structuredState is empty", () => {
+      const input = buildSummaryInput([], { structuredState: {} });
+      expect(input).toBe("");
+    });
+
+    it("includes both todos and metadata when both provided", () => {
+      const input = buildSummaryInput([], {
+        structuredState: {
+          todos: [
+            { content: "Task 1", status: "pending" },
+            { content: "Task 2", status: "completed" },
+          ],
+          metadata: {
+            status: "active",
+          },
+        },
+      });
+
+      expect(input).toContain("## Current Task List");
+      expect(input).toContain("[ ] Task 1");
+      expect(input).toContain("[x] Task 2");
+      expect(input).toContain("## Session Metadata");
+      expect(input).toContain('status: "active"');
+    });
+
+    it("includes message history when messages provided", () => {
+      const messages = [
+        {
+          id: "msg-1",
+          createdAt: Date.now(),
+          isSummary: false,
+          message: { role: "user" as const, content: "Hello" },
+        },
+        {
+          id: "msg-2",
+          createdAt: Date.now(),
+          isSummary: false,
+          message: { role: "assistant" as const, content: "Hi there" },
+        },
+      ];
+
+      const input = buildSummaryInput(messages);
+
+      expect(input).toContain("Conversation Transcript:");
+      expect(input).toContain("USER: Hello");
+      expect(input).toContain("ASSISTANT: Hi there");
+    });
+
+    it("includes previous summary when provided", () => {
+      const input = buildSummaryInput([], {
+        previousSummary: "Previous context about weather",
+      });
+
+      expect(input).toContain("Previous Summary:");
+      expect(input).toContain("Previous context about weather");
+    });
+
+    it("combines messages, previous summary, and structured state", () => {
+      const messages = [
+        {
+          id: "msg-1",
+          createdAt: Date.now(),
+          isSummary: false,
+          message: { role: "user" as const, content: "What time is it?" },
+        },
+      ];
+
+      const input = buildSummaryInput(messages, {
+        previousSummary: "Earlier conversation summary",
+        structuredState: {
+          todos: [{ content: "Check time", status: "in_progress" }],
+        },
+      });
+
+      expect(input).toContain("Previous Summary:");
+      expect(input).toContain("Earlier conversation summary");
+      expect(input).toContain("Conversation Transcript:");
+      expect(input).toContain("USER: What time is it?");
+      expect(input).toContain("## Current Task List");
+      expect(input).toContain("[→] Check time");
+    });
+
+    it("marks summary messages with (SUMMARY) label", () => {
+      const messages = [
+        {
+          id: "msg-1",
+          createdAt: Date.now(),
+          isSummary: true,
+          message: { role: "user" as const, content: "Summary content" },
+        },
+      ];
+
+      const input = buildSummaryInput(messages);
+
+      expect(input).toContain("USER (SUMMARY): Summary content");
+    });
+
+    it("skips empty messages from conversation history", () => {
+      const messages = [
+        {
+          id: "msg-1",
+          createdAt: Date.now(),
+          isSummary: false,
+          message: { role: "user" as const, content: "Hello" },
+        },
+        {
+          id: "msg-2",
+          createdAt: Date.now(),
+          isSummary: false,
+          message: { role: "assistant" as const, content: "" },
+        },
+      ];
+
+      const input = buildSummaryInput(messages);
+
+      expect(input).toContain("USER: Hello");
+      expect(input).not.toContain("ASSISTANT:");
+    });
+  });
+
   describe("legacy prompt constants", () => {
     it("DEFAULT_SUMMARIZATION_PROMPT contains required headers", () => {
       expect(DEFAULT_SUMMARIZATION_PROMPT).toContain("## Summary");

@@ -1,7 +1,10 @@
 import { generateText, type ModelMessage } from "ai";
-import { estimateTokens } from "./token-utils";
+import type { CheckpointMessage, StructuredState } from "./compaction-types";
+import { estimateTokens, extractMessageText } from "./token-utils";
 
 type GenerateTextModel = Parameters<typeof generateText>[0]["model"];
+type SummarizerMessage = CheckpointMessage | ModelMessage;
+type SummarizerInput = readonly SummarizerMessage[];
 
 /**
  * @deprecated Use DEFAULT_COMPACTION_USER_PROMPT instead.
@@ -121,6 +124,11 @@ export interface ModelSummarizerOptions {
   prompt?: string;
 }
 
+export interface BuildSummaryInputOptions {
+  previousSummary?: string;
+  structuredState?: StructuredState;
+}
+
 const SUMMARY_TAG_REGEX = /<summary>([\s\S]*?)<\/summary>/;
 const PREVIOUS_SUMMARY_CLOSE_TAG_REGEX = /<\/previous-summary>/gi;
 
@@ -129,29 +137,40 @@ function extractSummaryFromResponse(text: string): string {
   return match ? match[1].trim() : text.trim();
 }
 
-function extractMessageText(message: ModelMessage): string {
-  if (typeof message.content === "string") {
-    return message.content;
-  }
-  if (!Array.isArray(message.content)) {
-    return "";
-  }
-  return message.content
-    .map((part) => {
-      if (typeof part === "object" && part !== null) {
-        if (part.type === "text") {
-          return (part as { text: string }).text;
+function isCheckpointMessage(
+  message: SummarizerMessage
+): message is CheckpointMessage {
+  return (
+    typeof message === "object" && message !== null && "message" in message
+  );
+}
+
+function normalizeMessages(messages: SummarizerInput): ModelMessage[] {
+  return messages.map((message) =>
+    isCheckpointMessage(message) ? message.message : message
+  );
+}
+
+function toCheckpointMessages(messages: SummarizerInput): CheckpointMessage[] {
+  return messages.map((message, index) =>
+    isCheckpointMessage(message)
+      ? message
+      : {
+          id: `summary-input-${index}`,
+          createdAt: index,
+          isSummary: false,
+          message,
         }
-        if (part.type === "tool-call") {
-          return JSON.stringify(part);
-        }
-        if (part.type === "tool-result") {
-          return JSON.stringify(part);
-        }
-      }
-      return "";
-    })
-    .join(" ");
+  );
+}
+
+function buildExtractiveSummary(
+  messages: SummarizerInput,
+  previousSummary?: string
+): string {
+  return buildSummaryInput(toCheckpointMessages(messages), {
+    previousSummary,
+  }).trim();
 }
 
 function estimateMessagesTokens(messages: ModelMessage[]): number {
@@ -279,10 +298,81 @@ const DEFAULT_SUMMARIZER_MAX_OUTPUT = 4096;
 const MIN_SUMMARIZER_OUTPUT_TOKENS = 64;
 const SMALL_CONTEXT_THRESHOLD = 4096;
 
+function getTodoStatusIcon(
+  status: "pending" | "in_progress" | "completed" | "cancelled"
+): string {
+  switch (status) {
+    case "completed":
+      return "[x]";
+    case "in_progress":
+      return "[→]";
+    case "cancelled":
+      return "[✗]";
+    default:
+      return "[ ]";
+  }
+}
+
+function formatStructuredState(state: StructuredState): string {
+  const sections: string[] = [];
+
+  if (state.todos && state.todos.length > 0) {
+    sections.push("## Current Task List");
+    for (const todo of state.todos) {
+      const statusIcon = getTodoStatusIcon(todo.status);
+      sections.push(`- ${statusIcon} ${todo.content}`);
+    }
+  }
+
+  if (state.metadata && Object.keys(state.metadata).length > 0) {
+    sections.push("## Session Metadata");
+    for (const [key, value] of Object.entries(state.metadata)) {
+      sections.push(`- ${key}: ${JSON.stringify(value)}`);
+    }
+  }
+
+  return sections.join("\n");
+}
+
+export function buildSummaryInput(
+  messages: CheckpointMessage[],
+  options?: BuildSummaryInputOptions
+): string {
+  const parts: string[] = [];
+  const previousSummary = options?.previousSummary?.trim();
+
+  if (previousSummary) {
+    parts.push(`Previous Summary:\n${previousSummary}`);
+  }
+
+  if (messages.length > 0) {
+    parts.push("Conversation Transcript:");
+    for (const msg of messages) {
+      const text = extractMessageText(msg.message).trim();
+      if (text.trim()) {
+        const role = msg.isSummary
+          ? `${msg.message.role.toUpperCase()} (SUMMARY)`
+          : msg.message.role.toUpperCase();
+        parts.push(`${role}: ${text}`);
+      }
+    }
+  }
+
+  const structuredState = options?.structuredState;
+  if (structuredState) {
+    const formatted = formatStructuredState(structuredState);
+    if (formatted) {
+      parts.push(formatted);
+    }
+  }
+
+  return parts.join("\n\n");
+}
+
 export function createModelSummarizer(
   model: GenerateTextModel,
   options?: ModelSummarizerOptions
-): (messages: ModelMessage[], previousSummary?: string) => Promise<string> {
+): (messages: SummarizerInput, previousSummary?: string) => Promise<string> {
   const fullPrompt = options?.prompt ?? DEFAULT_COMPACTION_USER_PROMPT;
   const configuredMaxOutput =
     options?.maxOutputTokens ?? DEFAULT_SUMMARIZER_MAX_OUTPUT;
@@ -290,45 +380,50 @@ export function createModelSummarizer(
   const contextLimit = options?.contextLimit ?? 0;
 
   return async (
-    messages: ModelMessage[],
+    messages: SummarizerInput,
     previousSummary?: string
   ): Promise<string> => {
-    if (messages.length === 0) {
-      return "## Summary\nNo conversation history to summarize.\n\n## Context\n- (none)\n\n## Current State\n- (none)";
+    const normalizedMessages = normalizeMessages(messages);
+    const fallbackSummary = buildExtractiveSummary(messages, previousSummary);
+
+    if (normalizedMessages.length === 0) {
+      return fallbackSummary;
     }
 
-    const compactionPrompt = buildCompactionPrompt(contextLimit, fullPrompt);
-    const userTurnContent = buildUserTurnContent(
-      previousSummary,
-      compactionPrompt
-    );
-    const systemPrompt = await resolveSystemPrompt(instructionsSource);
-    const { maxOutputTokens, messagesToSend } = resolveSummarizerInputs(
-      messages,
-      userTurnContent,
-      systemPrompt,
-      configuredMaxOutput,
-      contextLimit
-    );
+    try {
+      const compactionPrompt = buildCompactionPrompt(contextLimit, fullPrompt);
+      const userTurnContent = buildUserTurnContent(
+        previousSummary,
+        compactionPrompt
+      );
+      const systemPrompt = await resolveSystemPrompt(instructionsSource);
+      const { maxOutputTokens, messagesToSend } = resolveSummarizerInputs(
+        normalizedMessages,
+        userTurnContent,
+        systemPrompt,
+        configuredMaxOutput,
+        contextLimit
+      );
 
-    const result = await generateText({
-      model,
-      ...(systemPrompt ? { system: systemPrompt } : {}),
-      messages: [
-        ...messagesToSend,
-        { role: "user" as const, content: userTurnContent },
-      ],
-      maxOutputTokens,
-    });
+      const result = await generateText({
+        model,
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+        messages: [
+          ...messagesToSend,
+          { role: "user" as const, content: userTurnContent },
+        ],
+        maxOutputTokens,
+      });
 
-    logSummarizerUsage(result.usage, messagesToSend.length, messages.length);
+      logSummarizerUsage(
+        result.usage,
+        messagesToSend.length,
+        normalizedMessages.length
+      );
 
-    const text = result.text.trim();
-
-    if (!text) {
-      return "## Summary\nConversation summary generation failed.\n\n## Context\n- (none)\n\n## Current State\n- (none)";
+      return extractSummaryFromResponse(result.text.trim()) || fallbackSummary;
+    } catch {
+      return fallbackSummary;
     }
-
-    return extractSummaryFromResponse(text);
   };
 }
