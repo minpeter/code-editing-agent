@@ -801,6 +801,11 @@ function cloneCompactionSegment(segment: CompactionSegment): CompactionSegment {
   };
 }
 
+/**
+ * @deprecated Use {@link CheckpointHistory} instead.
+ * MessageHistory will be removed in a future version.
+ * See packages/harness/src/checkpoint-history.ts for the replacement.
+ */
 export class MessageHistory {
   private readonly maxMessages: number;
   private readonly compaction: CompactionConfig;
