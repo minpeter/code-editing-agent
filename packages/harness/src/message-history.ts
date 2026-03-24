@@ -6,6 +6,7 @@ import {
   needsCompactionFromUsage,
   shouldStartSpeculativeCompaction,
 } from "./compaction-policy";
+import type { CheckpointMessage } from "./compaction-types";
 import {
   estimateTokens,
   extractMessageText,
@@ -1615,30 +1616,36 @@ export class MessageHistory {
    * Returns true if any outputs were pruned.
    */
   private performPruning(): boolean {
-    const modelMessages = this.getMaterializedMessages().map(
-      (m) => m.modelMessage
+    const materializedMessages = this.getMaterializedMessages();
+    const checkpointMessages: CheckpointMessage[] = materializedMessages.map(
+      (message) => ({
+        createdAt: message.createdAt.getTime(),
+        id: message.id,
+        isSummary: false,
+        message: message.modelMessage,
+        originalContent: message.originalContent,
+      })
     );
-    const result = pruneToolOutputs(modelMessages, this.pruning);
+    const result = pruneToolOutputs(checkpointMessages, this.pruning);
 
     if (result.prunedTokens === 0) {
       return false;
     }
 
-    const materializedMessages = this.getMaterializedMessages();
     const updatedMessages: Message[] = [];
 
     for (let i = 0; i < materializedMessages.length; i++) {
       const currentMessage = materializedMessages[i];
-      const nextModelMessage = result.messages[i];
-      if (!(currentMessage && nextModelMessage)) {
+      const nextCheckpointMessage = result.messages[i];
+      if (!(currentMessage && nextCheckpointMessage)) {
         continue;
       }
 
       updatedMessages.push(
-        currentMessage.modelMessage !== nextModelMessage
+        currentMessage.modelMessage !== nextCheckpointMessage.message
           ? {
               ...currentMessage,
-              modelMessage: nextModelMessage,
+              modelMessage: nextCheckpointMessage.message,
             }
           : currentMessage
       );

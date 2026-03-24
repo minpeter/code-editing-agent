@@ -1,11 +1,23 @@
-import type { ModelMessage } from "ai";
+import type { ModelMessage, ToolCallPart } from "ai";
 import { describe, expect, it } from "vitest";
+import type { CheckpointMessage } from "./compaction-types";
 import { pruneToolOutputs } from "./tool-pruning";
 
-// ─── Helpers ───
+let checkpointId = 0;
 
-function makeToolMessage(toolName: string, output: string): ModelMessage {
+function makeCheckpoint(message: ModelMessage): CheckpointMessage {
+  checkpointId += 1;
+
   return {
+    createdAt: 1_700_000_000_000 + checkpointId,
+    id: `checkpoint_${checkpointId}`,
+    isSummary: false,
+    message,
+  };
+}
+
+function makeToolMessage(toolName: string, output: string): CheckpointMessage {
+  return makeCheckpoint({
     role: "tool",
     content: [
       {
@@ -15,19 +27,19 @@ function makeToolMessage(toolName: string, output: string): ModelMessage {
         output: { type: "text" as const, value: output },
       },
     ],
-  };
+  });
 }
 
-function makeUserMessage(text: string): ModelMessage {
-  return { role: "user", content: text };
+function makeUserMessage(text: string): CheckpointMessage {
+  return makeCheckpoint({ role: "user", content: text });
 }
 
-function makeAssistantMessage(text: string): ModelMessage {
-  return { role: "assistant", content: text };
+function makeAssistantMessage(text: string): CheckpointMessage {
+  return makeCheckpoint({ role: "assistant", content: text });
 }
 
-function makeAssistantWithToolCall(toolName: string): ModelMessage {
-  return {
+function makeAssistantWithToolCall(toolName: string): CheckpointMessage {
+  return makeCheckpoint({
     role: "assistant",
     content: [
       {
@@ -37,7 +49,7 @@ function makeAssistantWithToolCall(toolName: string): ModelMessage {
         input: {},
       },
     ],
-  };
+  });
 }
 
 const largeOutput = "x".repeat(5000);
@@ -55,7 +67,7 @@ describe("pruneToolOutputs", () => {
     });
 
     it("does not prune when all messages are within protection window", () => {
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeUserMessage("hello"),
         makeAssistantWithToolCall("read_file"),
         makeToolMessage("read_file", largeOutput),
@@ -71,7 +83,7 @@ describe("pruneToolOutputs", () => {
     });
 
     it("does not prune non-tool messages", () => {
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeUserMessage(largeOutput),
         makeAssistantMessage(largeOutput),
       ];
@@ -85,7 +97,7 @@ describe("pruneToolOutputs", () => {
     });
 
     it("does not prune small tool outputs", () => {
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeToolMessage("read_file", smallOutput),
         makeUserMessage("recent"),
       ];
@@ -101,7 +113,7 @@ describe("pruneToolOutputs", () => {
 
   describe("basic pruning", () => {
     it("prunes large tool output outside protection window", () => {
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeUserMessage("read this file"),
         makeAssistantWithToolCall("read_file"),
         makeToolMessage("read_file", largeOutput),
@@ -120,16 +132,17 @@ describe("pruneToolOutputs", () => {
       expect(result.messages).toHaveLength(5);
 
       const prunedTool = result.messages[2];
-      expect(prunedTool.role).toBe("tool");
-      const content = prunedTool.content as any[];
+      expect(prunedTool.message.role).toBe("tool");
+      const content = prunedTool.message.content as any[];
       expect(content[0].output).toEqual({
         type: "text",
         value: "[output pruned — too large]",
       });
+      expect(content[0].compactedAt).toEqual(expect.any(Number));
     });
 
     it("preserves tool output within protection window", () => {
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeToolMessage("old_tool", largeOutput),
         makeUserMessage("middle"),
         makeToolMessage("recent_tool", largeOutput),
@@ -143,18 +156,19 @@ describe("pruneToolOutputs", () => {
 
       // recent_tool should be protected, old_tool should be pruned
       expect(result.prunedCount).toBe(1);
-      const firstTool = result.messages[0].content as any[];
+      const firstTool = result.messages[0].message.content as any[];
       expect(firstTool[0].output).toEqual({
         type: "text",
         value: "[output pruned — too large]",
       });
-      const lastTool = result.messages[2].content as any[];
+      expect(firstTool[0].compactedAt).toEqual(expect.any(Number));
+      const lastTool = result.messages[2].message.content as any[];
       expect(lastTool[0].output).toEqual(largeOutputWrapped);
     });
 
     it("uses custom replacement text", () => {
       const customText = "[REDACTED]";
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeToolMessage("read_file", largeOutput),
         makeUserMessage("recent message with enough tokens"),
       ];
@@ -167,14 +181,15 @@ describe("pruneToolOutputs", () => {
       });
 
       expect(result.prunedCount).toBe(1);
-      const content = result.messages[0].content as any[];
+      const content = result.messages[0].message.content as any[];
       expect(content[0].output).toEqual({ type: "text", value: customText });
+      expect(content[0].compactedAt).toEqual(expect.any(Number));
     });
   });
 
   describe("protected tool names", () => {
     it("does not prune outputs from protected tools", () => {
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeToolMessage("critical_tool", largeOutput),
         makeToolMessage("regular_tool", largeOutput),
         makeUserMessage("recent"),
@@ -189,20 +204,21 @@ describe("pruneToolOutputs", () => {
 
       // Only regular_tool should be pruned
       expect(result.prunedCount).toBe(1);
-      const criticalContent = result.messages[0].content as any[];
+      const criticalContent = result.messages[0].message.content as any[];
       expect(criticalContent[0].output).toEqual(largeOutputWrapped);
-      const regularContent = result.messages[1].content as any[];
+      const regularContent = result.messages[1].message.content as any[];
       expect(regularContent[0].output).toEqual({
         type: "text",
         value: "[output pruned — too large]",
       });
+      expect(regularContent[0].compactedAt).toEqual(expect.any(Number));
     });
   });
 
   describe("minimum savings threshold", () => {
     it("returns original messages when savings below threshold", () => {
       const mediumOutput = "x".repeat(200);
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeToolMessage("tool", mediumOutput),
         makeUserMessage("recent message".repeat(50)),
       ];
@@ -221,12 +237,12 @@ describe("pruneToolOutputs", () => {
 
   describe("message immutability", () => {
     it("does not mutate original messages", () => {
-      const original: ModelMessage[] = [
+      const original: CheckpointMessage[] = [
         makeToolMessage("read_file", largeOutput),
         makeUserMessage("recent"),
       ];
 
-      const originalContent = (original[0].content as any[])[0].output;
+      const originalContent = (original[0].message.content as any[])[0].output;
 
       pruneToolOutputs(original, {
         enabled: true,
@@ -234,13 +250,15 @@ describe("pruneToolOutputs", () => {
         minSavingsTokens: 10,
       });
 
-      expect((original[0].content as any[])[0].output).toBe(originalContent);
+      expect((original[0].message.content as any[])[0].output).toBe(
+        originalContent
+      );
     });
   });
 
   describe("multiple tool results in one message", () => {
     it("prunes individual tool results independently", () => {
-      const multiToolMessage: ModelMessage = {
+      const multiToolMessage = makeCheckpoint({
         role: "tool",
         content: [
           {
@@ -256,9 +274,9 @@ describe("pruneToolOutputs", () => {
             output: { type: "text" as const, value: smallOutput },
           },
         ],
-      };
+      });
 
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         multiToolMessage,
         makeUserMessage("recent message".repeat(50)),
       ];
@@ -270,11 +288,12 @@ describe("pruneToolOutputs", () => {
       });
 
       expect(result.prunedCount).toBe(1);
-      const content = result.messages[0].content as any[];
+      const content = result.messages[0].message.content as any[];
       expect(content[0].output).toEqual({
         type: "text",
         value: "[output pruned — too large]",
       });
+      expect(content[0].compactedAt).toEqual(expect.any(Number));
       expect(content[1].output).toEqual(smallOutputWrapped);
     });
   });
@@ -282,7 +301,7 @@ describe("pruneToolOutputs", () => {
   describe("object outputs", () => {
     it("prunes large object outputs", () => {
       const largeObj = { data: "x".repeat(5000), nested: { key: "value" } };
-      const objectToolMessage: ModelMessage = {
+      const objectToolMessage = makeCheckpoint({
         role: "tool",
         content: [
           {
@@ -292,9 +311,9 @@ describe("pruneToolOutputs", () => {
             output: { type: "json" as const, value: largeObj as any },
           },
         ],
-      };
+      });
 
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         objectToolMessage,
         makeUserMessage("recent message".repeat(50)),
       ];
@@ -306,17 +325,75 @@ describe("pruneToolOutputs", () => {
       });
 
       expect(result.prunedCount).toBe(1);
-      const content = result.messages[0].content as any[];
+      const content = result.messages[0].message.content as any[];
       expect(content[0].output).toEqual({
         type: "text",
         value: "[output pruned — too large]",
       });
+      expect(content[0].compactedAt).toEqual(expect.any(Number));
+    });
+  });
+
+  describe("tool topology", () => {
+    it("tool-call/result topology preserved after pruning", () => {
+      const messages: CheckpointMessage[] = [
+        makeUserMessage("load two files"),
+        makeAssistantWithToolCall("read_file_a"),
+        makeToolMessage("read_file_a", largeOutput),
+        makeAssistantWithToolCall("read_file_b"),
+        makeToolMessage("read_file_b", largeOutput),
+        makeUserMessage("recent message".repeat(50)),
+      ];
+
+      const result = pruneToolOutputs(messages, {
+        enabled: true,
+        protectRecentTokens: 10,
+        minSavingsTokens: 10,
+      });
+
+      expect(result.prunedCount).toBe(2);
+
+      for (let i = 0; i < result.messages.length; i++) {
+        const current = result.messages[i]?.message;
+        if (current?.role !== "assistant" || !Array.isArray(current.content)) {
+          continue;
+        }
+
+        const toolCall = current.content.find(
+          (part): part is ToolCallPart =>
+            typeof part === "object" &&
+            part !== null &&
+            "type" in part &&
+            part.type === "tool-call"
+        );
+
+        if (!toolCall) {
+          continue;
+        }
+
+        const nextMessage = result.messages[i + 1]?.message;
+        expect(nextMessage?.role).toBe("tool");
+        expect(Array.isArray(nextMessage?.content)).toBe(true);
+
+        const matchingResult = (nextMessage?.content as any[]).find(
+          (part) =>
+            part.type === "tool-result" &&
+            part.toolCallId === toolCall.toolCallId
+        );
+
+        expect(matchingResult).toBeDefined();
+        expect(matchingResult.output).toEqual({
+          type: "text",
+          value: "[output pruned — too large]",
+        });
+        expect(matchingResult.compactedAt).toEqual(expect.any(Number));
+      }
     });
   });
 
   describe("defaults", () => {
     it("uses default config values when not specified", () => {
-      const messages: ModelMessage[] = [
+      const messages: CheckpointMessage[] = [
         makeToolMessage("tool", largeOutput),
         makeUserMessage("a".repeat(8000)),
       ];

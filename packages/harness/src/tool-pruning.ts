@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { CheckpointMessage, PruningConfig } from "./compaction-types";
 import { estimateTokens, extractMessageText } from "./token-utils";
 
 // ─── Configuration ───
@@ -22,49 +22,14 @@ function isToolResultPart(part: unknown): part is {
   );
 }
 
-/**
- * Configuration for tool output pruning.
- */
-export interface PruningConfig {
-  /**
-   * Enable tool output pruning.
-   * @default false
-   */
-  enabled?: boolean;
-
-  /**
-   * Minimum estimated token savings required for pruning to take effect.
-   * If total savings are below this threshold, no pruning occurs.
-   * @default 200
-   */
-  minSavingsTokens?: number;
-
-  /**
-   * Tool names whose outputs should never be pruned.
-   * Useful for critical tools whose output must always be preserved in full.
-   */
-  protectedToolNames?: string[];
-
-  /**
-   * Number of recent tokens (from the end of conversation) to protect from pruning.
-   * Messages within this window are never pruned.
-   * @default 2000
-   */
-  protectRecentTokens?: number;
-
-  /**
-   * Text to replace pruned tool outputs with.
-   * @default "[output pruned — too large]"
-   */
-  replacementText?: string;
-}
+export type { PruningConfig } from "./compaction-types";
 
 /**
  * Result of a pruning operation.
  */
 export interface PruneResult {
   /** Messages after pruning (same length as input). */
-  messages: ModelMessage[];
+  messages: CheckpointMessage[];
   /** Number of individual tool outputs that were pruned. */
   prunedCount: number;
   /** Total estimated tokens saved by pruning. */
@@ -79,12 +44,12 @@ export interface PruneResult {
  * For older messages with `tool-result` parts, large outputs are replaced
  * with a short stub.
  *
- * @param messages - Array of model messages (not mutated)
+ * @param messages - Active checkpoint-message slice to prune (not mutated)
  * @param config - Pruning configuration
  * @returns Pruned messages array and statistics
  */
 export function pruneToolOutputs(
-  messages: ModelMessage[],
+  messages: CheckpointMessage[],
   config: PruningConfig
 ): PruneResult {
   if (messages.length === 0) {
@@ -98,6 +63,7 @@ export function pruneToolOutputs(
   const protectedToolNames = new Set(config.protectedToolNames ?? []);
   const replacementText = config.replacementText ?? DEFAULT_REPLACEMENT_TEXT;
   const replacementTokens = estimateTokens(replacementText);
+  const compactedAt = Date.now();
 
   // Calculate the protection boundary: walk backwards to find which messages
   // fall within the protectRecentTokens window
@@ -105,7 +71,7 @@ export function pruneToolOutputs(
   let recentTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msgTokens = estimateTokens(extractMessageText(messages[i]));
+    const msgTokens = estimateTokens(extractMessageText(messages[i].message));
     if (recentTokens + msgTokens > protectRecentTokens) {
       protectedFromIndex = i + 1;
       break;
@@ -119,10 +85,11 @@ export function pruneToolOutputs(
   // Walk messages and prune tool outputs outside the protected window
   let totalPrunedTokens = 0;
   let prunedCount = 0;
-  const result: ModelMessage[] = [];
+  const result: CheckpointMessage[] = [];
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
+    const modelMessage = msg.message;
 
     // Protected window — keep as-is
     if (i >= protectedFromIndex) {
@@ -131,13 +98,13 @@ export function pruneToolOutputs(
     }
 
     // Only prune "tool" role messages (which contain tool-result parts)
-    if (msg.role !== "tool" || !Array.isArray(msg.content)) {
+    if (modelMessage.role !== "tool" || !Array.isArray(modelMessage.content)) {
       result.push(msg);
       continue;
     }
 
     let messagePruned = false;
-    const newContent = msg.content.map((part) => {
+    const newContent = modelMessage.content.map((part) => {
       if (!isToolResultPart(part)) {
         return part;
       }
@@ -164,12 +131,19 @@ export function pruneToolOutputs(
 
       return {
         ...part,
+        compactedAt,
         output: { type: "text" as const, value: replacementText },
       };
     });
 
     if (messagePruned) {
-      result.push({ ...msg, content: newContent });
+      result.push({
+        ...msg,
+        message: {
+          ...modelMessage,
+          content: newContent,
+        },
+      });
     } else {
       result.push(msg);
     }
