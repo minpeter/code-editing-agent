@@ -1,3 +1,5 @@
+import type { CheckpointMessage } from "./compaction-types";
+
 export function calculateAggressiveCompactionSplitIndex(
   messageCount: number
 ): number | null {
@@ -57,12 +59,12 @@ export function calculateDefaultCompactionSplitIndex<T>(params: {
   return splitIndex;
 }
 
-export function calculateCompactionSplitIndex<T>(params: {
+export function calculateCompactionSplitIndex(params: {
   adjustSplitIndex: (splitIndex: number) => number;
   aggressive: boolean;
-  estimateMessageTokens: (message: T) => number;
+  estimateMessageTokens: (message: CheckpointMessage) => number;
   keepRecentTokens: number;
-  messages: T[];
+  messages: CheckpointMessage[];
 }): number | null {
   if (params.aggressive) {
     return calculateAggressiveCompactionSplitIndex(params.messages.length);
