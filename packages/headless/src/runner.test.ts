@@ -80,23 +80,6 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
-async function waitForCondition(
-  condition: () => boolean,
-  timeoutMs = 500,
-  intervalMs = 5
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    if (condition()) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-
-  throw new Error("Condition was not met before timeout");
-}
-
 describe("runHeadless", () => {
   it("adds and emits the initial user message via headless bootstrap", async () => {
     const events: Array<{ content?: string; type: string }> = [];
