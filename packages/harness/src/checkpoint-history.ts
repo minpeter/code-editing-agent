@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { ModelMessage, TextPart } from "ai";
 import { calculateCompactionSplitIndex } from "./compaction-planner";
+import {
+  getRecommendedMaxOutputTokens as getRecommendedMaxOutputTokensFromPolicy,
+  isAtHardContextLimitFromUsage,
+  needsCompactionFromUsage,
+  shouldStartSpeculativeCompaction,
+} from "./compaction-policy";
 import type {
   ActualTokenUsage,
   CheckpointMessage,
@@ -158,11 +164,13 @@ export class CheckpointHistory {
   private messages: CheckpointMessage[] = [];
   private summaryMessageId: string | null = null;
   private actualUsage: ActualTokenUsage | null = null;
+  private contextLimit = 0;
+  private systemPromptTokens = 0;
   private revision = 0;
   private readonly sessionId: string;
   private readonly sessionStore: SessionStore | null;
-  private readonly compactionConfig: NormalizedCompactionConfig;
-  private readonly pruningConfig: Required<PruningConfig>;
+  private compactionConfig: NormalizedCompactionConfig;
+  private pruningConfig: Required<PruningConfig>;
 
   constructor(options?: CheckpointHistoryOptions) {
     this.sessionId = options?.sessionId ?? randomUUID();
@@ -171,6 +179,7 @@ export class CheckpointHistory {
       ...DEFAULT_COMPACTION_CONFIG,
       ...options?.compaction,
     };
+    this.contextLimit = this.compactionConfig.contextLimit ?? 0;
     this.pruningConfig = {
       ...DEFAULT_PRUNING_CONFIG,
       ...options?.pruning,
@@ -316,6 +325,152 @@ export class CheckpointHistory {
         total + estimateTokens(extractMessageText(checkpointMessage.message)),
       0
     );
+  }
+
+  setContextLimit(limit: number): void {
+    this.contextLimit = limit;
+    this.compactionConfig = {
+      ...this.compactionConfig,
+      contextLimit: limit,
+    };
+    this.revision += 1;
+  }
+
+  getContextLimit(): number {
+    return this.contextLimit;
+  }
+
+  setSystemPromptTokens(tokens: number): void {
+    this.systemPromptTokens = tokens;
+    this.revision += 1;
+  }
+
+  getSystemPromptTokens(): number {
+    return this.systemPromptTokens;
+  }
+
+  isCompactionEnabled(): boolean {
+    return this.compactionConfig.enabled ?? false;
+  }
+
+  isPruningEnabled(): boolean {
+    return this.pruningConfig.enabled ?? false;
+  }
+
+  updateCompaction(config: Partial<CompactionConfig>): void {
+    this.compactionConfig = {
+      ...this.compactionConfig,
+      ...config,
+    };
+    if (config.contextLimit !== undefined) {
+      this.contextLimit = config.contextLimit;
+    }
+    this.revision += 1;
+  }
+
+  updatePruning(config: Partial<PruningConfig>): void {
+    this.pruningConfig = {
+      ...this.pruningConfig,
+      ...config,
+      protectedToolNames:
+        config.protectedToolNames ?? this.pruningConfig.protectedToolNames,
+    };
+    this.revision += 1;
+  }
+
+  needsCompaction(options?: {
+    phase?: "new-turn" | "intermediate-step";
+  }): boolean {
+    const reserveTokens = this.getEffectiveReserveTokens(options);
+    const thresholdLimit =
+      this.actualUsage && this.contextLimit > 0
+        ? this.contextLimit - reserveTokens
+        : (this.compactionConfig.maxTokens ??
+            DEFAULT_COMPACTION_CONFIG.maxTokens) - reserveTokens;
+
+    return needsCompactionFromUsage({
+      currentUsageTokens:
+        this.actualUsage && this.contextLimit > 0
+          ? (this.actualUsage.totalTokens ?? this.getEstimatedTokens())
+          : this.getEstimatedTokens(),
+      enabled: Boolean(this.compactionConfig.enabled),
+      hasMessages: this.messages.length > 0,
+      thresholdLimit,
+    });
+  }
+
+  shouldStartSpeculativeCompactionForNextTurn(): boolean {
+    const speculativeLimit = Math.min(
+      this.getActiveContextLimit(),
+      this.compactionConfig.maxTokens ?? Number.POSITIVE_INFINITY
+    );
+
+    return shouldStartSpeculativeCompaction({
+      contextLimit: speculativeLimit,
+      input: {
+        currentUsageTokens: this.getCurrentUsageTokens(),
+        enabled: Boolean(
+          this.compactionConfig.enabled || this.pruningConfig.enabled
+        ),
+        hasMessages: this.messages.length > 0,
+        phaseReserveTokens: this.getEffectiveReserveTokens({
+          phase: "new-turn",
+        }),
+        speculativeStartRatio: this.compactionConfig.speculativeStartRatio,
+      },
+    });
+  }
+
+  isAtHardContextLimit(
+    additionalTokens = 0,
+    options?: {
+      phase: "new-turn" | "intermediate-step";
+    }
+  ): boolean {
+    return isAtHardContextLimitFromUsage({
+      additionalTokens,
+      contextLimit: this.getActiveContextLimit(),
+      currentUsageTokens: this.getCurrentUsageTokens(),
+      enabled: Boolean(
+        this.compactionConfig.enabled || this.pruningConfig.enabled
+      ),
+      reserveTokens: this.getEffectiveReserveTokens(options),
+    });
+  }
+
+  getRecommendedMaxOutputTokens(messagesForLLM?: ModelMessage[]): number {
+    const contextLimit = this.contextLimit;
+    if (contextLimit <= 0) {
+      return 8192;
+    }
+
+    const estimatedInputTokens =
+      (messagesForLLM
+        ? messagesForLLM.reduce(
+            (total, message) =>
+              total + estimateTokens(extractMessageText(message)),
+            0
+          )
+        : this.getCurrentUsageTokens()) + this.systemPromptTokens;
+
+    return (
+      getRecommendedMaxOutputTokensFromPolicy({
+        contextLimit,
+        estimatedInputTokens,
+        reserveTokens:
+          this.compactionConfig.reserveTokens ??
+          DEFAULT_COMPACTION_CONFIG.reserveTokens,
+      }) ?? 0
+    );
+  }
+
+  wouldExceedContextWithAdditionalMessage(
+    content: string,
+    options?: {
+      phase: "new-turn" | "intermediate-step";
+    }
+  ): boolean {
+    return this.isAtHardContextLimit(estimateTokens(content), options);
   }
 
   async compact(options?: {
@@ -611,6 +766,34 @@ export class CheckpointHistory {
     }
 
     return this.messages.slice(summaryIndex);
+  }
+
+  private getCurrentUsageTokens(): number {
+    return this.actualUsage?.totalTokens ?? this.getEstimatedTokens();
+  }
+
+  private getActiveContextLimit(): number {
+    if (this.contextLimit > 0) {
+      return this.contextLimit;
+    }
+
+    return (
+      this.compactionConfig.maxTokens ?? DEFAULT_COMPACTION_CONFIG.maxTokens
+    );
+  }
+
+  private getEffectiveReserveTokens(options?: {
+    phase?: "new-turn" | "intermediate-step";
+  }): number {
+    const reserveTokens =
+      this.compactionConfig.reserveTokens ??
+      DEFAULT_COMPACTION_CONFIG.reserveTokens;
+
+    if (options?.phase === "intermediate-step") {
+      return reserveTokens * 2;
+    }
+
+    return reserveTokens;
   }
 
   private resolveCompactionSplitIndex(

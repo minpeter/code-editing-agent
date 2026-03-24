@@ -673,3 +673,78 @@ describe("CheckpointHistory", () => {
     });
   });
 });
+
+describe("CheckpointHistory context limit methods", () => {
+  it("setContextLimit / getContextLimit round-trip", () => {
+    const h = new CheckpointHistory();
+    expect(h.getContextLimit()).toBe(0);
+    h.setContextLimit(100_000);
+    expect(h.getContextLimit()).toBe(100_000);
+  });
+
+  it("setSystemPromptTokens / getSystemPromptTokens round-trip", () => {
+    const h = new CheckpointHistory();
+    expect(h.getSystemPromptTokens()).toBe(0);
+    h.setSystemPromptTokens(500);
+    expect(h.getSystemPromptTokens()).toBe(500);
+  });
+
+  it("isCompactionEnabled returns false by default", () => {
+    const h = new CheckpointHistory();
+    expect(h.isCompactionEnabled()).toBe(false);
+  });
+
+  it("isCompactionEnabled returns true when config.enabled=true", () => {
+    const h = new CheckpointHistory({
+      compaction: { enabled: true, summarizeFn: async () => "" },
+    });
+    expect(h.isCompactionEnabled()).toBe(true);
+  });
+
+  it("isPruningEnabled returns false by default", () => {
+    const h = new CheckpointHistory();
+    expect(h.isPruningEnabled()).toBe(false);
+  });
+
+  it("updateCompaction merges config", () => {
+    const h = new CheckpointHistory({ compaction: { enabled: false } });
+    h.updateCompaction({ enabled: true });
+    expect(h.isCompactionEnabled()).toBe(true);
+  });
+
+  it("updatePruning enables pruning", () => {
+    const h = new CheckpointHistory();
+    expect(h.isPruningEnabled()).toBe(false);
+    h.updatePruning({ enabled: true });
+    expect(h.isPruningEnabled()).toBe(true);
+  });
+
+  it("needsCompaction returns false when disabled", () => {
+    const h = new CheckpointHistory();
+    expect(h.needsCompaction()).toBe(false);
+  });
+
+  it("isAtHardContextLimit returns false when no limit set", () => {
+    const h = new CheckpointHistory();
+    expect(h.isAtHardContextLimit()).toBe(false);
+  });
+
+  it("getRecommendedMaxOutputTokens returns default when no limit set", () => {
+    const h = new CheckpointHistory();
+    const n = h.getRecommendedMaxOutputTokens();
+    expect(n).toBeGreaterThan(0);
+  });
+
+  it("shouldStartSpeculativeCompactionForNextTurn returns false by default", () => {
+    const h = new CheckpointHistory();
+    expect(h.shouldStartSpeculativeCompactionForNextTurn()).toBe(false);
+  });
+});
+
+describe("CheckpointHistory structural conformance", () => {
+  it("satisfies AgentTUIMessageHistory interface (compile-time)", () => {
+    const h = new CheckpointHistory();
+    const _: import("../../tui/src/agent-tui").AgentTUIMessageHistory = h;
+    expect(_).toBeDefined();
+  });
+});
