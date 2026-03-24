@@ -8,6 +8,7 @@ import {
 } from "./checkpoint-history";
 import { getContinuationText } from "./continuation";
 import { SessionStore } from "./session-store";
+import { estimateTokens } from "./token-utils";
 
 describe("CheckpointHistory", () => {
   describe("addUserMessage", () => {
@@ -746,5 +747,217 @@ describe("CheckpointHistory structural conformance", () => {
     const h = new CheckpointHistory();
     const _: import("../../tui/src/agent-tui").AgentTUIMessageHistory = h;
     expect(_).toBeDefined();
+  });
+});
+
+describe("handleContextOverflow() overflow recovery — RED", () => {
+  it("verbose summary recovery should still succeed via rollback+truncate", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 80,
+        keepRecentTokens: 0,
+        summarizeFn: async () => "verbose ".repeat(500),
+      },
+      pruning: { enabled: false },
+    });
+
+    h.addUserMessage("alpha ".repeat(200));
+    h.addModelMessages([{ role: "assistant", content: "ack" }]);
+    h.addUserMessage("beta ".repeat(200));
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(true);
+    expect(result.strategy).toBe("truncate");
+    expect(result.tokensAfter).toBeLessThan(result.tokensBefore);
+  });
+
+  it("summary-only overflow after compact should return success=false instead of throwing", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 20,
+        keepRecentTokens: 0,
+        summarizeFn: async () => "Y".repeat(200),
+      },
+      pruning: { enabled: false },
+    });
+
+    h.addUserMessage("request");
+    h.addModelMessages([{ role: "assistant", content: "response" }]);
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(false);
+    expect(result.error?.toLowerCase()).toContain("context");
+  });
+
+  it("single huge message should return success=false with context error, not throw", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 50,
+        summarizeFn: async () => "tiny",
+      },
+      pruning: { enabled: false },
+    });
+
+    h.addUserMessage("word ".repeat(5000));
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(false);
+    expect(result.error?.toLowerCase()).toContain("context");
+  });
+
+  it("prune strategy should actually reduce tokens for large tool-result outputs", async () => {
+    const hugeOutput = "very long output ".repeat(500);
+    const expectedLargeOutputTokens = estimateTokens(hugeOutput);
+
+    const h = new CheckpointHistory({
+      compaction: { enabled: false },
+      pruning: {
+        enabled: true,
+        minSavingsTokens: 1,
+        protectRecentTokens: 0,
+      },
+    });
+
+    h.addUserMessage("please read file");
+    h.addModelMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "read_file",
+            input: { path: "README.md" },
+          },
+        ],
+      },
+    ]);
+    h.addModelMessages([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "read_file",
+            output: { type: "text", value: hugeOutput },
+          },
+        ],
+      },
+    ]);
+
+    expect(expectedLargeOutputTokens).toBeGreaterThan(1000);
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(true);
+    expect(result.strategy).toBe("prune");
+    expect(result.tokensAfter).toBeLessThan(result.tokensBefore);
+    expect(h.getEstimatedTokens()).toBeLessThan(result.tokensBefore);
+  });
+
+  it("failed compact should rollback messages to pre-compact count", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 60,
+        keepRecentTokens: 0,
+        summarizeFn: async () => "verbose ".repeat(500),
+      },
+      pruning: { enabled: false },
+    });
+
+    h.addUserMessage("one ".repeat(120));
+    h.addModelMessages([{ role: "assistant", content: "reply one" }]);
+    h.addUserMessage("two ".repeat(120));
+    h.addModelMessages([{ role: "assistant", content: "reply two" }]);
+
+    const beforeCount = h.getAll().length;
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(false);
+    expect(h.getAll()).toHaveLength(beforeCount);
+  });
+
+  it("should guard concurrent recoveries and reject second call immediately", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 100,
+        keepRecentTokens: 0,
+        summarizeFn: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return "short summary";
+        },
+      },
+      pruning: { enabled: false },
+    });
+
+    for (let i = 0; i < 10; i++) {
+      h.addUserMessage(`message ${i} ${"x ".repeat(80)}`);
+    }
+
+    const [first, second] = await Promise.all([
+      h.handleContextOverflow(),
+      h.handleContextOverflow(),
+    ]);
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(false);
+    expect(second.error?.toLowerCase()).toContain("recovery in progress");
+  });
+
+  it("when all strategies fail should return success=false (nuclear exhausted) not throw", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 25,
+        keepRecentTokens: 0,
+        summarizeFn: async () => "Z".repeat(300),
+      },
+      pruning: { enabled: false },
+    });
+
+    h.addUserMessage(`u1 ${"long ".repeat(80)}`);
+    h.addModelMessages([
+      { role: "assistant", content: `a1 ${"long ".repeat(80)}` },
+    ]);
+    h.addUserMessage(`u2 ${"long ".repeat(80)}`);
+    h.addModelMessages([
+      { role: "assistant", content: `a2 ${"long ".repeat(80)}` },
+    ]);
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(false);
+    expect(result.error?.toLowerCase()).toContain("context");
+  });
+
+  it("successful overflow recovery should clear actualUsage", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 120,
+        keepRecentTokens: 0,
+        summarizeFn: async () => "brief summary",
+      },
+      pruning: { enabled: false },
+    });
+
+    for (let i = 0; i < 12; i++) {
+      h.addUserMessage("payload ".repeat(50) + i);
+    }
+
+    h.updateActualUsage({
+      promptTokens: 1000,
+      completionTokens: 500,
+      totalTokens: 1500,
+      updatedAt: new Date(),
+    });
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(true);
+    expect(h.getActualUsage()).toBeNull();
   });
 });
