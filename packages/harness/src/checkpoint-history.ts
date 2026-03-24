@@ -5,9 +5,11 @@ import type {
   CheckpointMessage,
   CompactionConfig,
   CompactionResult,
+  ContinuationVariant,
   MessageLine,
   PruningConfig,
 } from "./compaction-types";
+import { createContinuationMessage } from "./continuation";
 import type { SessionStore } from "./session-store";
 import { estimateTokens, extractMessageText } from "./token-utils";
 
@@ -42,6 +44,33 @@ export interface CheckpointHistoryOptions {
   sessionStore?: SessionStore;
 }
 
+export interface OverflowRecoveryResult {
+  error?: string;
+  strategy?: "prune" | "compact" | "aggressive-compact" | "truncate";
+  success: boolean;
+  tokensAfter: number;
+  tokensBefore: number;
+}
+
+export function isContextOverflowError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes("context_length_exceeded") ||
+    msg.includes("context length exceeded") ||
+    msg.includes("context window") ||
+    msg.includes("maximum context") ||
+    msg.includes("too many tokens") ||
+    msg.includes("input is too long") ||
+    msg.includes("prompt is too long") ||
+    msg.includes("tokens exceeds") ||
+    msg.includes("token limit")
+  );
+}
+
 function hasToolCalls(message: ModelMessage): boolean {
   if (message.role !== "assistant" || !Array.isArray(message.content)) {
     return false;
@@ -51,6 +80,27 @@ function hasToolCalls(message: ModelMessage): boolean {
     (part) =>
       typeof part === "object" && part !== null && part.type === "tool-call"
   );
+}
+
+function isReplayableTextOnlyUserMessage(message: CheckpointMessage): boolean {
+  return (
+    message.message.role === "user" &&
+    typeof message.message.content === "string" &&
+    message.message.content.trim().length > 0
+  );
+}
+
+function findReplayableUserMessage(
+  messages: CheckpointMessage[]
+): CheckpointMessage | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message && isReplayableTextOnlyUserMessage(message)) {
+      return message;
+    }
+  }
+
+  return null;
 }
 
 export class CheckpointHistory {
@@ -172,7 +222,10 @@ export class CheckpointHistory {
     );
   }
 
-  async compact(_options?: { auto?: boolean }): Promise<CompactionResult> {
+  async compact(options?: {
+    auto?: boolean;
+    aggressive?: boolean;
+  }): Promise<CompactionResult> {
     if (!this.compactionConfig.enabled) {
       return {
         success: false,
@@ -200,25 +253,18 @@ export class CheckpointHistory {
     const activeStartIndex = summaryIndex === -1 ? 0 : summaryIndex;
     const activeMessages = this.messages.slice(activeStartIndex);
 
-    let splitIndex = calculateCompactionSplitIndex({
-      adjustSplitIndex: (index) => index,
-      aggressive: false,
-      estimateMessageTokens: (message: CheckpointMessage) =>
-        estimateTokens(extractMessageText(message.message)),
-      keepRecentTokens: this.compactionConfig.keepRecentTokens ?? 2000,
-      messages: activeMessages,
-    });
+    const autoCompact = options?.auto === true;
+    const hasExplicitAutoFlag = typeof options?.auto === "boolean";
+    const replayMessage = autoCompact
+      ? findReplayableUserMessage(activeMessages)
+      : null;
 
-    if (splitIndex === null) {
-      splitIndex = calculateCompactionSplitIndex({
-        adjustSplitIndex: (index) => index,
-        aggressive: true,
-        estimateMessageTokens: (message: CheckpointMessage) =>
-          estimateTokens(extractMessageText(message.message)),
-        keepRecentTokens: this.compactionConfig.keepRecentTokens ?? 2000,
-        messages: activeMessages,
-      });
-    }
+    const splitIndex = hasExplicitAutoFlag
+      ? activeMessages.length
+      : this.resolveCompactionSplitIndex(
+          activeMessages,
+          options?.aggressive === true
+        );
 
     if (splitIndex === null || splitIndex <= 0) {
       return {
@@ -243,7 +289,11 @@ export class CheckpointHistory {
         ? toSummarizeCandidates.slice(1)
         : toSummarizeCandidates;
 
-    if (toSummarize.length === 0) {
+    const toSummarizeForSummary = replayMessage
+      ? toSummarize.filter((message) => message.id !== replayMessage.id)
+      : toSummarize;
+
+    if (toSummarizeForSummary.length === 0) {
       return {
         success: false,
         tokensBefore,
@@ -263,7 +313,7 @@ export class CheckpointHistory {
     }
 
     const summaryText = await summarizeFn(
-      toSummarize.map((message) => message.message),
+      toSummarizeForSummary.map((message) => message.message),
       previousSummary
     );
 
@@ -285,35 +335,89 @@ export class CheckpointHistory {
         content: summaryText,
       },
     };
+    const continuationVariant = this.resolveContinuationVariant(
+      autoCompact,
+      replayMessage
+    );
+    const continuationMessage = this.createCheckpointMessage(
+      createContinuationMessage(continuationVariant)
+    );
+    const replayMessageCopy = this.createReplayMessageCopy(replayMessage);
 
     const insertIndex = activeStartIndex + splitIndex;
     this.messages.splice(insertIndex, 0, summaryMessage);
+    this.messages.splice(insertIndex + 1, 0, continuationMessage);
+    if (replayMessageCopy) {
+      this.messages.push(replayMessageCopy);
+    }
+
     this.summaryMessageId = summaryMessage.id;
     this.revision += 1;
 
-    if (this.sessionStore) {
-      const line: MessageLine = {
-        type: "message",
-        id: summaryMessage.id,
-        createdAt: summaryMessage.createdAt,
-        isSummary: true,
-        message: summaryMessage.message,
-      };
-
-      await this.sessionStore.appendMessage(this.sessionId, line);
-      await this.sessionStore.updateCheckpoint(
-        this.sessionId,
-        summaryMessage.id
-      );
-    }
+    await this.persistCompactionMessages({
+      continuationMessage,
+      replayMessageCopy,
+      summaryMessage,
+    });
 
     const tokensAfter = this.getEstimatedTokens();
     return {
       success: true,
+      continuationVariant,
       summaryMessageId: summaryMessage.id,
       tokensBefore,
       tokensAfter,
     };
+  }
+
+  async handleContextOverflow(
+    _error?: unknown
+  ): Promise<OverflowRecoveryResult> {
+    const tokensBefore = this.getEstimatedTokens();
+
+    if (!(this.compactionConfig.enabled || this.pruningConfig.enabled)) {
+      return {
+        success: false,
+        tokensBefore,
+        tokensAfter: tokensBefore,
+        error: "no reduction mechanism available",
+      };
+    }
+
+    const contextLimit = this.compactionConfig.contextLimit;
+
+    const pruneResult = this.tryPruneRecovery(tokensBefore, contextLimit);
+    if (pruneResult) {
+      return pruneResult;
+    }
+
+    const compactResult = await this.tryCompactionRecovery({
+      aggressive: false,
+      contextLimit,
+      tokensBefore,
+    });
+    if (compactResult) {
+      return compactResult;
+    }
+
+    const aggressiveResult = await this.tryCompactionRecovery({
+      aggressive: true,
+      contextLimit,
+      tokensBefore,
+    });
+    if (aggressiveResult) {
+      return aggressiveResult;
+    }
+
+    const truncateResult = this.tryTruncateRecovery(tokensBefore, contextLimit);
+    if (truncateResult) {
+      return truncateResult;
+    }
+
+    const tokensAfter = this.getEstimatedTokens();
+    throw new Error(
+      `Context overflow recovery exhausted all strategies (prune → compact → aggressive-compact → truncate). tokensBefore=${tokensBefore}, tokensAfter=${tokensAfter}, contextLimit=${contextLimit}`
+    );
   }
 
   getCompactionConfig(): Readonly<NormalizedCompactionConfig> {
@@ -325,6 +429,74 @@ export class CheckpointHistory {
       ...this.pruningConfig,
       protectedToolNames: [...this.pruningConfig.protectedToolNames],
     };
+  }
+
+  private resolveContinuationVariant(
+    autoCompact: boolean,
+    replayMessage: CheckpointMessage | null
+  ): ContinuationVariant {
+    if (!autoCompact) {
+      return "manual";
+    }
+
+    return replayMessage ? "auto-with-replay" : "tool-loop";
+  }
+
+  private createReplayMessageCopy(
+    replayMessage: CheckpointMessage | null
+  ): CheckpointMessage | null {
+    if (!replayMessage || typeof replayMessage.message.content !== "string") {
+      return null;
+    }
+
+    return this.createCheckpointMessage(
+      {
+        role: "user",
+        content: replayMessage.message.content,
+      },
+      replayMessage.originalContent
+    );
+  }
+
+  private async persistCompactionMessages(params: {
+    continuationMessage: CheckpointMessage;
+    replayMessageCopy: CheckpointMessage | null;
+    summaryMessage: CheckpointMessage;
+  }): Promise<void> {
+    if (!this.sessionStore) {
+      return;
+    }
+
+    const { continuationMessage, replayMessageCopy, summaryMessage } = params;
+    const summaryLine: MessageLine = {
+      type: "message",
+      id: summaryMessage.id,
+      createdAt: summaryMessage.createdAt,
+      isSummary: true,
+      message: summaryMessage.message,
+    };
+
+    await this.sessionStore.appendMessage(this.sessionId, summaryLine);
+    await this.sessionStore.appendMessage(this.sessionId, {
+      type: "message",
+      id: continuationMessage.id,
+      createdAt: continuationMessage.createdAt,
+      isSummary: continuationMessage.isSummary,
+      originalContent: continuationMessage.originalContent,
+      message: continuationMessage.message,
+    });
+    if (replayMessageCopy) {
+      await this.sessionStore.appendMessage(this.sessionId, {
+        type: "message",
+        id: replayMessageCopy.id,
+        createdAt: replayMessageCopy.createdAt,
+        isSummary: replayMessageCopy.isSummary,
+        originalContent: replayMessageCopy.originalContent,
+        message: replayMessageCopy.message,
+      });
+    }
+
+    await this.sessionStore.updateCheckpoint(this.sessionId, summaryMessage.id);
   }
 
   private getActiveMessages(): CheckpointMessage[] {
@@ -343,6 +515,158 @@ export class CheckpointHistory {
     }
 
     return this.messages.slice(summaryIndex);
+  }
+
+  private resolveCompactionSplitIndex(
+    activeMessages: CheckpointMessage[],
+    forceAggressive: boolean
+  ): number | null {
+    if (forceAggressive) {
+      return activeMessages.length - 1;
+    }
+
+    const defaultSplitIndex = calculateCompactionSplitIndex({
+      adjustSplitIndex: (index) => index,
+      aggressive: false,
+      estimateMessageTokens: (message: CheckpointMessage) =>
+        estimateTokens(extractMessageText(message.message)),
+      keepRecentTokens: this.compactionConfig.keepRecentTokens ?? 2000,
+      messages: activeMessages,
+    });
+    if (defaultSplitIndex !== null) {
+      return defaultSplitIndex;
+    }
+
+    return calculateCompactionSplitIndex({
+      adjustSplitIndex: (index) => index,
+      aggressive: true,
+      estimateMessageTokens: (message: CheckpointMessage) =>
+        estimateTokens(extractMessageText(message.message)),
+      keepRecentTokens: this.compactionConfig.keepRecentTokens ?? 2000,
+      messages: activeMessages,
+    });
+  }
+
+  private didRecoverySucceed(params: {
+    contextLimit: number;
+    tokensAfter: number;
+    tokensBefore: number;
+  }): boolean {
+    const { contextLimit, tokensAfter, tokensBefore } = params;
+    if (tokensAfter >= tokensBefore) {
+      return false;
+    }
+
+    if (contextLimit <= 0) {
+      return true;
+    }
+
+    return tokensAfter < contextLimit;
+  }
+
+  private tryPruneRecovery(
+    tokensBefore: number,
+    contextLimit: number
+  ): OverflowRecoveryResult | null {
+    if (!this.pruningConfig.enabled) {
+      return null;
+    }
+
+    const tokensAfter = this.getEstimatedTokens();
+    if (
+      !this.didRecoverySucceed({
+        contextLimit,
+        tokensAfter,
+        tokensBefore,
+      })
+    ) {
+      return null;
+    }
+
+    return {
+      success: true,
+      strategy: "prune",
+      tokensBefore,
+      tokensAfter,
+    };
+  }
+
+  private async tryCompactionRecovery(params: {
+    aggressive: boolean;
+    contextLimit: number;
+    tokensBefore: number;
+  }): Promise<OverflowRecoveryResult | null> {
+    const { aggressive, contextLimit, tokensBefore } = params;
+    if (!(this.compactionConfig.enabled && this.compactionConfig.summarizeFn)) {
+      return null;
+    }
+    if (aggressive && this.messages.length <= 1) {
+      return null;
+    }
+
+    const result = await this.compact({ auto: true, aggressive });
+    if (!result.success) {
+      return null;
+    }
+
+    const tokensAfter = this.getEstimatedTokens();
+    if (
+      !this.didRecoverySucceed({
+        contextLimit,
+        tokensAfter,
+        tokensBefore,
+      })
+    ) {
+      return null;
+    }
+
+    return {
+      success: true,
+      strategy: aggressive ? "aggressive-compact" : "compact",
+      tokensBefore,
+      tokensAfter,
+    };
+  }
+
+  private tryTruncateRecovery(
+    tokensBefore: number,
+    contextLimit: number
+  ): OverflowRecoveryResult | null {
+    if (contextLimit <= 0) {
+      return null;
+    }
+
+    while (
+      this.getEstimatedTokens() >= contextLimit &&
+      this.messages.length > 1
+    ) {
+      const oldestNonSummaryIdx = this.messages.findIndex(
+        (message) => !message.isSummary
+      );
+      if (oldestNonSummaryIdx === -1) {
+        break;
+      }
+      this.messages.splice(oldestNonSummaryIdx, 1);
+      this.revision += 1;
+    }
+
+    const tokensAfter = this.getEstimatedTokens();
+    if (
+      !this.didRecoverySucceed({
+        contextLimit,
+        tokensAfter,
+        tokensBefore,
+      })
+    ) {
+      return null;
+    }
+
+    return {
+      success: true,
+      strategy: "truncate",
+      tokensBefore,
+      tokensAfter,
+    };
   }
 
   private createCheckpointMessage(

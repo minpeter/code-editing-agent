@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CheckpointHistory } from "./checkpoint-history";
+import {
+  CheckpointHistory,
+  isContextOverflowError,
+} from "./checkpoint-history";
+import { getContinuationText } from "./continuation";
 import { SessionStore } from "./session-store";
 
 describe("CheckpointHistory", () => {
@@ -305,6 +309,108 @@ describe("CheckpointHistory", () => {
       const result = await h.compact();
       expect(result.success).toBe(false);
     });
+
+    describe("with user request replay", () => {
+      it("auto-compact: getMessagesForLLM has [summary, continuation, last_user_request]", async () => {
+        const h = new CheckpointHistory({
+          compaction: {
+            enabled: true,
+            summarizeFn: async () => "Summary of conversation",
+          },
+        });
+
+        h.addUserMessage("initial message");
+        h.addModelMessages([{ role: "assistant", content: "reply" }]);
+        h.addUserMessage("LATEST USER REQUEST");
+
+        await h.compact({ auto: true });
+
+        const llmMsgs = h.getMessagesForLLM();
+        expect(llmMsgs.length).toBeGreaterThanOrEqual(3);
+        expect(llmMsgs[0]?.role).toBe("user");
+        expect(llmMsgs[1]?.role).toBe("assistant");
+        expect(llmMsgs[1]?.content).toBe(
+          getContinuationText("auto-with-replay")
+        );
+
+        const lastIndex = llmMsgs.length - 1;
+        const lastMsg = lastIndex >= 0 ? llmMsgs[lastIndex] : undefined;
+        expect(lastMsg?.role).toBe("user");
+        expect(lastMsg?.content).toBe("LATEST USER REQUEST");
+      });
+
+      it("manual-compact: NO replay, just [summary, continuation]", async () => {
+        const h = new CheckpointHistory({
+          compaction: {
+            enabled: true,
+            summarizeFn: async () => "Summary",
+          },
+        });
+
+        h.addUserMessage("some message");
+        h.addModelMessages([{ role: "assistant", content: "reply" }]);
+        h.addUserMessage("this should NOT be replayed");
+
+        await h.compact({ auto: false });
+
+        const llmMsgs = h.getMessagesForLLM();
+        expect(llmMsgs[0]?.role).toBe("user");
+        expect(llmMsgs[1]?.role).toBe("assistant");
+        expect(llmMsgs[1]?.content).toBe(getContinuationText("manual"));
+
+        const userMsgs = llmMsgs.filter((m) => m.role === "user");
+        expect(userMsgs).toHaveLength(1);
+      });
+
+      it("only text-only user messages are replayed (not tool-content messages)", async () => {
+        const h = new CheckpointHistory({
+          compaction: {
+            enabled: true,
+            summarizeFn: async () => "Summary",
+          },
+        });
+
+        h.addModelMessages([
+          {
+            role: "user",
+            content: [{ type: "text", text: "not plain string" }],
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "1",
+                toolName: "test",
+                input: {},
+              },
+            ],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "1",
+                toolName: "test",
+                output: { type: "text", value: "result" },
+              },
+            ],
+          },
+        ]);
+
+        await h.compact({ auto: true });
+
+        const llmMsgs = h.getMessagesForLLM();
+        expect(llmMsgs[0]?.role).toBe("user");
+        expect(llmMsgs[1]?.role).toBe("assistant");
+        expect(llmMsgs[1]?.content).toBe(getContinuationText("tool-loop"));
+
+        const lastIndex = llmMsgs.length - 1;
+        const lastMsg = lastIndex >= 0 ? llmMsgs[lastIndex] : undefined;
+        expect(lastMsg?.role).not.toBe("user");
+      });
+    });
   });
 
   describe("tool-call/result sequence validation", () => {
@@ -354,6 +460,95 @@ describe("CheckpointHistory", () => {
       const msgs = h.getMessagesForLLM();
       expect(msgs).toHaveLength(1);
       expect(msgs[0]).toEqual({ role: "assistant", content: "next response" });
+    });
+  });
+
+  describe("handleContextOverflow()", () => {
+    it("prune → compact escalation reduces tokens", async () => {
+      const h = new CheckpointHistory({
+        compaction: {
+          enabled: true,
+          maxTokens: 100,
+          summarizeFn: async () => "Brief summary",
+        },
+        pruning: {
+          enabled: true,
+          minSavingsTokens: 1,
+        },
+      });
+
+      for (let i = 0; i < 20; i++) {
+        h.addUserMessage(`This is a fairly long message ${i}`);
+      }
+
+      const tokensBefore = h.getEstimatedTokens();
+      const result = await h.handleContextOverflow();
+
+      expect(result.success).toBe(true);
+      expect(h.getEstimatedTokens()).toBeLessThan(tokensBefore);
+      expect(result.tokensAfter).toBeLessThan(result.tokensBefore);
+    });
+
+    it("returns success=false if no reduction possible (disabled compaction)", async () => {
+      const h = new CheckpointHistory({
+        compaction: { enabled: false },
+        pruning: { enabled: false },
+      });
+      h.addUserMessage("hello");
+
+      const result = await h.handleContextOverflow();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("no reduction mechanism available");
+    });
+
+    it("ensures tokens are below contextLimit after recovery when contextLimit is set", async () => {
+      const h = new CheckpointHistory({
+        compaction: {
+          enabled: true,
+          contextLimit: 40,
+          keepRecentTokens: 0,
+          summarizeFn: async () => "short",
+        },
+        pruning: {
+          enabled: true,
+          minSavingsTokens: 1,
+        },
+      });
+
+      for (let i = 0; i < 12; i++) {
+        h.addUserMessage(`Long user message ${i} with many extra tokens`);
+      }
+
+      const result = await h.handleContextOverflow();
+      expect(result.success).toBe(true);
+      expect(h.getEstimatedTokens()).toBeLessThan(40);
+    });
+
+    it("throws meaningful error if all strategies fail", async () => {
+      const h = new CheckpointHistory({
+        compaction: {
+          enabled: true,
+          contextLimit: 5,
+          summarizeFn: async () => "this summary is still too long to fit",
+        },
+        pruning: { enabled: false },
+      });
+
+      h.addUserMessage("single very long message that cannot be removed");
+
+      await expect(h.handleContextOverflow()).rejects.toThrow(
+        "Context overflow recovery exhausted all strategies"
+      );
+    });
+  });
+
+  describe("isContextOverflowError()", () => {
+    it("detects context length exceeded errors", () => {
+      expect(isContextOverflowError(new Error("context_length_exceeded"))).toBe(
+        true
+      );
+      expect(isContextOverflowError(new Error("network error"))).toBe(false);
+      expect(isContextOverflowError(null)).toBe(false);
     });
   });
 
