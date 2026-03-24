@@ -50,6 +50,7 @@ export {
   DEFAULT_SUMMARIZATION_PROMPT,
   ITERATIVE_SUMMARIZATION_PROMPT,
 } from "./compaction-prompts";
+export type * from "./compaction-types";
 export { runAgentLoop } from "./loop";
 export type {
   ActualTokenUsage,
