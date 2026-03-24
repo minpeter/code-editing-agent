@@ -1,4 +1,4 @@
-import { MessageHistory } from "@ai-sdk-tool/harness";
+import { CheckpointHistory } from "@ai-sdk-tool/harness";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   TranslationAgentManager,
@@ -73,7 +73,7 @@ const createAgentManagerStub = (): TranslationAgentManager => {
 };
 
 const runPipeline = async (input: string, translationEnabled: boolean) => {
-  const history = new MessageHistory();
+  const history = new CheckpointHistory();
 
   const translatedResult = translationEnabled
     ? await translateToEnglish(input, createAgentManagerStub())

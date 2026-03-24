@@ -1,10 +1,13 @@
 import {
-  computeSpeculativeStartRatio,
+  CheckpointHistory,
   type createModelSummarizer,
-  MessageHistory,
 } from "@ai-sdk-tool/harness";
 import { beforeEach, describe, expect, it } from "vitest";
-import { agentManager, selectTranslationReasoningMode } from "./agent";
+import {
+  agentManager,
+  computeSpeculativeStartRatio,
+  selectTranslationReasoningMode,
+} from "./agent";
 
 describe("AgentManager translation state", () => {
   beforeEach(() => {
@@ -76,13 +79,13 @@ describe("AgentManager compaction config", () => {
 
     const compaction = agentManager.buildCompactionConfig();
     const contextLength = agentManager.getModelTokenLimits().contextLength;
-    const history = new MessageHistory({ compaction });
+    const history = new CheckpointHistory({ compaction });
     history.setContextLimit(contextLength);
     history.addUserMessage("hello");
 
     const expectedRatio = computeSpeculativeStartRatio(
       contextLength,
-      compaction.reserveTokens
+      compaction.reserveTokens ?? 0
     );
 
     expect(compaction.maxTokens).toBe(20_480);
@@ -92,7 +95,12 @@ describe("AgentManager compaction config", () => {
     expect(compaction.speculativeStartRatio).toBe(expectedRatio);
     expect(expectedRatio).toBeCloseTo(0.7, 2);
 
-    history.updateActualUsage({ totalTokens: 16_000 });
+    history.updateActualUsage({
+      totalTokens: 16_000,
+      promptTokens: 16_000,
+      completionTokens: 0,
+      updatedAt: new Date(),
+    });
     expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
     expect(history.needsCompaction()).toBe(false);
   });

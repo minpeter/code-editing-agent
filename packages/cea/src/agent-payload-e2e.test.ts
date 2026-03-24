@@ -27,8 +27,9 @@ vi.mock("ai", async () => {
   };
 });
 
-const { MessageHistory } = await import("@ai-sdk-tool/harness");
+const { CheckpointHistory } = await import("@ai-sdk-tool/harness");
 const { AgentManager } = await import("./agent");
+type CheckpointHistoryInstance = InstanceType<typeof CheckpointHistory>;
 
 function getLast<T>(values: T[]): T | null {
   return values.length > 0 ? ([...values].pop() ?? null) : null;
@@ -38,9 +39,7 @@ const createFriendliStub = () => {
   return ((modelId: string) => ({ modelId })) as never;
 };
 
-async function capturePayloadFromHistory(
-  history: InstanceType<typeof MessageHistory>
-) {
+async function capturePayloadFromHistory(history: CheckpointHistoryInstance) {
   const manager = new AgentManager(createFriendliStub(), null);
   manager.setProvider("friendli");
   manager.setModelId("MiniMaxAI/MiniMax-M2.5");
@@ -58,7 +57,7 @@ describe("AgentManager Friendli payload E2E", () => {
   });
 
   it("sends compacted MiniMax payload with valid message content shapes", async () => {
-    const history = new MessageHistory({
+    const history = new CheckpointHistory({
       compaction: {
         enabled: true,
         maxTokens: 16,
@@ -88,7 +87,7 @@ describe("AgentManager Friendli payload E2E", () => {
 
     const messages = (payload?.messages ?? []) as ModelMessage[];
     expect(messages.length).toBeGreaterThan(0);
-    expect(messages[0]?.role).toBe("system");
+    expect(messages[0]?.role).toBe("user");
 
     for (const message of messages) {
       expect(
@@ -101,7 +100,7 @@ describe("AgentManager Friendli payload E2E", () => {
   });
 
   it("preserves a valid assistant-tool pair in the final payload under zero-budget truncation", async () => {
-    const history = new MessageHistory({
+    const history = new CheckpointHistory({
       compaction: {
         enabled: true,
         maxTokens: 100,
@@ -142,6 +141,7 @@ describe("AgentManager Friendli payload E2E", () => {
     const messages = (payload?.messages ?? []) as ModelMessage[];
 
     expect(messages.map((message) => message.role)).toEqual([
+      "user",
       "assistant",
       "tool",
     ]);

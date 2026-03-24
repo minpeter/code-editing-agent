@@ -7,11 +7,6 @@ import {
   CompactionOrchestrator,
   type ContextUsage,
   estimateTokens,
-  extractMessageText,
-  getRecommendedMaxOutputTokens,
-  isAtHardContextLimitFromUsage,
-  type MessageHistory as LegacyMessageHistory,
-  type ModelMessage,
   parseCommand,
   type RunnableAgent,
   SessionManager,
@@ -115,221 +110,50 @@ const formatContextUsage = (contextUsage: ContextUsage): string => {
   return `${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
 };
 
-type CompactionPhase = "intermediate-step" | "new-turn";
+type SessionScopedHistory = CheckpointHistory & {
+  setSession: (sessionId: string) => void;
+};
 
-interface RuntimeCompactionConfig {
-  contextLimit?: number;
-  enabled?: boolean;
-  keepRecentTokens?: number;
-  maxTokens?: number;
-  reserveTokens?: number;
-  speculativeStartRatio?: number;
-  summarizeFn?: (
-    messages: ModelMessage[],
-    previousSummary?: string
-  ) => Promise<string>;
-}
+const createSessionScopedCheckpointHistory = (
+  sessionBaseDir: string,
+  initialSessionId: string
+): SessionScopedHistory => {
+  mkdirSync(sessionBaseDir, { recursive: true });
+  const sessionStore = new SessionStore(sessionBaseDir);
+  let history = new CheckpointHistory({
+    sessionId: initialSessionId,
+    sessionStore,
+  });
 
-interface RuntimeUsage {
-  completionTokens?: number;
-  inputTokens?: number;
-  outputTokens?: number;
-  promptTokens?: number;
-  totalTokens?: number;
-}
+  const setSession = (sessionId: string): void => {
+    const compaction = history.getCompactionConfig();
+    const pruning = history.getPruningConfig();
+    const systemPromptTokens = history.getSystemPromptTokens();
 
-class SessionScopedCheckpointHistory {
-  private actualUsage: {
-    completionTokens: number;
-    promptTokens: number;
-    totalTokens: number;
-  } | null = null;
-  private compactionConfig: RuntimeCompactionConfig = {};
-  private history: CheckpointHistory;
-  private sessionId: string;
-  private readonly sessionBaseDir: string;
-  private sessionStore: SessionStore;
-  private systemPromptTokens = 0;
-
-  constructor(sessionBaseDir: string, sessionId: string) {
-    this.sessionBaseDir = sessionBaseDir;
-    this.sessionId = sessionId;
-    mkdirSync(this.sessionBaseDir, { recursive: true });
-    this.sessionStore = new SessionStore(this.sessionBaseDir);
-    this.history = this.createHistory();
-  }
-
-  private createHistory(): CheckpointHistory {
-    return new CheckpointHistory({
-      sessionId: this.sessionId,
-      sessionStore: this.sessionStore,
-      compaction: { ...this.compactionConfig },
+    history = new CheckpointHistory({
+      sessionId,
+      sessionStore,
+      compaction,
+      pruning,
     });
-  }
+    history.setSystemPromptTokens(systemPromptTokens);
+  };
 
-  private resetUsage(): void {
-    this.actualUsage = null;
-  }
-
-  private getEffectiveReserveTokens(
-    phase: CompactionPhase = "new-turn"
-  ): number {
-    const reserveTokens = Math.max(
-      0,
-      this.getCompactionConfig().reserveTokens ?? 0
-    );
-    return phase === "intermediate-step" ? reserveTokens * 2 : reserveTokens;
-  }
-
-  setSession(sessionId: string): void {
-    this.sessionId = sessionId;
-    this.sessionStore = new SessionStore(this.sessionBaseDir);
-    this.history = this.createHistory();
-    this.resetUsage();
-  }
-
-  clear(): void {
-    this.history = this.createHistory();
-    this.resetUsage();
-  }
-
-  updateCompaction(config: RuntimeCompactionConfig): void {
-    this.compactionConfig = {
-      ...this.compactionConfig,
-      ...config,
-    };
-    Object.assign(
-      this.history as unknown as { compactionConfig: RuntimeCompactionConfig },
-      {
-        compactionConfig: {
-          ...(this.history.getCompactionConfig() as RuntimeCompactionConfig),
-          ...this.compactionConfig,
-        },
+  return new Proxy({ setSession } as SessionScopedHistory, {
+    get: (target, property, receiver) => {
+      if (property in target) {
+        return Reflect.get(target, property, receiver);
       }
-    );
-    this.resetUsage();
-  }
 
-  setSystemPromptTokens(tokens: number): void {
-    this.systemPromptTokens = Math.max(0, tokens);
-  }
-
-  addUserMessage(content: string, originalContent?: string) {
-    this.resetUsage();
-    return this.history.addUserMessage(content, originalContent);
-  }
-
-  addModelMessages(messages: ModelMessage[]) {
-    this.resetUsage();
-    return this.history.addModelMessages(messages);
-  }
-
-  toModelMessages(): ModelMessage[] {
-    return this.history.toModelMessages();
-  }
-
-  getMessagesForLLM(): ModelMessage[] {
-    return this.history.getMessagesForLLM();
-  }
-
-  getEstimatedTokens(): number {
-    return this.history.getEstimatedTokens();
-  }
-
-  getRevision(): number {
-    return this.history.getRevision();
-  }
-
-  getCompactionConfig(): Readonly<RuntimeCompactionConfig> {
-    return this.history.getCompactionConfig();
-  }
-
-  updateActualUsage(usage: RuntimeUsage): void {
-    const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
-    const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
-    const totalTokens = usage.totalTokens ?? promptTokens + completionTokens;
-
-    this.actualUsage = {
-      promptTokens,
-      completionTokens,
-      totalTokens,
-    };
-  }
-
-  getContextUsage(): ContextUsage | null {
-    const limit = this.getCompactionConfig().contextLimit ?? 0;
-    if (limit <= 0) {
-      return null;
-    }
-
-    const used = this.actualUsage?.totalTokens ?? this.getEstimatedTokens();
-    return {
-      limit,
-      percentage: Math.min(100, Math.round((used / limit) * 100)),
-      remaining: Math.max(0, limit - used),
-      source: this.actualUsage ? "actual" : "estimated",
-      used,
-    };
-  }
-
-  getRecommendedMaxOutputTokens(
-    messagesForLLM?: ModelMessage[]
-  ): number | undefined {
-    const contextLimit = this.getCompactionConfig().contextLimit ?? 0;
-    if (contextLimit <= 0) {
-      return undefined;
-    }
-
-    const activeMessages = messagesForLLM ?? this.getMessagesForLLM();
-    const estimatedInputTokens =
-      this.systemPromptTokens +
-      activeMessages.reduce(
-        (total, message) => total + estimateTokens(extractMessageText(message)),
-        0
+      const value = Reflect.get(
+        history as unknown as object,
+        property,
+        history as unknown as object
       );
-
-    return getRecommendedMaxOutputTokens({
-      contextLimit,
-      estimatedInputTokens,
-      reserveTokens: this.getEffectiveReserveTokens(),
-    });
-  }
-
-  isAtHardContextLimit(
-    additionalTokens = 0,
-    options?: { phase: CompactionPhase }
-  ): boolean {
-    const contextLimit = this.getCompactionConfig().contextLimit ?? 0;
-    if (contextLimit <= 0) {
-      return false;
-    }
-
-    return isAtHardContextLimitFromUsage({
-      additionalTokens,
-      contextLimit,
-      currentUsageTokens:
-        this.actualUsage?.totalTokens ?? this.getEstimatedTokens(),
-      enabled: Boolean(this.getCompactionConfig().enabled),
-      reserveTokens: this.getEffectiveReserveTokens(options?.phase),
-    });
-  }
-
-  async compact(options?: { aggressive?: boolean; auto?: boolean }) {
-    const result = await this.history.compact(options);
-    if (result.success) {
-      this.resetUsage();
-    }
-    return result;
-  }
-
-  async handleContextOverflow(error?: unknown) {
-    const result = await this.history.handleContextOverflow(error);
-    if (result.success) {
-      this.resetUsage();
-    }
-    return result;
-  }
-}
+      return typeof value === "function" ? value.bind(history) : value;
+    },
+  });
+};
 
 const buildCurrentIndicatorLabel = (
   label: string,
@@ -401,7 +225,7 @@ if (!sessionManagerScope.__ceaSessionManager) {
 }
 const sessionManager = sessionManagerScope.__ceaSessionManager;
 const sessionStoreBaseDir = join(process.cwd(), ".plugsuits", "sessions");
-const messageHistory = new SessionScopedCheckpointHistory(
+const messageHistory = createSessionScopedCheckpointHistory(
   sessionStoreBaseDir,
   "session-bootstrap"
 );
@@ -701,7 +525,7 @@ const mainCommand = defineCommand({
             originalContent: preparedPrompt.originalText,
           },
           maxIterations,
-          messageHistory: messageHistory as unknown as LegacyMessageHistory,
+          messageHistory,
           modelId: agentManager.getModelId(),
           onTodoReminder: async () => {
             const incompleteTodos = await getIncompleteTodos();

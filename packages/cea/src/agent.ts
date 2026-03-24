@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ProviderOptions as AiProviderOptions } from "@ai-sdk/provider-utils";
 import {
-  computeSpeculativeStartRatio,
+  type CompactionConfig,
   createAgent,
   createModelSummarizer,
   type AgentStreamOptions as HarnessAgentStreamOptions,
@@ -52,19 +52,6 @@ const DEFAULT_CONTEXT_LENGTH = 200_000;
 const TRANSLATION_MAX_OUTPUT_TOKENS = 4000;
 
 type ProviderOptions = AiProviderOptions | undefined;
-
-interface RuntimeCompactionConfig {
-  contextLimit?: number;
-  enabled?: boolean;
-  keepRecentTokens?: number;
-  maxTokens?: number;
-  reserveTokens?: number;
-  speculativeStartRatio?: number;
-  summarizeFn?: (
-    messages: ModelMessage[],
-    previousSummary?: string
-  ) => Promise<string>;
-}
 
 export type AgentStreamOptions = Pick<
   HarnessAgentStreamOptions,
@@ -406,14 +393,9 @@ export class AgentManager {
     };
   }
 
-  /**
-   * Build a CompactionConfig suitable for the current model's token limits.
-   * Callers (CLI/headless) should apply this to their MessageHistory
-   * whenever the model changes.
-   */
   buildCompactionConfig(
-    overrides?: Partial<RuntimeCompactionConfig>
-  ): RuntimeCompactionConfig {
+    overrides?: Partial<CompactionConfig>
+  ): CompactionConfig {
     const contextLength = getModelContextLength(this.modelId, this.provider);
     const compactionReserveTokens = getCompactionReserveTokens(
       this.modelId,
@@ -671,3 +653,16 @@ export function createAgentManager(options?: {
 }
 
 export const agentManager = createAgentManager();
+export const computeSpeculativeStartRatio = (
+  contextLength: number,
+  reserveTokens: number
+): number => {
+  if (!(contextLength > 0)) {
+    return 0.7;
+  }
+
+  return Math.max(
+    0.15,
+    Math.min(0.95, 1 - (Math.max(0, reserveTokens) * 3) / contextLength)
+  );
+};
