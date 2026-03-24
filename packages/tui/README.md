@@ -19,7 +19,7 @@ pnpm add @ai-sdk-tool/harness ai
 ## Quick Start
 
 ```typescript
-import { createAgent, MessageHistory } from "@ai-sdk-tool/harness";
+import { createAgent, CheckpointHistory } from "@ai-sdk-tool/harness";
 import { createAgentTUI } from "@ai-sdk-tool/tui";
 import { openai } from "@ai-sdk/openai";
 
@@ -28,7 +28,7 @@ const agent = createAgent({
   instructions: "You are a helpful assistant.",
 });
 
-const messageHistory = new MessageHistory();
+const messageHistory = new CheckpointHistory();
 
 // Starts a full interactive terminal session.
 // Blocks until the user exits (Ctrl+C twice).
@@ -55,7 +55,7 @@ import { createAgentTUI, type AgentTUIConfig } from "@ai-sdk-tool/tui";
 
 await createAgentTUI({
   agent,           // required — { stream(messages, opts?): Promise<AgentStreamResult> }
-  messageHistory,  // required — MessageHistory from @ai-sdk-tool/harness
+  messageHistory,  // required — CheckpointHistory from @ai-sdk-tool/harness
   header,          // optional — { title: string; subtitle?: string }
   footer,          // optional — { text?: string }
   commands,        // optional — Command[] (defaults to all registered commands)
@@ -71,7 +71,7 @@ await createAgentTUI({
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `agent` | `{ stream(...) }` | yes | Agent with a `stream` method compatible with `AgentStreamResult` |
-| `messageHistory` | `MessageHistory` | yes | Conversation history — the TUI reads and writes to this |
+| `messageHistory` | `CheckpointHistory` | yes | Conversation history — the TUI reads and writes to this |
 | `header` | `{ title, subtitle? }` | no | Text shown at the top of the terminal |
 | `footer` | `{ text? }` | no | Text shown below the input editor |
 | `commands` | `Command[]` | no | Slash commands available in the editor; defaults to all registered commands |

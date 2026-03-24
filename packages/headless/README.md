@@ -19,14 +19,14 @@ pnpm add @ai-sdk-tool/harness ai
 ## Quick Start
 
 ```typescript
-import { createAgent, MessageHistory, SessionManager } from "@ai-sdk-tool/harness";
+import { createAgent, CheckpointHistory, SessionManager } from "@ai-sdk-tool/harness";
 import { runHeadless, registerSignalHandlers } from "@ai-sdk-tool/headless";
 import { openai } from "@ai-sdk/openai";
 
 const session = new SessionManager();
 const sessionId = session.initialize();
 
-const messageHistory = new MessageHistory();
+const messageHistory = new CheckpointHistory();
 const agent = createAgent({
   model: openai("gpt-4o"),
   instructions: "You are a helpful assistant.",
@@ -71,7 +71,7 @@ import { runHeadless } from "@ai-sdk-tool/headless";
 await runHeadless({
   sessionId,       // string — unique session ID stamped on every event
   stream,          // (messages: unknown[]) => Promise<AgentStreamResult>
-  messageHistory,  // MessageHistory from @ai-sdk-tool/harness
+  messageHistory,  // CheckpointHistory from @ai-sdk-tool/harness
   getModelId,      // () => string — current model ID for event metadata
   maxIterations,   // optional number — safety cap on loop iterations
   emitEvent,       // optional (event: TrajectoryEvent) => void — defaults to stdout JSONL
@@ -85,7 +85,7 @@ await runHeadless({
 |-------|------|----------|-------------|
 | `sessionId` | `string` | yes | Unique ID stamped on every emitted event |
 | `stream` | `(messages) => Promise<AgentStreamResult>` | yes | Agent stream function |
-| `messageHistory` | `MessageHistory` | yes | Conversation history — read and written during the loop |
+| `messageHistory` | `CheckpointHistory` | yes | Conversation history — read and written during the loop |
 | `getModelId` | `() => string` | yes | Returns the current model ID for `tool_call` and `assistant` events |
 | `maxIterations` | `number` | no | Total iteration budget across the entire headless run, including TODO reminder turns; emits an `error` event and stops if exceeded |
 | `emitEvent` | `(event) => void` | no | Custom event sink; defaults to `console.log(JSON.stringify(event))` |

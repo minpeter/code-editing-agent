@@ -13,7 +13,7 @@
 plugsuits/
 |- packages/
 |  |- harness/          @ai-sdk-tool/harness — core loop, session, skills, TODO, commands
-|  |  `- src/           Agent, MessageHistory, SessionManager, SkillsEngine, TodoContinuation
+|  |  `- src/           Agent, CheckpointHistory, SessionManager, SkillsEngine, TodoContinuation
 |  |- tui/              @ai-sdk-tool/tui — terminal UI components
 |  |  |- src/           createAgentTUI, AssistantStreamView, BaseToolCallView, Spinner, colors
 |  |  `- AGENTS.md      TUI package conventions
@@ -38,7 +38,7 @@ plugsuits/
 | Headless JSONL runner | `packages/headless/src/runner.ts` | `runHeadless` — event-streaming loop |
 | Core agent loop | `packages/harness/src/loop.ts` | `runAgentLoop` — model-agnostic iteration |
 | Agent factory | `packages/harness/src/agent.ts` | `createAgent` — wraps Vercel AI SDK `streamText` |
-| Message history | `packages/harness/src/message-history.ts` | `MessageHistory` — compaction + limit enforcement |
+| Message history | `packages/harness/src/checkpoint-history.ts` | `CheckpointHistory` — compaction + checkpointing |
 | Session management | `packages/harness/src/session.ts` | `SessionManager` — UUID-based session IDs |
 | Skills loading | `packages/harness/src/skills.ts` | `SkillsEngine` — bundled/global/project skill discovery |
 | TODO continuation | `packages/harness/src/todo-continuation.ts` | `TodoContinuation` — incomplete-task reminder loop |
@@ -59,7 +59,7 @@ plugsuits/
 | `runHeadless` | function | `packages/headless/src/runner.ts` | JSONL event-streaming loop with optional TODO continuation |
 | `runAgentLoop` | function | `packages/harness/src/loop.ts` | Model-agnostic agent iteration loop |
 | `createAgent` | function | `packages/harness/src/agent.ts` | Wraps Vercel AI SDK `streamText` into an `Agent` |
-| `MessageHistory` | class | `packages/harness/src/message-history.ts` | Conversation history with compaction and limit enforcement |
+| `CheckpointHistory` | class | `packages/harness/src/checkpoint-history.ts` | Conversation history with compaction and checkpointing |
 | `SessionManager` | class | `packages/harness/src/session.ts` | UUID-based session ID lifecycle |
 | `SkillsEngine` | class | `packages/harness/src/skills.ts` | Discovers and loads skills from bundled/global/project dirs |
 | `TodoContinuation` | class | `packages/harness/src/todo-continuation.ts` | Reads todo files and generates reminder messages |

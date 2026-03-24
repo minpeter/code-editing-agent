@@ -209,20 +209,6 @@ interface CompactionHistoryLike {
   shouldStartSpeculativeCompactionForNextTurn?: () => boolean;
 }
 
-interface LegacyCompactionHistoryLike extends CompactionHistoryLike {
-  applyPreparedCompaction: (prepared: PreparedCompaction) => {
-    applied: boolean;
-    reason: "applied" | "noop" | "stale" | "rejected";
-  };
-  isAtHardContextLimit: (
-    additionalTokens: number,
-    options: { phase: CompactionPhase }
-  ) => boolean;
-  prepareSpeculativeCompaction: (options: {
-    phase: CompactionPhase;
-  }) => Promise<PreparedCompaction | null>;
-}
-
 interface SpeculativeMeta {
   completedRevision: number;
   error?: unknown;
@@ -247,21 +233,6 @@ function isHistoryLike(value: unknown): value is CompactionHistoryLike {
     typeof candidate.compact === "function" &&
     typeof candidate.getCompactionConfig === "function" &&
     typeof candidate.getEstimatedTokens === "function"
-  );
-}
-
-function isLegacyHistoryLike(
-  value: unknown
-): value is LegacyCompactionHistoryLike {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.prepareSpeculativeCompaction === "function" &&
-    typeof candidate.applyPreparedCompaction === "function" &&
-    typeof candidate.isAtHardContextLimit === "function"
   );
 }
 
@@ -439,11 +410,6 @@ export class CompactionOrchestrator {
       return;
     }
 
-    if (isLegacyHistoryLike(resolvedHistory)) {
-      this.startSpeculativeLegacy(resolvedHistory);
-      return;
-    }
-
     if (!this.shouldStartSpeculative(history)) {
       return;
     }
@@ -499,10 +465,6 @@ export class CompactionOrchestrator {
       return { applied: false, stale: false };
     }
 
-    if (isLegacyHistoryLike(resolvedHistory)) {
-      return this.applyReadyLegacy(resolvedHistory);
-    }
-
     for (let index = this.jobs.length - 1; index >= 0; index -= 1) {
       const job = this.jobs[index];
       if (job.discarded || job.state === "running") {
@@ -554,9 +516,7 @@ export class CompactionOrchestrator {
     additionalTokensOrPhase: number | CompactionPhase,
     maybePhase?: CompactionPhase
   ): Promise<boolean> {
-    const hasHistoryArg =
-      isHistoryLike(historyOrAdditionalTokens) ||
-      isLegacyHistoryLike(historyOrAdditionalTokens);
+    const hasHistoryArg = isHistoryLike(historyOrAdditionalTokens);
     const history = this.resolveHistory(
       hasHistoryArg ? historyOrAdditionalTokens : undefined
     );
@@ -570,39 +530,6 @@ export class CompactionOrchestrator {
     const phase = (
       hasHistoryArg ? maybePhase : additionalTokensOrPhase
     ) as CompactionPhase;
-
-    if (isLegacyHistoryLike(history)) {
-      const legacyBlocking = history.isAtHardContextLimit(additionalTokens, {
-        phase,
-      });
-      if (!legacyBlocking) {
-        return false;
-      }
-
-      this.callbacks.onBlockingChange?.(true);
-      try {
-        await blockAtHardLimitCore({
-          additionalTokens,
-          phase,
-          isAtHardContextLimit: (tokens, options) =>
-            history.isAtHardContextLimit(tokens, options),
-          getLatestRunningSpeculativeCompaction: () =>
-            this.getLatestRunningSpeculativeCompaction(),
-          prepareSpeculativeCompaction: (attemptPhase) =>
-            history.prepareSpeculativeCompaction({ phase: attemptPhase }),
-          applyPreparedCompaction: (prepared) =>
-            this.applyPreparedCompactionLegacy(history, prepared),
-          applyReadyCompaction: () => this.applyReadyLegacy(history),
-          warnHardLimitStillExceeded: () => {
-            this.callbacks.onStillExceeded?.();
-          },
-        });
-      } finally {
-        this.callbacks.onBlockingChange?.(false);
-      }
-
-      return true;
-    }
 
     const blocking = this.isAtHardLimit(history, additionalTokens, phase);
     if (!blocking) {
@@ -638,10 +565,7 @@ export class CompactionOrchestrator {
       return Promise.resolve(false);
     }
 
-    if (
-      isHistoryLike(historyOrContent) ||
-      isLegacyHistoryLike(historyOrContent)
-    ) {
+    if (isHistoryLike(historyOrContent)) {
       return this.blockAtHardLimit(
         historyOrContent,
         estimateTokens(content),
@@ -653,10 +577,7 @@ export class CompactionOrchestrator {
   }
 
   private resolveHistory(explicit?: unknown): CompactionHistoryLike | null {
-    if (
-      explicit &&
-      (isHistoryLike(explicit) || isLegacyHistoryLike(explicit))
-    ) {
+    if (explicit && isHistoryLike(explicit)) {
       return explicit as CompactionHistoryLike;
     }
 
@@ -767,97 +688,6 @@ export class CompactionOrchestrator {
     } finally {
       this.compactionInProgress = false;
     }
-  }
-
-  private applyReadyLegacy(history: LegacyCompactionHistoryLike): {
-    applied: boolean;
-    stale: boolean;
-  } {
-    return applyReadyCompactionCore({
-      jobs: this.jobs,
-      applyPreparedCompaction: (prepared) =>
-        this.applyPreparedCompactionLegacy(history, prepared),
-      discardJob: (job) => {
-        this.discardJob(job);
-      },
-      discardAllJobs: () => {
-        this.discardAll();
-      },
-      onStale: () => {
-        this.startSpeculativeLegacy(history);
-      },
-    });
-  }
-
-  private startSpeculativeLegacy(history: LegacyCompactionHistoryLike): void {
-    this.applyReadyLegacy(history);
-    if (
-      this.jobs.some(
-        (job) =>
-          !job.discarded &&
-          (job.state === "running" || job.state === "completed")
-      )
-    ) {
-      return;
-    }
-
-    if (!history.shouldStartSpeculativeCompactionForNextTurn?.()) {
-      return;
-    }
-
-    const job: SpeculativeCompactionJob = {
-      discarded: false,
-      id: `background-compaction-${++this.jobCounter}`,
-      phase: "new-turn",
-      prepared: null,
-      promise: Promise.resolve(),
-      state: "running",
-    };
-
-    this.callbacks.onJobStatus?.(job.id, "Compacting...", "running");
-
-    job.promise = (async () => {
-      try {
-        job.prepared = await history.prepareSpeculativeCompaction({
-          phase: "new-turn",
-        });
-        job.state = "completed";
-
-        if (!job.discarded) {
-          this.callbacks.onJobStatus?.(job.id, "", "clear");
-        }
-      } catch (error) {
-        job.state = "failed";
-        this.callbacks.onJobStatus?.(job.id, "", "clear");
-        this.reportError("Speculative compaction failed", error);
-      }
-    })();
-
-    this.jobs.push(job);
-  }
-
-  private applyPreparedCompactionLegacy(
-    history: LegacyCompactionHistoryLike,
-    prepared: PreparedCompaction
-  ): { applied: boolean; reason: "applied" | "noop" | "stale" | "rejected" } {
-    const result = history.applyPreparedCompaction(prepared);
-
-    if (result.reason === "applied") {
-      const newMessageCount = (prepared.segments ?? []).reduce(
-        (count, segment) => count + segment.messages.length,
-        0
-      );
-      this.callbacks.onApplied?.({
-        baseMessageCount: prepared.baseMessageIds?.length ?? 0,
-        newMessageCount,
-        phase: prepared.phase ?? "new-turn",
-        tokenDelta: prepared.tokenDelta ?? 0,
-      });
-    } else if (result.reason === "rejected") {
-      this.callbacks.onRejected?.();
-    }
-
-    return result;
   }
 
   private emitCompactionResult(

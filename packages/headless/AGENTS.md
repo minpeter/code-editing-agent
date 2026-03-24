@@ -7,7 +7,7 @@ Source: `packages/headless/src/`
 
 This package provides a non-interactive, JSONL event-streaming runtime for agent sessions. Instead of rendering to a terminal, it writes structured events to stdout — one JSON object per line. This makes it suitable for CI/CD pipelines, benchmarks, and any programmatic consumer that needs a machine-readable transcript.
 
-The package depends on `@ai-sdk-tool/harness` for `MessageHistory`, `AgentStreamResult`, and `shouldContinueManualToolLoop`. The agent itself is passed in as a config parameter.
+The package depends on `@ai-sdk-tool/harness` for `CheckpointHistory`, `AgentStreamResult`, and `shouldContinueManualToolLoop`. The agent itself is passed in as a config parameter.
 
 ## JSONL EVENT PROTOCOL
 
@@ -44,7 +44,7 @@ import { runHeadless } from "@ai-sdk-tool/headless";
 await runHeadless({
   sessionId,       // string — unique session identifier
   stream,          // (messages: unknown[]) => Promise<AgentStreamResult>
-  messageHistory,  // MessageHistory from @ai-sdk-tool/harness
+  messageHistory,  // CheckpointHistory from @ai-sdk-tool/harness
   getModelId,      // () => string — current model ID for event metadata
   maxIterations,   // number — optional safety cap on loop iterations
   emitEvent,       // (event: TrajectoryEvent) => void — optional, defaults to stdout JSONL
@@ -58,7 +58,7 @@ await runHeadless({
 |-------|------|----------|-------------|
 | `sessionId` | `string` | yes | Unique ID stamped on every event |
 | `stream` | `(messages) => Promise<AgentStreamResult>` | yes | Agent stream function |
-| `messageHistory` | `MessageHistory` | yes | Conversation history instance |
+| `messageHistory` | `CheckpointHistory` | yes | Conversation history instance |
 | `getModelId` | `() => string` | yes | Returns current model ID |
 | `maxIterations` | `number` | no | Total iteration budget across the entire headless run, including TODO reminder turns, before emitting an error event |
 | `emitEvent` | `(event) => void` | no | Custom event sink; defaults to `console.log(JSON.stringify(event))` |
@@ -131,13 +131,13 @@ import type {
 ### Minimal headless run
 
 ```typescript
-import { createAgent, MessageHistory, SessionManager } from "@ai-sdk-tool/harness";
+import { createAgent, CheckpointHistory, SessionManager } from "@ai-sdk-tool/harness";
 import { runHeadless, registerSignalHandlers } from "@ai-sdk-tool/headless";
 import { openai } from "@ai-sdk/openai";
 
 const session = new SessionManager();
 const sessionId = session.initialize();
-const messageHistory = new MessageHistory();
+const messageHistory = new CheckpointHistory();
 const agent = createAgent({ model: openai("gpt-4o"), instructions: "..." });
 
 registerSignalHandlers({

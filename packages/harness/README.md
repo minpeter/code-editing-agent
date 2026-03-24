@@ -19,7 +19,7 @@ pnpm add ai zod
 ## Quick Start
 
 ```typescript
-import { createAgent, runAgentLoop, MessageHistory } from "@ai-sdk-tool/harness";
+import { createAgent, runAgentLoop, CheckpointHistory } from "@ai-sdk-tool/harness";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { tool } from "ai";
@@ -107,39 +107,24 @@ interface RunAgentLoopResult {
 
 ---
 
-### `MessageHistory`
+### `CheckpointHistory`
 
 Manages conversation history with configurable limits, compaction, and automatic cleanup of invalid message sequences.
 
 ```typescript
-import { MessageHistory } from "@ai-sdk-tool/harness";
+import { CheckpointHistory } from "@ai-sdk-tool/harness";
 
-const history = new MessageHistory({
-  maxMessages: 50,          // Max messages to keep (default: 1000)
+const history = new CheckpointHistory({
   compaction: {
     enabled: true,
     summarizeFn: async (messages) => "Summary of earlier conversation...",
     speculativeStartRatio: 0.8,
   },
 });
-
-// Add messages
-history.addUserMessage("Hello!");
-history.addModelMessages(responseMessages);
-
-// Get messages for the next API call
-const messages = history.getMessagesForLLM();
-
-// Optional explicit compaction APIs
-const prepared = await history.prepareSpeculativeCompaction({ phase: "new-turn" });
-if (prepared) {
-  history.applyPreparedCompaction(prepared);
-}
-await history.compact();
 ```
 
 **Key behaviors:**
-- `addUserMessage()` and `addModelMessages()` enforce `maxMessages` automatically
+- `addUserMessage()` and `addModelMessages()` manage history state
 - `getMessagesForLLM()` returns summary-prefixed messages suitable for the next model call
 - `prepareSpeculativeCompaction()`, `applyPreparedCompaction()`, and `compact()` are the supported compaction entrypoints
 - invalid tool-call/tool-result sequences are cleaned up automatically during trimming and compaction
@@ -369,7 +354,7 @@ const normalized = normalizeFinishReason("tool_calls"); // => "tool-calls"
 
 ### Compaction prompts
 
-Built-in summarization prompts for `MessageHistory` compaction.
+Built-in summarization prompts for `CheckpointHistory` compaction.
 
 ```typescript
 import {
@@ -383,8 +368,7 @@ const summarize = createModelSummarizer({
   prompt: DEFAULT_SUMMARIZATION_PROMPT,
 });
 
-const history = new MessageHistory({
-  maxMessages: 100,
+const history = new CheckpointHistory({
   compaction: {
     enabled: true,
     speculativeStartRatio: 0.8,
@@ -415,11 +399,11 @@ import type {
   Tool,
   ToolCallPart,
   ToolSet,
-  // MessageHistory types:
+  // CheckpointHistory types:
   CompactionConfig,
   CompactionSummary,
   Message,
-  MessageHistoryOptions,
+  CheckpointHistoryOptions,
   // Session:
   // (SessionManager is a class, not a type)
   // Skills:
@@ -463,8 +447,7 @@ const agent = createAgent({
 ### Compacting long conversations
 
 ```typescript
-const history = new MessageHistory({
-  maxMessages: 100,
+const history = new CheckpointHistory({
   compaction: {
     enabled: true,
     speculativeStartRatio: 0.8,
@@ -475,15 +458,7 @@ const history = new MessageHistory({
     },
   },
 });
-
-const prepared = await history.prepareSpeculativeCompaction({
-  phase: "new-turn",
-});
-
-if (prepared) {
-  history.applyPreparedCompaction(prepared);
-}
-```
+```,oldString:
 
 ### Abort signal for cancellation
 
@@ -505,7 +480,7 @@ const result = await runAgentLoop({
 ```typescript
 import {
   createAgent,
-  MessageHistory,
+  CheckpointHistory,
   SessionManager,
   SkillsEngine,
   TodoContinuation,
@@ -523,7 +498,7 @@ const paths = createAgentPaths({
 const session = new SessionManager("my-agent");
 const sessionId = session.initialize();
 
-const history = new MessageHistory({ maxMessages: 200 });
+const history = new CheckpointHistory({});
 
 const skillsEngine = new SkillsEngine({
   bundledDir: "./skills",

@@ -20,7 +20,7 @@ import { createAgentTUI } from "@ai-sdk-tool/tui";
 
 await createAgentTUI({
   agent,           // { stream(messages, opts?): Promise<AgentStreamResult> }
-  messageHistory,  // MessageHistory from @ai-sdk-tool/harness
+  messageHistory,  // CheckpointHistory from @ai-sdk-tool/harness
   header: { title: "My Agent", subtitle: "model: gpt-4o" },
   footer: { text: "12.4k/128.0k (10%)" },
   commands,        // Command[] — optional, defaults to registered commands
@@ -39,7 +39,7 @@ await createAgentTUI({
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `agent` | `{ stream(...) }` | yes | Agent with a `stream` method |
-| `messageHistory` | `MessageHistory` | yes | Conversation history instance |
+| `messageHistory` | `CheckpointHistory` | yes | Conversation history instance |
 | `header` | `{ title, subtitle? }` | no | Header text shown at the top |
 | `footer` | `{ text? }` | no | Text shown below the input editor |
 | `commands` | `Command[]` | no | Slash commands; defaults to all registered commands |
@@ -126,12 +126,12 @@ Available color keys: `blue`, `yellow`, `green`, `cyan`, `red`, `magenta`, `whit
 ### Minimal setup
 
 ```typescript
-import { createAgent, MessageHistory } from "@ai-sdk-tool/harness";
+import { createAgent, CheckpointHistory } from "@ai-sdk-tool/harness";
 import { createAgentTUI } from "@ai-sdk-tool/tui";
 import { openai } from "@ai-sdk/openai";
 
 const agent = createAgent({ model: openai("gpt-4o"), instructions: "..." });
-const messageHistory = new MessageHistory();
+const messageHistory = new CheckpointHistory();
 
 await createAgentTUI({ agent, messageHistory });
 ```
