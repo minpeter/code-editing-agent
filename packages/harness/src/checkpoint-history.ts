@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ModelMessage } from "ai";
+import type { ModelMessage, TextPart } from "ai";
 import { calculateCompactionSplitIndex } from "./compaction-planner";
 import type {
   CheckpointMessage,
@@ -30,6 +30,8 @@ const DEFAULT_PRUNING_CONFIG: Required<PruningConfig> = {
   protectRecentTokens: 2000,
   replacementText: "[output pruned — too large]",
 };
+
+const TRAILING_NEWLINES = /\n+$/;
 
 type NormalizedCompactionConfig = Omit<
   Required<CompactionConfig>,
@@ -80,6 +82,53 @@ function hasToolCalls(message: ModelMessage): boolean {
     (part) =>
       typeof part === "object" && part !== null && part.type === "tool-call"
   );
+}
+
+function trimTrailingAssistantNewlines(message: ModelMessage): ModelMessage {
+  if (message.role !== "assistant") {
+    return message;
+  }
+
+  const content = message.content;
+  if (typeof content === "string") {
+    return {
+      ...message,
+      content: content.replace(TRAILING_NEWLINES, ""),
+    };
+  }
+
+  if (!Array.isArray(content) || content.length === 0) {
+    return message;
+  }
+
+  let lastTextIndex = -1;
+  for (let index = content.length - 1; index >= 0; index -= 1) {
+    if (content[index]?.type === "text") {
+      lastTextIndex = index;
+      break;
+    }
+  }
+
+  if (lastTextIndex === -1) {
+    return message;
+  }
+
+  const lastTextPart = content[lastTextIndex] as TextPart;
+  const trimmedText = lastTextPart.text.replace(TRAILING_NEWLINES, "");
+  if (trimmedText === lastTextPart.text) {
+    return message;
+  }
+
+  const trimmedContent = [...content];
+  trimmedContent[lastTextIndex] = {
+    ...lastTextPart,
+    text: trimmedText,
+  };
+
+  return {
+    ...message,
+    content: trimmedContent,
+  };
 }
 
 function isReplayableTextOnlyUserMessage(message: CheckpointMessage): boolean {
@@ -330,10 +379,10 @@ export class CheckpointHistory {
       id: randomUUID(),
       createdAt: Date.now(),
       isSummary: true,
-      message: {
+      message: trimTrailingAssistantNewlines({
         role: "assistant",
         content: summaryText,
-      },
+      }),
     };
     const continuationVariant = this.resolveContinuationVariant(
       autoCompact,
@@ -678,7 +727,7 @@ export class CheckpointHistory {
       createdAt: Date.now(),
       isSummary: false,
       originalContent,
-      message,
+      message: trimTrailingAssistantNewlines(message),
     };
   }
 
