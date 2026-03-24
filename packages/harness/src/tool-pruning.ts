@@ -1,30 +1,5 @@
-import type { ModelMessage, TextPart } from "ai";
-import { estimateTokens } from "./message-history";
-
-function extractMessageText(message: ModelMessage): string {
-  if (typeof message.content === "string") {
-    return message.content;
-  }
-  if (!Array.isArray(message.content)) {
-    return "";
-  }
-  return message.content
-    .map((part) => {
-      if (typeof part === "object" && part !== null) {
-        if (part.type === "text") {
-          return (part as TextPart).text;
-        }
-        if (part.type === "tool-call") {
-          return `${part.toolName} ${JSON.stringify(part.input)}`;
-        }
-        if (part.type === "tool-result") {
-          return `${part.toolName} ${JSON.stringify(part.output)}`;
-        }
-      }
-      return "";
-    })
-    .join(" ");
-}
+import type { ModelMessage } from "ai";
+import { estimateTokens, extractMessageText } from "./token-utils";
 
 // ─── Configuration ───
 

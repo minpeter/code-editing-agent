@@ -1,5 +1,5 @@
 import { generateText, type ModelMessage } from "ai";
-import { estimateTokens } from "./message-history";
+import { estimateTokens } from "./token-utils";
 
 type GenerateTextModel = Parameters<typeof generateText>[0]["model"];
 

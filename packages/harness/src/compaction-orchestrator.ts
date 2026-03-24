@@ -1,8 +1,5 @@
-import {
-  estimateTokens,
-  type MessageHistory,
-  type PreparedCompaction,
-} from "./message-history";
+import type { MessageHistory, PreparedCompaction } from "./message-history";
+import { estimateTokens } from "./token-utils";
 
 export interface SpeculativeCompactionJob {
   discarded: boolean;

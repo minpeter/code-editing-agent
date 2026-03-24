@@ -65,7 +65,6 @@ export type {
 } from "./message-history";
 export {
   computeSpeculativeStartRatio,
-  estimateTokens,
   MessageHistory,
 } from "./message-history";
 export type { MessageTextOptions } from "./message-text";
@@ -88,6 +87,7 @@ export type { SkillInfo, SkillsConfig } from "./skills";
 export { SkillsEngine } from "./skills";
 export type { TodoConfig, TodoItem } from "./todo-continuation";
 export { TodoContinuation } from "./todo-continuation";
+export { estimateTokens, extractMessageText } from "./token-utils";
 export {
   normalizeFinishReason,
   shouldContinueManualToolLoop,
