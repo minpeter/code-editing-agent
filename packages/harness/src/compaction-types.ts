@@ -75,6 +75,7 @@ export interface ActualTokenUsage {
   completionTokens?: number;
   promptTokens?: number;
   totalTokens?: number;
+  updatedAt?: number;
 }
 
 export interface ContextUsage {

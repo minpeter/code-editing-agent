@@ -584,4 +584,92 @@ describe("CheckpointHistory", () => {
       expect(h.getAll()).toHaveLength(1);
     });
   });
+
+  describe("CheckpointHistory token tracking", () => {
+    it("clear() resets messages to empty array", () => {
+      const h = new CheckpointHistory();
+      h.addUserMessage("hello");
+      h.addUserMessage("world");
+      h.clear();
+      expect(h.getAll()).toHaveLength(0);
+    });
+
+    it("clear() resets summaryMessageId to null", async () => {
+      const h = new CheckpointHistory({
+        compaction: {
+          enabled: true,
+          keepRecentTokens: 0,
+          summarizeFn: async () => "summary",
+        },
+      });
+      h.addUserMessage("hello");
+      h.addUserMessage("world");
+      await h.compact();
+      expect(h.getSummaryMessageId()).not.toBeNull();
+      h.clear();
+      expect(h.getSummaryMessageId()).toBeNull();
+    });
+
+    it("clear() increments revision", () => {
+      const h = new CheckpointHistory();
+      const revBefore = h.getRevision();
+      h.clear();
+      expect(h.getRevision()).toBeGreaterThan(revBefore);
+    });
+
+    it("updateActualUsage stores usage and getActualUsage retrieves it", () => {
+      const h = new CheckpointHistory();
+      h.updateActualUsage({
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 150,
+      });
+      const usage = h.getActualUsage();
+      expect(usage).not.toBeNull();
+      expect(usage?.promptTokens).toBe(100);
+      expect(usage?.completionTokens).toBe(50);
+      expect(usage?.totalTokens).toBe(150);
+    });
+
+    it("getActualUsage returns null when no usage recorded", () => {
+      const h = new CheckpointHistory();
+      expect(h.getActualUsage()).toBeNull();
+    });
+
+    it("clear() resets actual usage to null", () => {
+      const h = new CheckpointHistory();
+      h.updateActualUsage({ promptTokens: 100 });
+      h.clear();
+      expect(h.getActualUsage()).toBeNull();
+    });
+
+    it("getContextUsage returns source='estimated' before actual usage", () => {
+      const h = new CheckpointHistory();
+      h.addUserMessage("hello world");
+      const usage = h.getContextUsage();
+      expect(usage.source).toBe("estimated");
+      expect(usage.used).toBeGreaterThan(0);
+    });
+
+    it("getContextUsage returns source='actual' after updateActualUsage", () => {
+      const h = new CheckpointHistory();
+      h.addUserMessage("hello");
+      h.updateActualUsage({
+        promptTokens: 42,
+        completionTokens: 10,
+        totalTokens: 52,
+      });
+      const usage = h.getContextUsage();
+      expect(usage.source).toBe("actual");
+      expect(usage.used).toBe(42);
+    });
+
+    it("getContextUsage percentage is 0 when no context limit set", () => {
+      const h = new CheckpointHistory();
+      h.addUserMessage("hello");
+      const usage = h.getContextUsage();
+      expect(usage.percentage).toBe(0);
+      expect(usage.limit).toBe(0);
+    });
+  });
 });

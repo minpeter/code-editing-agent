@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { ModelMessage, TextPart } from "ai";
 import { calculateCompactionSplitIndex } from "./compaction-planner";
 import type {
+  ActualTokenUsage,
   CheckpointMessage,
   CompactionConfig,
   CompactionResult,
+  ContextUsage,
   ContinuationVariant,
   MessageLine,
   PruningConfig,
@@ -155,6 +157,7 @@ function findReplayableUserMessage(
 export class CheckpointHistory {
   private messages: CheckpointMessage[] = [];
   private summaryMessageId: string | null = null;
+  private actualUsage: ActualTokenUsage | null = null;
   private revision = 0;
   private readonly sessionId: string;
   private readonly sessionStore: SessionStore | null;
@@ -255,6 +258,50 @@ export class CheckpointHistory {
 
   getRevision(): number {
     return this.revision;
+  }
+
+  clear(): void {
+    this.messages = [];
+    this.summaryMessageId = null;
+    this.actualUsage = null;
+    this.revision += 1;
+  }
+
+  updateActualUsage(usage: ActualTokenUsage): void {
+    this.actualUsage = {
+      ...usage,
+      updatedAt: Date.now(),
+    };
+    this.revision += 1;
+  }
+
+  getActualUsage(): ActualTokenUsage | null {
+    return this.actualUsage ? { ...this.actualUsage } : null;
+  }
+
+  getContextUsage(): ContextUsage {
+    const limit = this.compactionConfig.contextLimit ?? 0;
+
+    if (this.actualUsage) {
+      const used =
+        this.actualUsage.promptTokens ?? this.actualUsage.totalTokens ?? 0;
+      return {
+        used,
+        limit,
+        remaining: limit > 0 ? Math.max(0, limit - used) : 0,
+        percentage: limit > 0 ? Math.min(100, (used / limit) * 100) : 0,
+        source: "actual",
+      };
+    }
+
+    const estimated = this.getEstimatedTokens();
+    return {
+      used: estimated,
+      limit,
+      remaining: limit > 0 ? Math.max(0, limit - estimated) : 0,
+      percentage: limit > 0 ? Math.min(100, (estimated / limit) * 100) : 0,
+      source: "estimated",
+    };
   }
 
   getSummaryMessageId(): string | null {
