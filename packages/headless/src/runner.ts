@@ -1,6 +1,5 @@
 import type {
   CheckpointHistory,
-  MessageHistory,
   ModelMessage,
   RunnableAgent,
 } from "@ai-sdk-tool/harness";
@@ -18,14 +17,14 @@ export interface InitialUserMessage {
   originalContent?: string;
 }
 
-type HeadlessMessageHistory = MessageHistory | CheckpointHistory;
+type HeadlessMessageHistory = CheckpointHistory;
 
 type UsageAwareMessageHistory = HeadlessMessageHistory & {
-  updateActualUsage: MessageHistory["updateActualUsage"];
+  updateActualUsage: CheckpointHistory["updateActualUsage"];
 };
 
 type MaxOutputAwareMessageHistory = HeadlessMessageHistory & {
-  getRecommendedMaxOutputTokens: MessageHistory["getRecommendedMaxOutputTokens"];
+  getRecommendedMaxOutputTokens: CheckpointHistory["getRecommendedMaxOutputTokens"];
 };
 
 function hasUsageTracking(
@@ -60,7 +59,12 @@ function updateHistoryUsage(
     return;
   }
 
-  history.updateActualUsage(usage);
+  history.updateActualUsage({
+    completionTokens: usage.completionTokens ?? 0,
+    promptTokens: usage.promptTokens ?? 0,
+    totalTokens: usage.totalTokens ?? 0,
+    updatedAt: new Date(),
+  });
 }
 
 function getRecommendedMaxOutputTokens(

@@ -1,9 +1,10 @@
 import {
+  CheckpointHistory,
   type Command,
+  type ContextUsage,
   createAgent,
   createModelSummarizer,
   estimateTokens,
-  MessageHistory,
   SessionManager,
 } from "@ai-sdk-tool/harness";
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
@@ -77,9 +78,7 @@ function formatTokens(tokenCount: number): string {
   return String(tokenCount);
 }
 
-function formatContextUsage(
-  contextUsage: NonNullable<ReturnType<MessageHistory["getContextUsage"]>>
-): string {
+function formatContextUsage(contextUsage: ContextUsage): string {
   if (contextUsage.source === "estimated" && contextUsage.used === 0) {
     return `?/${formatTokens(contextUsage.limit)} (?)`;
   }
@@ -112,7 +111,7 @@ const main = defineCommand({
     const friendli = createFriendliProvider();
     const model = friendli(selectedModelId);
     const compaction = createCompactionConfig(model);
-    const messageHistory = new MessageHistory({
+    const messageHistory = new CheckpointHistory({
       compaction,
     });
     messageHistory.setContextLimit(compaction.maxTokens);
