@@ -1132,3 +1132,67 @@ describe("post-recovery actualUsage preservation", () => {
     }
   });
 });
+
+describe("20K spike prevention — integration", () => {
+  it("all 3 gaps work together: systemPrompt + tool-content weighting + post-recovery tracking", async () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 20_000,
+        reserveTokens: 2000,
+        keepRecentTokens: 0,
+        summarizeFn: async () => "compact summary",
+      },
+      pruning: { enabled: false },
+    });
+
+    h.setSystemPromptTokens(3000);
+
+    for (let i = 0; i < 5; i++) {
+      h.addUserMessage(`query ${i}`);
+      h.addModelMessages([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: `call_${i}`,
+              toolName: "read_file",
+              input: { path: `file${i}.ts` },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: `call_${i}`,
+              toolName: "read_file",
+              output: { type: "text", value: "x".repeat(9000) },
+            },
+          ],
+        },
+      ]);
+    }
+
+    const estimatedTokens = h.getEstimatedTokens();
+    expect(estimatedTokens).toBeGreaterThan(11_250);
+
+    const contextUsage = h.getContextUsage();
+    expect(contextUsage.source).toBe("estimated");
+    expect(contextUsage.used).toBe(estimatedTokens + 3000);
+
+    expect(h.isAtHardContextLimit()).toBe(true);
+
+    const result = await h.handleContextOverflow();
+    expect(result.success).toBe(true);
+
+    const usage = h.getActualUsage();
+    expect(usage).not.toBeNull();
+    expect(usage?.totalTokens).toBeGreaterThan(0);
+
+    const postRecoveryUsage = h.getContextUsage();
+    expect(postRecoveryUsage.used).toBeLessThan(20_000 - 2000);
+  });
+});
