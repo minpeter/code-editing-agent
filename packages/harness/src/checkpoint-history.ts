@@ -652,7 +652,14 @@ export class CheckpointHistory {
 
       const pruneResult = this.tryPruneRecovery(tokensBefore, contextLimit);
       if (pruneResult) {
-        this.actualUsage = null;
+        const estimatedTokens =
+          this.getEstimatedTokens() + this.systemPromptTokens;
+        this.actualUsage = {
+          promptTokens: estimatedTokens,
+          completionTokens: 0,
+          totalTokens: estimatedTokens,
+          updatedAt: new Date(),
+        };
         return pruneResult;
       }
 
@@ -662,7 +669,14 @@ export class CheckpointHistory {
         contextLimit
       );
       if (compactResult) {
-        this.actualUsage = null;
+        const estimatedTokens =
+          this.getEstimatedTokens() + this.systemPromptTokens;
+        this.actualUsage = {
+          promptTokens: estimatedTokens,
+          completionTokens: 0,
+          totalTokens: estimatedTokens,
+          updatedAt: new Date(),
+        };
         return compactResult;
       }
 
@@ -672,7 +686,14 @@ export class CheckpointHistory {
         contextLimit
       );
       if (aggressiveResult) {
-        this.actualUsage = null;
+        const estimatedTokens =
+          this.getEstimatedTokens() + this.systemPromptTokens;
+        this.actualUsage = {
+          promptTokens: estimatedTokens,
+          completionTokens: 0,
+          totalTokens: estimatedTokens,
+          updatedAt: new Date(),
+        };
         return aggressiveResult;
       }
 
@@ -682,7 +703,14 @@ export class CheckpointHistory {
       );
       if (truncateResult) {
         if (truncateResult.success) {
-          this.actualUsage = null;
+          const estimatedTokens =
+            this.getEstimatedTokens() + this.systemPromptTokens;
+          this.actualUsage = {
+            promptTokens: estimatedTokens,
+            completionTokens: 0,
+            totalTokens: estimatedTokens,
+            updatedAt: new Date(),
+          };
         }
         return truncateResult;
       }

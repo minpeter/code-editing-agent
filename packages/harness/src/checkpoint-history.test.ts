@@ -962,7 +962,13 @@ describe("handleContextOverflow() overflow recovery — RED", () => {
 
     const result = await h.handleContextOverflow();
     expect(result.success).toBe(true);
-    expect(h.getActualUsage()).toBeNull();
+
+    const usage = h.getActualUsage();
+    expect(usage).not.toBeNull();
+    if (usage) {
+      expect(usage.totalTokens).toBeGreaterThan(0);
+      expect(usage.completionTokens).toBe(0);
+    }
   });
 });
 
