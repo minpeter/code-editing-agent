@@ -298,8 +298,7 @@ export class CheckpointHistory {
     const limit = this.compactionConfig.contextLimit ?? 0;
 
     if (this.actualUsage) {
-      const used =
-        this.actualUsage.promptTokens ?? this.actualUsage.totalTokens ?? 0;
+      const used = this.getCurrentUsageTokens();
       return {
         used,
         limit,
@@ -388,17 +387,19 @@ export class CheckpointHistory {
     phase?: "new-turn" | "intermediate-step";
   }): boolean {
     const reserveTokens = this.getEffectiveReserveTokens(options);
-    const thresholdLimit =
-      this.actualUsage && this.contextLimit > 0
+    const configuredSoftLimit =
+      this.compactionConfig.maxTokens ?? DEFAULT_COMPACTION_CONFIG.maxTokens;
+    const hardInputBudget =
+      this.contextLimit > 0
         ? this.contextLimit - reserveTokens
-        : (this.compactionConfig.maxTokens ??
-            DEFAULT_COMPACTION_CONFIG.maxTokens) - reserveTokens;
+        : Number.POSITIVE_INFINITY;
+    const thresholdLimit = Math.max(
+      0,
+      Math.min(configuredSoftLimit, hardInputBudget)
+    );
 
     return needsCompactionFromUsage({
-      currentUsageTokens:
-        this.actualUsage && this.contextLimit > 0
-          ? (this.actualUsage.totalTokens ?? this.getEstimatedTokens())
-          : this.getEstimatedTokens(),
+      currentUsageTokens: this.getCurrentUsageTokens(),
       enabled: Boolean(this.compactionConfig.enabled),
       hasMessages: this.messages.length > 0,
       thresholdLimit,
@@ -544,9 +545,7 @@ export class CheckpointHistory {
         ? toSummarizeCandidates.slice(1)
         : toSummarizeCandidates;
 
-    const toSummarizeForSummary = replayMessage
-      ? toSummarize.filter((message) => message.id !== replayMessage.id)
-      : toSummarize;
+    const toSummarizeForSummary = toSummarize;
 
     if (toSummarizeForSummary.length === 0) {
       return {
@@ -608,6 +607,7 @@ export class CheckpointHistory {
 
     this.summaryMessageId = summaryMessage.id;
     this.revision += 1;
+    this.rebaselineActualUsageToCurrentEstimate();
 
     await this.persistCompactionMessages({
       continuationMessage,
@@ -828,10 +828,20 @@ export class CheckpointHistory {
   }
 
   private getCurrentUsageTokens(): number {
-    if (this.actualUsage?.totalTokens != null) {
-      return this.actualUsage.totalTokens; // API totalTokens already includes system prompt
+    if (this.actualUsage) {
+      return this.actualUsage.promptTokens ?? this.actualUsage.totalTokens ?? 0;
     }
-    return this.getEstimatedTokens() + this.systemPromptTokens; // Add system prompt to estimate
+    return this.getEstimatedTokens() + this.systemPromptTokens;
+  }
+
+  private rebaselineActualUsageToCurrentEstimate(): void {
+    const promptTokens = this.getEstimatedTokens() + this.systemPromptTokens;
+    this.actualUsage = {
+      promptTokens,
+      completionTokens: 0,
+      totalTokens: promptTokens,
+      updatedAt: new Date(),
+    };
   }
 
   private getActiveContextLimit(): number {
@@ -991,6 +1001,7 @@ export class CheckpointHistory {
 
     let messagesToSummarize: CheckpointMessage[];
     let messagesToKeep: CheckpointMessage[];
+    const replayMessage = findReplayableUserMessage(activeMessages);
 
     if (aggressive) {
       messagesToSummarize = activeMessages;
@@ -1027,8 +1038,19 @@ export class CheckpointHistory {
       id: randomUUID(),
       createdAt: Date.now(),
       isSummary: true,
-      message: { role: "assistant", content: summaryText },
+      message: trimTrailingAssistantNewlines({
+        role: "assistant",
+        content: summaryText,
+      }),
     };
+    const continuationVariant = this.resolveContinuationVariant(
+      true,
+      replayMessage
+    );
+    const continuationMessage = this.createCheckpointMessage(
+      createContinuationMessage(continuationVariant)
+    );
+    const replayMessageCopy = this.createReplayMessageCopy(replayMessage);
 
     let preActiveMessages: CheckpointMessage[] = [];
     if (this.summaryMessageId) {
@@ -1040,7 +1062,15 @@ export class CheckpointHistory {
       }
     }
 
-    this.messages = [...preActiveMessages, summaryMessage, ...messagesToKeep];
+    this.messages = [
+      ...preActiveMessages,
+      summaryMessage,
+      continuationMessage,
+      ...messagesToKeep,
+    ];
+    if (replayMessageCopy) {
+      this.messages.push(replayMessageCopy);
+    }
     this.summaryMessageId = summaryMessage.id;
     this.revision += 1;
 

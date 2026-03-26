@@ -348,6 +348,11 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     compactionOrchestrator.startSpeculative(config.messageHistory);
   };
 
+  const compactBeforeNextTurnIfNeeded = async (): Promise<void> => {
+    await compactionOrchestrator.checkAndCompact();
+    compactionOrchestrator.applyReady(config.messageHistory);
+  };
+
   const enqueueUserMessage = async (
     message: InitialUserMessage | { content: string }
   ): Promise<void> => {
@@ -382,6 +387,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           await runSingleTurn(phase);
         applyPendingMessages(pendingMessages);
         updateUsage(usage);
+        await compactBeforeNextTurnIfNeeded();
 
         if (!shouldContinue) {
           startSpeculativeCompaction();

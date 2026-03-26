@@ -5,6 +5,7 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   agentManager,
+  computeCompactionMaxTokens,
   computeSpeculativeStartRatio,
   selectTranslationReasoningMode,
 } from "./agent";
@@ -65,7 +66,7 @@ describe("AgentManager compaction config", () => {
     agentManager.resetForTesting();
   });
 
-  it("uses dynamically computed speculative ratio based on context and reserve", () => {
+  it("uses a soft compaction threshold and earlier speculative ratio based on usable input budget", () => {
     agentManager.setProvider("friendli");
     agentManager.setModelId("test-compact");
 
@@ -87,13 +88,22 @@ describe("AgentManager compaction config", () => {
       contextLength,
       compaction.reserveTokens ?? 0
     );
+    const expectedMaxTokens = computeCompactionMaxTokens(
+      contextLength,
+      compaction.reserveTokens ?? 0
+    );
 
-    expect(compaction.maxTokens).toBe(20_480);
+    expect(compaction.maxTokens).toBe(expectedMaxTokens);
     expect(agentManager.getModelTokenLimits().maxCompletionTokens).toBe(20_480);
     expect(compaction.reserveTokens).toBe(2048);
-    expect(compaction.keepRecentTokens).toBe(Math.floor(20_480 * 0.3));
+    expect(compaction.keepRecentTokens).toBe(
+      Math.min(
+        Math.floor(contextLength * 0.3),
+        Math.max(512, Math.floor(expectedMaxTokens * 0.5))
+      )
+    );
     expect(compaction.speculativeStartRatio).toBe(expectedRatio);
-    expect(expectedRatio).toBeCloseTo(0.7, 2);
+    expect(expectedRatio).toBeCloseTo(0.75, 2);
 
     history.updateActualUsage({
       totalTokens: 16_000,
@@ -102,7 +112,7 @@ describe("AgentManager compaction config", () => {
       updatedAt: new Date(),
     });
     expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
-    expect(history.needsCompaction()).toBe(false);
+    expect(history.needsCompaction()).toBe(true);
   });
 
   it("fails fast with a clear error when stream is called with empty messages", async () => {

@@ -6,7 +6,12 @@ import type { TrajectoryEvent } from "./types";
 
 function createMockStream(
   responseMessages: ModelMessage[],
-  finishReason: "stop" | "tool-calls" = "stop"
+  finishReason: "stop" | "tool-calls" = "stop",
+  usage?: {
+    completionTokens?: number;
+    promptTokens?: number;
+    totalTokens?: number;
+  }
 ): AgentStreamResult {
   return {
     finishReason: Promise.resolve(finishReason),
@@ -22,9 +27,9 @@ function createMockStream(
       messages: responseMessages,
     } as unknown as Awaited<AgentStreamResult["response"]>),
     totalUsage: Promise.resolve(
-      undefined
+      usage
     ) as unknown as AgentStreamResult["totalUsage"],
-    usage: Promise.resolve(undefined) as unknown as AgentStreamResult["usage"],
+    usage: Promise.resolve(usage) as unknown as AgentStreamResult["usage"],
   };
 }
 
@@ -136,7 +141,7 @@ describe("runHeadless", () => {
     expect(events.some((event) => event.type === "user")).toBe(false);
   });
 
-  it("does not block a normal follow-up while speculative compaction is still running below the hard limit", async () => {
+  it("compacts before a normal follow-up once the soft compaction threshold is exceeded", async () => {
     const summarizeDeferred = createDeferred<string>();
     const history = new CheckpointHistory({
       compaction: {
@@ -151,23 +156,30 @@ describe("runHeadless", () => {
 
     let streamCallCount = 0;
     let secondCallMessages: ModelMessage[] = [];
-    const secondCallSeen = createDeferred<void>();
-
     const runPromise = runHeadless({
       agent: {
         stream: ({ messages }) => {
           streamCallCount += 1;
           if (streamCallCount === 2) {
             secondCallMessages = messages;
-            secondCallSeen.resolve();
           }
 
-          return createMockStream([
-            {
-              role: "assistant",
-              content: streamCallCount === 1 ? "a".repeat(1000) : "done",
-            },
-          ]);
+          return createMockStream(
+            [
+              {
+                role: "assistant",
+                content: streamCallCount === 1 ? "a".repeat(1000) : "done",
+              },
+            ],
+            "stop",
+            streamCallCount === 1
+              ? {
+                  promptTokens: 900,
+                  completionTokens: 0,
+                  totalTokens: 900,
+                }
+              : undefined
+          );
         },
       },
       initialUserMessage: {
@@ -185,20 +197,14 @@ describe("runHeadless", () => {
       sessionId: "session-small-follow-up",
     });
 
-    await Promise.race([
-      secondCallSeen.promise,
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("second stream call did not start")),
-          500
-        )
-      ),
-    ]);
-
-    expect(secondCallMessages[0]?.role).not.toBe("system");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(streamCallCount).toBe(1);
 
     summarizeDeferred.resolve("Prepared summary");
     await runPromise;
+
+    expect(streamCallCount).toBe(2);
+    expect(secondCallMessages[0]?.role).toBe("user");
   });
 
   it("blocks only when a follow-up hits the hard context limit", async () => {

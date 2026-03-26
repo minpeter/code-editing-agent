@@ -428,12 +428,21 @@ export class AgentManager {
         contextLimit: effectiveContextLength,
       }
     );
+    const maxTokens = computeCompactionMaxTokens(
+      effectiveContextLength,
+      effectiveReserveTokens
+    );
+    const keepRecentTokens = Math.min(
+      Math.floor(effectiveContextLength * 0.3),
+      Math.max(512, Math.floor(maxTokens * 0.5))
+    );
+
     return {
       contextLimit: effectiveContextLength,
       enabled: true,
-      maxTokens: effectiveContextLength,
+      maxTokens,
       reserveTokens: effectiveReserveTokens,
-      keepRecentTokens: Math.floor(effectiveContextLength * 0.3),
+      keepRecentTokens,
       speculativeStartRatio: computeSpeculativeStartRatio(
         effectiveContextLength,
         effectiveReserveTokens
@@ -673,16 +682,30 @@ export function createAgentManager(options?: {
 }
 
 export const agentManager = createAgentManager();
+export const computeCompactionMaxTokens = (
+  contextLength: number,
+  reserveTokens: number
+): number => {
+  if (!(contextLength > 0)) {
+    return 8000;
+  }
+
+  const usableInputBudget = Math.max(
+    1,
+    contextLength - Math.max(0, reserveTokens)
+  );
+  return Math.max(1024, Math.floor(usableInputBudget * 0.8));
+};
+
 export const computeSpeculativeStartRatio = (
   contextLength: number,
   reserveTokens: number
 ): number => {
   if (!(contextLength > 0)) {
-    return 0.7;
+    return 0.75;
   }
 
-  return Math.max(
-    0.15,
-    Math.min(0.95, 1 - (Math.max(0, reserveTokens) * 3) / contextLength)
-  );
+  const softBudget = computeCompactionMaxTokens(contextLength, reserveTokens);
+  const speculativeThreshold = Math.max(512, Math.floor(softBudget * 0.75));
+  return Math.max(0.15, Math.min(0.95, speculativeThreshold / softBudget));
 };

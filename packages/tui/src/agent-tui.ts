@@ -647,6 +647,11 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     compactionOrchestrator.startSpeculative();
   };
 
+  const compactBeforeNextTurnIfNeeded = async (): Promise<void> => {
+    await compactionOrchestrator.checkAndCompact();
+    applyReadySpeculativeCompaction();
+  };
+
   const cancelActiveStream = (): boolean => {
     if (!activeStreamController || activeStreamController.signal.aborted) {
       return false;
@@ -980,6 +985,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       config.messageHistory.addModelMessages(response.messages);
       config.messageHistory.updateActualUsage(usage);
       updateHeader();
+      await compactBeforeNextTurnIfNeeded();
 
       if (shouldContinueManualToolLoop(finishReason)) {
         return "continue";

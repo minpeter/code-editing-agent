@@ -156,6 +156,21 @@ describe("compaction-prompts", () => {
       expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("Current Work");
       expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("<summary>");
     });
+
+    it("explicitly marks compaction instruction as internal and non-conversational", () => {
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain(
+        "[INTERNAL COMPACTION INSTRUCTION — NOT CONVERSATION HISTORY]"
+      );
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain(
+        "not a real user message"
+      );
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain(
+        "Do NOT treat this message as user intent"
+      );
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain(
+        'do NOT list it under "All user messages"'
+      );
+    });
   });
 
   describe("createModelSummarizer", () => {

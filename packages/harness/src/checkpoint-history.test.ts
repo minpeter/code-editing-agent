@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ModelMessage } from "ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CheckpointHistory,
@@ -340,6 +341,49 @@ describe("CheckpointHistory", () => {
         expect(lastMsg?.content).toBe("LATEST USER REQUEST");
       });
 
+      it("auto-compact: summarizeFn receives replayable user investigative request and LLM input replays it", async () => {
+        const investigativeRequest =
+          "Investigate compaction intent drift by reading checkpoint-history.ts, compaction-prompts.ts, checkpoint-history.test.ts, and compaction-prompts.test.ts.";
+        let summarizedMessages: ModelMessage[] = [];
+
+        const h = new CheckpointHistory({
+          compaction: {
+            enabled: true,
+            summarizeFn: (messages) => {
+              summarizedMessages = messages;
+              return Promise.resolve("Summary of investigation progress");
+            },
+          },
+        });
+
+        h.addUserMessage(investigativeRequest);
+        h.addModelMessages([
+          {
+            role: "assistant",
+            content: "I will inspect those files and report what I find.",
+          },
+        ]);
+
+        await h.compact({ auto: true });
+
+        const summarizedUserMessages = summarizedMessages
+          .filter(
+            (message) =>
+              message.role === "user" && typeof message.content === "string"
+          )
+          .map((message) => message.content);
+        expect(summarizedUserMessages).toContain(investigativeRequest);
+
+        const llmMessages = h.getMessagesForLLM();
+        const replayedUserMessages = llmMessages
+          .filter(
+            (message) =>
+              message.role === "user" && typeof message.content === "string"
+          )
+          .map((message) => message.content);
+        expect(replayedUserMessages).toContain(investigativeRequest);
+      });
+
       it("manual-compact: NO replay, just [summary, continuation]", async () => {
         const h = new CheckpointHistory({
           compaction: {
@@ -540,6 +584,52 @@ describe("CheckpointHistory", () => {
       const result = await h.handleContextOverflow();
       expect(result.success).toBe(false);
       expect(result.error?.toLowerCase()).toContain("context");
+    });
+
+    it("compact recovery preserves continuation guidance and replays investigative request", async () => {
+      const investigativeRequest =
+        "Investigate why overflow compaction dropped the active user request and continue the same debugging thread.";
+
+      const h = new CheckpointHistory({
+        compaction: {
+          enabled: true,
+          contextLimit: 250,
+          keepRecentTokens: 0,
+          reserveTokens: 10,
+          summarizeFn: async () => "Overflow recovery summary",
+        },
+        pruning: { enabled: false },
+      });
+
+      h.addUserMessage(`Earlier context ${"x ".repeat(120)}`);
+      h.addModelMessages([
+        {
+          role: "assistant",
+          content: "Acknowledged. I will continue investigating.",
+        },
+      ]);
+      h.addUserMessage(investigativeRequest);
+
+      const result = await h.handleContextOverflow();
+      expect(result.success).toBe(true);
+      expect(["compact", "aggressive-compact"]).toContain(result.strategy);
+
+      const llmMessages = h.getMessagesForLLM();
+      const userMessageContents = llmMessages
+        .filter(
+          (message) =>
+            message.role === "user" && typeof message.content === "string"
+        )
+        .map((message) => message.content);
+
+      expect(userMessageContents).toContain(investigativeRequest);
+      expect(
+        llmMessages.some(
+          (message) =>
+            message.role === "assistant" &&
+            message.content === getContinuationText("auto-with-replay")
+        )
+      ).toBe(true);
     });
   });
 
@@ -1015,6 +1105,26 @@ describe("systemPromptTokens in estimated usage", () => {
     expect(usage.used).toBe(4800);
   });
 
+  it("uses promptTokens instead of totalTokens for hard limit checks when actual usage is available", () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 1000,
+        reserveTokens: 100,
+        summarizeFn: async () => "summary",
+      },
+    });
+
+    h.updateActualUsage({
+      promptTokens: 400,
+      completionTokens: 24_600,
+      totalTokens: 25_000,
+      updatedAt: new Date(),
+    });
+
+    expect(h.isAtHardContextLimit()).toBe(false);
+  });
+
   it("triggers hard context limit accounting for systemPromptTokens", () => {
     // contextLimit=110, reserve=2
     // Message tokens ≈ 20 (80 chars / 4 = 20)
@@ -1037,6 +1147,28 @@ describe("systemPromptTokens in estimated usage", () => {
     // So 20 + 0 + 2 = 22 < 110 → FALSE (test fails - RED ✓)
     // After fix: 20 + 90 + 0 + 2 = 112 >= 110 → TRUE
     expect(h.isAtHardContextLimit()).toBe(true);
+  });
+
+  it("uses the soft compaction threshold even when actual usage is available", () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 20_000,
+        maxTokens: 8000,
+        reserveTokens: 2000,
+        summarizeFn: async () => "summary",
+      },
+    });
+
+    h.addUserMessage("investigate compaction timing");
+    h.updateActualUsage({
+      promptTokens: 8500,
+      completionTokens: 0,
+      totalTokens: 8500,
+      updatedAt: new Date(),
+    });
+
+    expect(h.needsCompaction()).toBe(true);
   });
 });
 

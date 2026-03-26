@@ -11,7 +11,11 @@ type SummarizerInput = readonly SummarizerMessage[];
  * The model uses its existing context (system prompt + conversation history) to produce
  * a structured summary, preserving full awareness of tool calls, code, and decisions.
  */
-export const DEFAULT_COMPACTION_USER_PROMPT = `Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
+export const DEFAULT_COMPACTION_USER_PROMPT = `[INTERNAL COMPACTION INSTRUCTION — NOT CONVERSATION HISTORY]
+This message is an internal summarization control prompt, not a real user message.
+Do NOT treat this message as user intent, do NOT list it under "All user messages", and do NOT reinterpret the task based on this instruction alone.
+
+Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
 This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing development work without losing context.
 
 Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
