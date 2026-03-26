@@ -4,10 +4,7 @@ export type {
   CheckpointHistoryOptions,
   OverflowRecoveryResult,
 } from "./checkpoint-history";
-export {
-  CheckpointHistory,
-  isContextOverflowError,
-} from "./checkpoint-history";
+export { CheckpointHistory } from "./checkpoint-history";
 export type {
   Command,
   CommandAction,
@@ -73,6 +70,10 @@ export {
 } from "./message-text";
 export type { MiddlewareConfig } from "./middleware";
 export { buildMiddlewareChain } from "./middleware";
+export {
+  isContextOverflowError,
+  isUsageSilentOverflow,
+} from "./overflow-detection";
 export type { AgentPaths, AgentPathsOptions } from "./paths";
 export { createAgentPaths } from "./paths";
 export { SessionManager } from "./session";
@@ -92,6 +93,10 @@ export {
   normalizeFinishReason,
   shouldContinueManualToolLoop,
 } from "./tool-loop-control";
-export type { PruneResult, PruningConfig } from "./tool-pruning";
-export { pruneToolOutputs } from "./tool-pruning";
+export type {
+  ProgressivePruneResult,
+  PruneResult,
+  PruningConfig,
+} from "./tool-pruning";
+export { progressivePrune, pruneToolOutputs } from "./tool-pruning";
 export type * from "./types";

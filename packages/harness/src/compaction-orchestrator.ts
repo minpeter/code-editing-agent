@@ -197,6 +197,7 @@ interface CompactionHistoryLike {
     maxTokens?: number;
     reserveTokens?: number;
     speculativeStartRatio?: number;
+    thresholdRatio?: number;
   };
   getEstimatedTokens: () => number;
   getRevision?: () => number;
@@ -427,7 +428,7 @@ export class CompactionOrchestrator {
       state: "running",
     };
 
-    this.callbacks.onJobStatus?.(jobId, "Compacting...", "running");
+    this.callbacks.onJobStatus?.(jobId, "Background compaction...", "running");
 
     job.promise = (async () => {
       try {
@@ -615,11 +616,26 @@ export class CompactionOrchestrator {
     }
 
     const config = history.getCompactionConfig();
+    const contextLimit = this.resolvePolicyContextLimit(config);
+    const configuredThresholdRatio = config.thresholdRatio ?? 0.5;
+    const maxTokensRatio =
+      typeof config.maxTokens === "number" &&
+      Number.isFinite(config.maxTokens) &&
+      config.maxTokens > 0 &&
+      contextLimit > 0
+        ? config.maxTokens / contextLimit
+        : undefined;
+    const thresholdRatio =
+      typeof maxTokensRatio === "number"
+        ? Math.min(configuredThresholdRatio, maxTokensRatio)
+        : configuredThresholdRatio;
+
     return needsCompactionFromUsage({
       enabled: config.enabled ?? false,
       hasMessages: history.getEstimatedTokens() > 0,
       currentUsageTokens: history.getEstimatedTokens(),
-      thresholdLimit: config.maxTokens ?? Number.MAX_SAFE_INTEGER,
+      contextLimit,
+      thresholdRatio,
     });
   }
 

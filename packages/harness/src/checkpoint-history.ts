@@ -9,6 +9,7 @@ import {
 } from "./compaction-policy";
 import type {
   ActualTokenUsage,
+  ActualTokenUsageInput,
   CheckpointMessage,
   CompactionConfig,
   CompactionResult,
@@ -33,6 +34,7 @@ const DEFAULT_COMPACTION_CONFIG: NormalizedCompactionConfig = {
   keepRecentTokens: 2000,
   reserveTokens: 2000,
   speculativeStartRatio: undefined,
+  thresholdRatio: 0.5,
   summarizeFn: undefined,
 };
 
@@ -282,10 +284,18 @@ export class CheckpointHistory {
     this.revision += 1;
   }
 
-  updateActualUsage(usage: ActualTokenUsage): void {
+  updateActualUsage(usage: ActualTokenUsageInput): void {
+    const promptTokens =
+      usage.promptTokens ?? usage.inputTokens ?? usage.totalTokens ?? 0;
+    const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
+    const totalTokens =
+      usage.totalTokens ?? Math.max(0, promptTokens + completionTokens);
+
     this.actualUsage = {
-      ...usage,
-      updatedAt: new Date(),
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      updatedAt: usage.updatedAt ?? new Date(),
     };
     this.revision += 1;
   }
@@ -386,23 +396,28 @@ export class CheckpointHistory {
   needsCompaction(options?: {
     phase?: "new-turn" | "intermediate-step";
   }): boolean {
-    const reserveTokens = this.getEffectiveReserveTokens(options);
-    const configuredSoftLimit =
-      this.compactionConfig.maxTokens ?? DEFAULT_COMPACTION_CONFIG.maxTokens;
-    const hardInputBudget =
-      this.contextLimit > 0
-        ? this.contextLimit - reserveTokens
-        : Number.POSITIVE_INFINITY;
-    const thresholdLimit = Math.max(
-      0,
-      Math.min(configuredSoftLimit, hardInputBudget)
-    );
+    this.getEffectiveReserveTokens(options);
+    const contextLimit = this.getActiveContextLimit();
+    const configuredThresholdRatio =
+      this.compactionConfig.thresholdRatio ?? 0.5;
+    const maxTokensRatio =
+      typeof this.compactionConfig.maxTokens === "number" &&
+      Number.isFinite(this.compactionConfig.maxTokens) &&
+      this.compactionConfig.maxTokens > 0 &&
+      contextLimit > 0
+        ? this.compactionConfig.maxTokens / contextLimit
+        : undefined;
+    const thresholdRatio =
+      typeof maxTokensRatio === "number"
+        ? Math.min(configuredThresholdRatio, maxTokensRatio)
+        : configuredThresholdRatio;
 
     return needsCompactionFromUsage({
       currentUsageTokens: this.getCurrentUsageTokens(),
+      contextLimit,
+      thresholdRatio,
       enabled: Boolean(this.compactionConfig.enabled),
       hasMessages: this.messages.length > 0,
-      thresholdLimit,
     });
   }
 
@@ -451,12 +466,14 @@ export class CheckpointHistory {
       return 8192;
     }
 
-    const estimatedInputTokens = messagesForLLM
-      ? messagesForLLM.reduce(
+    let estimatedInputTokens = this.getCurrentUsageTokens();
+    if (!this.actualUsage && messagesForLLM) {
+      estimatedInputTokens =
+        messagesForLLM.reduce(
           (total, message) => total + estimateMessageTokens(message),
           0
-        ) + this.systemPromptTokens
-      : this.getCurrentUsageTokens();
+        ) + this.systemPromptTokens;
+    }
 
     return (
       getRecommendedMaxOutputTokensFromPolicy({
@@ -862,6 +879,9 @@ export class CheckpointHistory {
       DEFAULT_COMPACTION_CONFIG.reserveTokens;
 
     if (options?.phase === "intermediate-step") {
+      if (this.actualUsage) {
+        return reserveTokens;
+      }
       return reserveTokens * 2;
     }
 

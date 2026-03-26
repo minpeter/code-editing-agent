@@ -6,6 +6,9 @@ import { estimateTokens, extractMessageText } from "./token-utils";
 const DEFAULT_REPLACEMENT_TEXT = "[output pruned — too large]";
 const DEFAULT_PROTECT_RECENT_TOKENS = 2000;
 const DEFAULT_MIN_SAVINGS_TOKENS = 200;
+const PROGRESSIVE_LEVELS = [0, 10, 20, 50, 100] as const;
+const DEFAULT_PROGRESSIVE_REPLACEMENT_TEXT = "[output pruned]";
+const DEFAULT_PROGRESSIVE_PROTECT_RECENT_TOKENS = 40_000;
 
 function isToolResultPart(part: unknown): part is {
   output: unknown;
@@ -34,6 +37,204 @@ export interface PruneResult {
   prunedCount: number;
   /** Total estimated tokens saved by pruning. */
   prunedTokens: number;
+}
+
+export interface ProgressivePruneResult {
+  levelUsed: number;
+  messages: CheckpointMessage[];
+  tokensAfter: number;
+  tokensBefore: number;
+}
+
+interface PrunableToolResultRef {
+  messageIndex: number;
+  partIndex: number;
+}
+
+function estimateCheckpointTokens(messages: CheckpointMessage[]): number {
+  return messages.reduce((total, message) => {
+    return total + estimateTokens(extractMessageText(message.message));
+  }, 0);
+}
+
+function resolveProtectedFromIndex(
+  messages: CheckpointMessage[],
+  protectRecentTokens: number
+): number {
+  let protectedFromIndex = messages.length;
+  let recentTokens = 0;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msgTokens = estimateTokens(extractMessageText(messages[i].message));
+    if (recentTokens + msgTokens > protectRecentTokens) {
+      protectedFromIndex = i + 1;
+      break;
+    }
+    recentTokens += msgTokens;
+    if (i === 0) {
+      protectedFromIndex = 0;
+    }
+  }
+
+  return protectedFromIndex;
+}
+
+function collectPrunableToolResultRefs(
+  messages: CheckpointMessage[],
+  protectedFromIndex: number,
+  protectedToolNames: Set<string>
+): PrunableToolResultRef[] {
+  const refs: PrunableToolResultRef[] = [];
+
+  for (let messageIndex = 0; messageIndex < messages.length; messageIndex++) {
+    if (messageIndex >= protectedFromIndex) {
+      continue;
+    }
+
+    const modelMessage = messages[messageIndex].message;
+    if (modelMessage.role !== "tool" || !Array.isArray(modelMessage.content)) {
+      continue;
+    }
+
+    for (
+      let partIndex = 0;
+      partIndex < modelMessage.content.length;
+      partIndex++
+    ) {
+      const part = modelMessage.content[partIndex];
+      if (!isToolResultPart(part)) {
+        continue;
+      }
+      if (protectedToolNames.has(part.toolName)) {
+        continue;
+      }
+      refs.push({ messageIndex, partIndex });
+    }
+  }
+
+  return refs;
+}
+
+function applyProgressivePruningLevel(
+  messages: CheckpointMessage[],
+  prunableRefs: PrunableToolResultRef[],
+  removeCount: number,
+  replacementText: string
+): CheckpointMessage[] {
+  if (removeCount <= 0 || prunableRefs.length === 0) {
+    return messages;
+  }
+
+  const boundedRemoveCount = Math.min(removeCount, prunableRefs.length);
+  const start = Math.floor((prunableRefs.length - boundedRemoveCount) / 2);
+  const compactedAt = Date.now();
+
+  const replacementsByMessage = new Map<number, unknown[]>();
+
+  for (let offset = 0; offset < boundedRemoveCount; offset++) {
+    const ref = prunableRefs[start + offset];
+    const originalMessage = messages[ref.messageIndex];
+    const originalContent = originalMessage.message.content;
+    if (!Array.isArray(originalContent)) {
+      continue;
+    }
+
+    const mutableContent = replacementsByMessage.get(ref.messageIndex) ?? [
+      ...originalContent,
+    ];
+    const part = mutableContent[ref.partIndex];
+
+    if (isToolResultPart(part)) {
+      mutableContent[ref.partIndex] = {
+        ...part,
+        compactedAt,
+        output: { type: "text" as const, value: replacementText },
+      };
+      replacementsByMessage.set(ref.messageIndex, mutableContent);
+    }
+  }
+
+  if (replacementsByMessage.size === 0) {
+    return messages;
+  }
+
+  return messages.map((checkpoint, index) => {
+    const content = replacementsByMessage.get(index);
+    if (!content) {
+      return checkpoint;
+    }
+
+    return {
+      ...checkpoint,
+      message: {
+        ...checkpoint.message,
+        content: content as never,
+      },
+    };
+  });
+}
+
+export function progressivePrune(
+  messages: CheckpointMessage[],
+  config: PruningConfig & { targetTokens: number }
+): ProgressivePruneResult {
+  const tokensBefore = estimateCheckpointTokens(messages);
+  const protectRecentTokens =
+    config.protectRecentTokens ?? DEFAULT_PROGRESSIVE_PROTECT_RECENT_TOKENS;
+  const protectedToolNames = new Set(config.protectedToolNames ?? []);
+  const replacementText =
+    config.replacementText ?? DEFAULT_PROGRESSIVE_REPLACEMENT_TEXT;
+
+  const protectedFromIndex = resolveProtectedFromIndex(
+    messages,
+    protectRecentTokens
+  );
+  const prunableRefs = collectPrunableToolResultRefs(
+    messages,
+    protectedFromIndex,
+    protectedToolNames
+  );
+
+  let level4Result: ProgressivePruneResult | null = null;
+
+  for (
+    let levelIndex = 0;
+    levelIndex < PROGRESSIVE_LEVELS.length;
+    levelIndex++
+  ) {
+    const percentage = PROGRESSIVE_LEVELS[levelIndex];
+    const removeCount = Math.floor((prunableRefs.length * percentage) / 100);
+    const candidateMessages = applyProgressivePruningLevel(
+      messages,
+      prunableRefs,
+      removeCount,
+      replacementText
+    );
+    const tokensAfter = estimateCheckpointTokens(candidateMessages);
+    const result: ProgressivePruneResult = {
+      levelUsed: levelIndex,
+      messages: candidateMessages,
+      tokensAfter,
+      tokensBefore,
+    };
+
+    if (tokensAfter <= config.targetTokens) {
+      return result;
+    }
+
+    if (levelIndex === PROGRESSIVE_LEVELS.length - 1) {
+      level4Result = result;
+    }
+  }
+
+  return (
+    level4Result ?? {
+      levelUsed: PROGRESSIVE_LEVELS.length - 1,
+      messages,
+      tokensAfter: tokensBefore,
+      tokensBefore,
+    }
+  );
 }
 
 /**

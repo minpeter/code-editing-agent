@@ -144,16 +144,11 @@ describe("compaction-prompts", () => {
 
   describe("DEFAULT_COMPACTION_USER_PROMPT", () => {
     it("contains required summary sections", () => {
-      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain(
-        "Primary Request and Intent"
-      );
-      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain(
-        "Key Technical Concepts"
-      );
-      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain(
-        "Files and Code Sections"
-      );
-      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("Current Work");
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("Current Goal");
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("Files & Changes");
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("Technical Discoveries");
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("Strategy & Approach");
+      expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("Exact Next Steps");
       expect(DEFAULT_COMPACTION_USER_PROMPT).toContain("<summary>");
     });
 
@@ -232,9 +227,7 @@ describe("compaction-prompts", () => {
         typeof lastMsg.content === "string"
           ? lastMsg.content
           : lastMsg.content.map((part: any) => part.text ?? "").join("");
-      expect(lastContent).toContain(
-        "Your task is to create a detailed summary"
-      );
+      expect(lastContent).toContain("Create a structured handoff summary");
     });
 
     it("handles model returning empty text with extractive fallback", async () => {
@@ -489,9 +482,7 @@ describe("compaction-prompts", () => {
 
       expect(lastUserContent).toContain("<previous-summary>");
       expect(lastUserContent).toContain("Old conversation about weather");
-      expect(lastUserContent).toContain(
-        "Your task is to create a detailed summary"
-      );
+      expect(lastUserContent).toContain("Create a structured handoff summary");
     });
 
     it("does not include previous-summary tags when no previousSummary", async () => {

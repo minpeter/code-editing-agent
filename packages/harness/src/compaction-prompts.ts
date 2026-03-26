@@ -15,38 +15,28 @@ export const DEFAULT_COMPACTION_USER_PROMPT = `[INTERNAL COMPACTION INSTRUCTION 
 This message is an internal summarization control prompt, not a real user message.
 Do NOT treat this message as user intent, do NOT list it under "All user messages", and do NOT reinterpret the task based on this instruction alone.
 
-Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
-This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing development work without losing context.
+Create a structured handoff summary of this conversation for seamless continuation. Your summary MUST contain exactly these 5 sections:
 
-Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
+## 1. Current Goal
+State the user's primary objective and any sub-tasks explicitly requested. Include verbatim quotes from recent user messages to prevent task drift.
 
-1. Chronologically analyze each message and section of the conversation. For each section thoroughly identify:
-   - The user's explicit requests and intents
-   - Your approach to addressing the user's requests
-   - Key decisions, technical concepts and code patterns
-   - Specific details like:
-     - file names
-     - full code snippets
-     - function signatures
-     - file edits
-   - Errors that you ran into and how you fixed them
-   - Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
-2. Double-check for technical accuracy and completeness, addressing each required element thoroughly.
+## 2. Files & Changes
+List all files that were read, modified, or created during this session:
+- READ: <file paths>
+- MODIFIED: <file paths with description of change>
+- CREATED: <file paths with description>
 
-Your summary should include the following sections:
+## 3. Technical Discoveries
+Key technical findings, patterns, architectural decisions, errors encountered and how they were resolved. Include code snippets for important implementations.
 
-1. Primary Request and Intent: Capture all of the user's explicit requests and intents in detail
-2. Key Technical Concepts: List all important technical concepts, technologies, and frameworks discussed.
-3. Files and Code Sections: Enumerate specific files and code sections examined, modified, or created. Pay special attention to the most recent messages and include full code snippets where applicable and include a summary of why this file read or edit is important.
-4. Errors and fixes: List all errors that you ran into, and how you fixed them. Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
-5. Problem Solving: Document problems solved and any ongoing troubleshooting efforts.
-6. All user messages: List ALL user messages that are not tool results. These are critical for understanding the users' feedback and changing intent.
-7. Pending Tasks: Outline any pending tasks that you have explicitly been asked to work on.
-8. Current Work: Describe in detail precisely what was being worked on immediately before this summary request, paying special attention to the most recent messages from both user and assistant. Include file names and code snippets where applicable.
-9. Optional Next Step: List the next step that you will take that is related to the most recent work you were doing. IMPORTANT: ensure that this step is DIRECTLY in line with the user's most recent explicit requests, and the task you were working on immediately before this summary request. If your last task was concluded, then only list next steps if they are explicitly in line with the users request. Do not start on tangential requests or really old requests that were already completed without confirming with the user first.
-                       If there is a next step, include direct quotes from the most recent conversation showing exactly what task you were working on and where you left off. This should be verbatim to ensure there's no drift in task interpretation.
+## 4. Strategy & Approach
+The approach being taken to solve the problem, including any alternatives considered and why the current approach was chosen.
 
-There may be additional summarization instructions provided in the included context. If so, remember to follow these instructions when creating the above summary.
+## 5. Exact Next Steps
+The precise next action to take, directly in line with the user's most recent request. Include verbatim quotes from the conversation showing exactly where work was left off.
+IMPORTANT: Only include next steps that are explicitly in line with the user's current request. Do not suggest tangential tasks.
+
+Verification: Before finalizing, confirm: Does your summary clearly state the user's original request? If not, restate it verbatim.
 
 IMPORTANT: Do NOT use any tools. You MUST respond with ONLY the <summary>...</summary> block as your text output.`;
 

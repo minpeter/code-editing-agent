@@ -37,13 +37,52 @@ describe("compaction-policy", () => {
     ).toBe(true);
   });
 
-  it("computes needsCompaction from usage and reserve", () => {
+  it("starts speculative compaction from thresholdRatio-derived predictive threshold", () => {
+    expect(
+      shouldStartSpeculativeCompaction({
+        contextLimit: 20_000,
+        input: {
+          currentUsageTokens: 7499,
+          enabled: true,
+          hasMessages: true,
+          phaseReserveTokens: 2000,
+          thresholdRatio: 0.5,
+        },
+      })
+    ).toBe(false);
+
+    expect(
+      shouldStartSpeculativeCompaction({
+        contextLimit: 20_000,
+        input: {
+          currentUsageTokens: 7501,
+          enabled: true,
+          hasMessages: true,
+          phaseReserveTokens: 2000,
+          thresholdRatio: 0.5,
+        },
+      })
+    ).toBe(true);
+  });
+
+  it("computes needsCompaction from usage and thresholdRatio", () => {
     expect(
       needsCompactionFromUsage({
-        currentUsageTokens: 900,
+        currentUsageTokens: 9999,
+        contextLimit: 20_000,
+        thresholdRatio: 0.5,
         enabled: true,
         hasMessages: true,
-        thresholdLimit: 900,
+      })
+    ).toBe(false);
+
+    expect(
+      needsCompactionFromUsage({
+        currentUsageTokens: 10_001,
+        contextLimit: 20_000,
+        thresholdRatio: 0.5,
+        enabled: true,
+        hasMessages: true,
       })
     ).toBe(true);
   });

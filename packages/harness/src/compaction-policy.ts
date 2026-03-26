@@ -4,6 +4,7 @@ export interface CompactionPolicyInput {
   hasMessages: boolean;
   phaseReserveTokens: number;
   speculativeStartRatio?: number;
+  thresholdRatio?: number;
 }
 
 export function shouldStartSpeculativeCompaction(params: {
@@ -13,6 +14,17 @@ export function shouldStartSpeculativeCompaction(params: {
   const { contextLimit, input } = params;
   if (!(input.enabled && input.hasMessages)) {
     return false;
+  }
+
+  const hasValidThresholdRatio =
+    typeof input.thresholdRatio === "number" &&
+    Number.isFinite(input.thresholdRatio) &&
+    input.thresholdRatio > 0;
+
+  if (hasValidThresholdRatio) {
+    const speculativeThreshold =
+      contextLimit * (input.thresholdRatio as number) * 0.75;
+    return input.currentUsageTokens >= speculativeThreshold;
   }
 
   const predictiveThreshold =
@@ -28,14 +40,27 @@ export function shouldStartSpeculativeCompaction(params: {
 
 export function needsCompactionFromUsage(params: {
   currentUsageTokens: number;
+  contextLimit: number;
+  thresholdRatio?: number;
   enabled: boolean;
   hasMessages: boolean;
-  thresholdLimit: number;
 }): boolean {
-  const { currentUsageTokens, enabled, hasMessages, thresholdLimit } = params;
+  const {
+    currentUsageTokens,
+    contextLimit,
+    thresholdRatio = 0.5,
+    enabled,
+    hasMessages,
+  } = params;
   if (!(enabled && hasMessages)) {
     return false;
   }
+
+  const normalizedThresholdRatio =
+    Number.isFinite(thresholdRatio) && thresholdRatio > 0
+      ? thresholdRatio
+      : 0.5;
+  const thresholdLimit = contextLimit * normalizedThresholdRatio;
 
   return currentUsageTokens >= thresholdLimit;
 }

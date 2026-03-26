@@ -44,6 +44,8 @@ export interface CompactionConfig {
     messages: ModelMessage[],
     previousSummary?: string
   ) => Promise<string>;
+  // Fraction of contextLimit at which compaction triggers (default: 0.5)
+  thresholdRatio?: number;
 }
 
 export interface PruningConfig {
@@ -85,6 +87,15 @@ export interface ActualTokenUsage {
   promptTokens: number;
   totalTokens: number;
   updatedAt: Date;
+}
+
+export interface ActualTokenUsageInput {
+  completionTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  promptTokens?: number;
+  totalTokens?: number;
+  updatedAt?: Date;
 }
 
 export interface ContextUsage {

@@ -1,7 +1,7 @@
 import type { ModelMessage, ToolCallPart } from "ai";
 import { describe, expect, it } from "vitest";
 import type { CheckpointMessage } from "./compaction-types";
-import { pruneToolOutputs } from "./tool-pruning";
+import { progressivePrune, pruneToolOutputs } from "./tool-pruning";
 
 let checkpointId = 0;
 
@@ -402,5 +402,104 @@ describe("pruneToolOutputs", () => {
       expect(result.prunedCount).toBe(1);
       expect(result.prunedTokens).toBeGreaterThan(0);
     });
+  });
+});
+
+describe("progressivePrune", () => {
+  it("returns level 0 unchanged when already under target", () => {
+    const messages: CheckpointMessage[] = [
+      makeUserMessage("hello"),
+      makeToolMessage("read_file", largeOutput),
+    ];
+
+    const result = progressivePrune(messages, {
+      enabled: true,
+      protectRecentTokens: 0,
+      targetTokens: Number.MAX_SAFE_INTEGER,
+    });
+
+    expect(result.levelUsed).toBe(0);
+    expect(result.messages).toBe(messages);
+    expect(result.tokensAfter).toBe(result.tokensBefore);
+  });
+
+  it("uses middle-out pruning when selecting prunable outputs", () => {
+    const indexedMessages: CheckpointMessage[] = Array.from({ length: 10 }).map(
+      (_, index) =>
+        makeToolMessage(`tool_${index}`, `tool-${index}:${"x".repeat(18_000)}`)
+    );
+
+    const baseline = progressivePrune(indexedMessages, {
+      enabled: true,
+      protectRecentTokens: 0,
+      targetTokens: Number.MAX_SAFE_INTEGER,
+    });
+
+    const result = progressivePrune(indexedMessages, {
+      enabled: true,
+      protectRecentTokens: 0,
+      targetTokens: baseline.tokensBefore - 1000,
+    });
+
+    expect(result.levelUsed).toBe(1);
+
+    const prunedIndexes = result.messages
+      .map((msg, index) => {
+        if (
+          msg.message.role !== "tool" ||
+          !Array.isArray(msg.message.content)
+        ) {
+          return null;
+        }
+        const output = (msg.message.content as any[])[0]?.output;
+        return output?.value === "[output pruned]" ? index : null;
+      })
+      .filter((value): value is number => value !== null);
+
+    expect(prunedIndexes).toEqual([4]);
+  });
+
+  it("uses level 4 as final fallback and prunes all prunable outputs", () => {
+    const messages: CheckpointMessage[] = [
+      makeToolMessage("a", largeOutput),
+      makeToolMessage("b", largeOutput),
+      makeToolMessage("c", largeOutput),
+    ];
+
+    const result = progressivePrune(messages, {
+      enabled: true,
+      protectRecentTokens: 0,
+      targetTokens: -1,
+    });
+
+    expect(result.levelUsed).toBe(4);
+    expect(result.tokensAfter).toBeLessThan(result.tokensBefore);
+
+    for (const message of result.messages) {
+      if (message.message.role !== "tool") {
+        continue;
+      }
+      const content = message.message.content as any[];
+      expect(content[0].output).toEqual({
+        type: "text",
+        value: "[output pruned]",
+      });
+      expect(content[0].compactedAt).toEqual(expect.any(Number));
+    }
+  });
+
+  it("defaults protectRecentTokens to 40000 for progressive mode", () => {
+    const messages: CheckpointMessage[] = [
+      makeToolMessage("old_tool", largeOutput),
+      makeUserMessage("recent ".repeat(5000)),
+    ];
+
+    const result = progressivePrune(messages, {
+      enabled: true,
+      targetTokens: 1,
+    });
+
+    const toolContent = result.messages[0].message.content as any[];
+    expect(toolContent[0].output).toEqual(largeOutputWrapped);
   });
 });
