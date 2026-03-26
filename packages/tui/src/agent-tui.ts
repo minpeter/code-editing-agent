@@ -7,6 +7,7 @@ import {
   estimateTokens,
   executeCommand,
   isCommand,
+  isContextOverflowError,
   isSkillCommandResult,
   type ModelMessage,
   type OverflowRecoveryResult,
@@ -418,6 +419,27 @@ export function formatCompactionAppliedNotice(params: {
     : `↻ Blocking compaction applied: ${params.detail}`;
 }
 
+export async function retryStreamTurnOnContextOverflow<T>(params: {
+  error: unknown;
+  overflowRetried: boolean;
+  retry: () => Promise<T>;
+  runBlockingCompaction: () => Promise<boolean>;
+}): Promise<{ handled: false } | { handled: true; result: T }> {
+  if (params.overflowRetried || !isContextOverflowError(params.error)) {
+    return { handled: false };
+  }
+
+  const didCompact = await params.runBlockingCompaction();
+  if (!didCompact) {
+    return { handled: false };
+  }
+
+  return {
+    handled: true,
+    result: await params.retry(),
+  };
+}
+
 export interface AgentTUIConfig {
   agent: RunnableAgent;
   commands?: Command[];
@@ -745,6 +767,27 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const compactBeforeNextTurnIfNeeded = async (): Promise<void> => {
     await compactionOrchestrator.checkAndCompact();
     applyReadySpeculativeCompaction();
+  };
+
+  const runBlockingOverflowCompaction = async (
+    error: unknown
+  ): Promise<boolean> => {
+    blockingCompactionActive = true;
+    backgroundStatuses.clear();
+    renderFooterStatuses();
+    showLoader("Blocking compaction...");
+
+    try {
+      const result = await compactionOrchestrator.handleOverflow(error);
+      updateHeader();
+      tui.requestRender();
+      return result.success;
+    } finally {
+      blockingCompactionActive = false;
+      clearStatus();
+      updateHeader();
+      tui.requestRender();
+    }
   };
 
   const measureUsageIfAvailable = async (
@@ -1081,8 +1124,79 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     };
   };
 
+  const finalizeSuccessfulStreamTurn = async (params: {
+    finishReason: string;
+    responseMessages: ModelMessage[];
+    streamAbortController: AbortController;
+    usage:
+      | {
+          completionTokens?: number;
+          inputTokens?: number;
+          outputTokens?: number;
+          promptTokens?: number;
+          totalTokens?: number;
+        }
+      | null
+      | undefined;
+  }): Promise<"completed" | "continue" | "interrupted"> => {
+    logStreamUsage(params.usage);
+
+    if (
+      streamInterruptRequested ||
+      params.streamAbortController.signal.aborted
+    ) {
+      addInterruptedMessage();
+      return "interrupted";
+    }
+
+    applyReadySpeculativeCompaction();
+    config.messageHistory.addModelMessages(params.responseMessages);
+    const normalizedUsage = normalizeUsageMeasurement(params.usage);
+    if (normalizedUsage) {
+      config.messageHistory.updateActualUsage(normalizedUsage);
+    }
+    updateHeader();
+    await compactBeforeNextTurnIfNeeded();
+
+    if (shouldContinueManualToolLoop(params.finishReason)) {
+      return "continue";
+    }
+
+    addAbnormalFinishReasonMessage(params.finishReason);
+
+    return "completed";
+  };
+
+  const handleStreamTurnError = async (params: {
+    error: unknown;
+    overflowRetried: boolean;
+    phase: "new-turn" | "intermediate-step";
+    streamAbortController: AbortController;
+  }): Promise<"completed" | "continue" | "interrupted"> => {
+    if (
+      streamInterruptRequested ||
+      params.streamAbortController.signal.aborted
+    ) {
+      addInterruptedMessage();
+      return "interrupted";
+    }
+
+    const overflowRetry = await retryStreamTurnOnContextOverflow({
+      error: params.error,
+      overflowRetried: params.overflowRetried,
+      runBlockingCompaction: () => runBlockingOverflowCompaction(params.error),
+      retry: async () => runSingleStreamTurn(params.phase, true),
+    });
+    if (overflowRetry.handled) {
+      return overflowRetry.result;
+    }
+
+    throw params.error;
+  };
+
   const runSingleStreamTurn = async (
-    phase: "new-turn" | "intermediate-step"
+    phase: "new-turn" | "intermediate-step",
+    overflowRetried = false
   ): Promise<"completed" | "continue" | "interrupted"> => {
     let messagesForLLM = await prepareMessages(phase);
 
@@ -1126,36 +1240,19 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         stream.usage,
       ]);
 
-      logStreamUsage(usage);
-
-      if (streamInterruptRequested || streamAbortController.signal.aborted) {
-        addInterruptedMessage();
-        return "interrupted";
-      }
-
-      applyReadySpeculativeCompaction();
-      config.messageHistory.addModelMessages(response.messages);
-      const normalizedUsage = normalizeUsageMeasurement(usage);
-      if (normalizedUsage) {
-        config.messageHistory.updateActualUsage(normalizedUsage);
-      }
-      updateHeader();
-      await compactBeforeNextTurnIfNeeded();
-
-      if (shouldContinueManualToolLoop(finishReason)) {
-        return "continue";
-      }
-
-      addAbnormalFinishReasonMessage(finishReason);
-
-      return "completed";
+      return await finalizeSuccessfulStreamTurn({
+        finishReason,
+        responseMessages: response.messages,
+        streamAbortController,
+        usage,
+      });
     } catch (error) {
-      if (streamInterruptRequested || streamAbortController.signal.aborted) {
-        addInterruptedMessage();
-        return "interrupted";
-      }
-
-      throw error;
+      return await handleStreamTurnError({
+        error,
+        overflowRetried,
+        phase,
+        streamAbortController,
+      });
     } finally {
       if (activeStreamController === streamAbortController) {
         activeStreamController = null;

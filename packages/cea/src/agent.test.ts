@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agentManager,
   buildFileTrackingSummarizeFn,
+  computeAdaptiveThresholdRatio,
   computeCompactionMaxTokens,
   computeSpeculativeStartRatio,
   selectTranslationReasoningMode,
@@ -154,6 +155,16 @@ packages/cea/src/agent.test.ts, packages/cea/src/unused.ts
 summary`);
   });
 
+  it("computeAdaptiveThresholdRatio returns context-adapted values", () => {
+    expect(computeAdaptiveThresholdRatio(8000)).toBe(0.5);
+    expect(computeAdaptiveThresholdRatio(20_000)).toBe(0.55);
+    expect(computeAdaptiveThresholdRatio(40_000)).toBe(0.6);
+    expect(computeAdaptiveThresholdRatio(80_000)).toBe(0.65);
+    expect(computeAdaptiveThresholdRatio(200_000)).toBe(0.7);
+    expect(computeAdaptiveThresholdRatio(400_000)).toBe(0.7);
+    expect(computeAdaptiveThresholdRatio(0)).toBe(0.5);
+  });
+
   it("uses a soft compaction threshold and earlier speculative ratio based on usable input budget", () => {
     agentManager.setProvider("friendli");
     agentManager.setModelId("test-compact");
@@ -180,14 +191,16 @@ summary`);
       contextLength,
       compaction.reserveTokens ?? 0
     );
+    const expectedThresholdRatio = computeAdaptiveThresholdRatio(contextLength);
 
     expect(compaction.maxTokens).toBe(expectedMaxTokens);
+    expect(compaction.thresholdRatio).toBe(expectedThresholdRatio);
     expect(agentManager.getModelTokenLimits().maxCompletionTokens).toBe(20_480);
     expect(compaction.reserveTokens).toBe(2048);
     expect(compaction.keepRecentTokens).toBe(
       Math.min(
         Math.floor(contextLength * 0.3),
-        Math.max(512, Math.floor(expectedMaxTokens * 0.5))
+        Math.max(512, Math.floor(contextLength * expectedThresholdRatio * 0.3))
       )
     );
     expect(compaction.speculativeStartRatio).toBe(expectedRatio);

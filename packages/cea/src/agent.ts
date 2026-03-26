@@ -593,19 +593,28 @@ export class AgentManager {
       }
     );
     const summarizeFn = buildFileTrackingSummarizeFn(baseModelSummarizer);
+
+    // Compute context-adaptive threshold ratio
+    const thresholdRatio = computeAdaptiveThresholdRatio(
+      effectiveContextLength
+    );
+
+    // Backward compatibility: keep maxTokens computed from old formula
     const maxTokens = computeCompactionMaxTokens(
       effectiveContextLength,
       effectiveReserveTokens
     );
+
     const keepRecentTokens = Math.min(
       Math.floor(effectiveContextLength * 0.3),
-      Math.max(512, Math.floor(maxTokens * 0.5))
+      Math.max(512, Math.floor(effectiveContextLength * thresholdRatio * 0.3))
     );
 
     return {
       contextLimit: effectiveContextLength,
       enabled: true,
       maxTokens,
+      thresholdRatio,
       reserveTokens: effectiveReserveTokens,
       keepRecentTokens,
       speculativeStartRatio: computeSpeculativeStartRatio(
@@ -908,6 +917,32 @@ export function createAgentManager(options?: {
 }
 
 export const agentManager = createAgentManager();
+
+export const computeAdaptiveThresholdRatio = (
+  contextLength: number
+): number => {
+  if (!(contextLength > 0)) {
+    return 0.5;
+  }
+
+  if (contextLength <= 8000) {
+    return 0.5;
+  }
+  if (contextLength <= 20_000) {
+    return 0.55;
+  }
+  if (contextLength <= 40_000) {
+    return 0.6;
+  }
+  if (contextLength <= 80_000) {
+    return 0.65;
+  }
+  if (contextLength <= 200_000) {
+    return 0.7;
+  }
+  return 0.7;
+};
+
 export const computeCompactionMaxTokens = (
   contextLength: number,
   reserveTokens: number

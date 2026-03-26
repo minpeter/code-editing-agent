@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   formatCompactionAppliedNotice,
+  retryStreamTurnOnContextOverflow,
   shouldDisplayBackgroundCompactionStatus,
 } from "./agent-tui";
 
@@ -79,6 +80,50 @@ describe("agent-tui compaction core", () => {
         state: "clear",
       })
     ).toBe(false);
+  });
+
+  it("runs blocking compaction then retries once on overflow errors", async () => {
+    let compactionCalls = 0;
+    let retryCalls = 0;
+
+    const result = await retryStreamTurnOnContextOverflow({
+      error: new Error("maximum context length exceeded"),
+      overflowRetried: false,
+      runBlockingCompaction: () => {
+        compactionCalls += 1;
+        return Promise.resolve(true);
+      },
+      retry: () => {
+        retryCalls += 1;
+        return Promise.resolve("completed" as const);
+      },
+    });
+
+    expect(result).toEqual({ handled: true, result: "completed" });
+    expect(compactionCalls).toBe(1);
+    expect(retryCalls).toBe(1);
+  });
+
+  it("does not retry overflow errors more than once", async () => {
+    let compactionCalls = 0;
+    let retryCalls = 0;
+
+    const result = await retryStreamTurnOnContextOverflow({
+      error: new Error("context_length_exceeded"),
+      overflowRetried: true,
+      runBlockingCompaction: () => {
+        compactionCalls += 1;
+        return Promise.resolve(true);
+      },
+      retry: () => {
+        retryCalls += 1;
+        return Promise.resolve("completed" as const);
+      },
+    });
+
+    expect(result).toEqual({ handled: false });
+    expect(compactionCalls).toBe(0);
+    expect(retryCalls).toBe(0);
   });
 
   it("does not block when context is below hard limit", async () => {
