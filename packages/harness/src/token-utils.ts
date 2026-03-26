@@ -3,6 +3,8 @@ import type { ModelMessage, TextPart } from "ai";
 // Constants for token estimation
 export const LATIN_CHARS_PER_TOKEN = 4;
 export const CJK_CHARS_PER_TOKEN = 1.5;
+export const TOOL_RESULT_CHARS_PER_TOKEN = 3;
+export const TOOL_CALL_CHARS_PER_TOKEN = 3;
 
 // CJK Unicode ranges for improved token estimation
 const CJK_REGEX =
@@ -53,11 +55,67 @@ export function extractMessageText(message: ModelMessage): string {
     .join(" ");
 }
 
+function estimateCodeContentTokens(
+  text: string,
+  nonCjkCharsPerToken: number
+): number {
+  const cjkMatches = text.match(CJK_REGEX);
+  const cjkCount = cjkMatches ? cjkMatches.length : 0;
+  const nonCjkCount = text.length - cjkCount;
+
+  const cjkTokens = cjkCount / CJK_CHARS_PER_TOKEN;
+  const nonCjkTokens = nonCjkCount / nonCjkCharsPerToken;
+
+  return Math.ceil(cjkTokens + nonCjkTokens);
+}
+
 /**
  * Estimate token count for a ModelMessage, with content-type-aware weighting.
  * Tool-call and tool-result parts use chars/3 weighting (heavier than text's chars/4).
- * TODO: implement in T4
  */
-export function estimateMessageTokens(_message: ModelMessage): number {
-  throw new Error("estimateMessageTokens not implemented yet");
+export function estimateMessageTokens(message: ModelMessage): number {
+  if (typeof message.content === "string") {
+    return estimateTokens(message.content);
+  }
+
+  if (message.role === "tool") {
+    const text = extractMessageText(message);
+    return estimateCodeContentTokens(text, TOOL_RESULT_CHARS_PER_TOKEN);
+  }
+
+  if (Array.isArray(message.content)) {
+    let totalTokens = 0;
+
+    for (const part of message.content) {
+      if (typeof part !== "object" || part === null) {
+        continue;
+      }
+
+      if (part.type === "text") {
+        totalTokens += estimateTokens((part as TextPart).text);
+        continue;
+      }
+
+      if (part.type === "tool-call") {
+        const toolCallText = `${part.toolName} ${JSON.stringify(part.input)}`;
+        totalTokens += estimateCodeContentTokens(
+          toolCallText,
+          TOOL_CALL_CHARS_PER_TOKEN
+        );
+        continue;
+      }
+
+      if (part.type === "tool-result") {
+        const toolResultText = `${part.toolName} ${JSON.stringify(part.output)}`;
+        totalTokens += estimateCodeContentTokens(
+          toolResultText,
+          TOOL_RESULT_CHARS_PER_TOKEN
+        );
+      }
+    }
+
+    return totalTokens;
+  }
+
+  return estimateTokens(extractMessageText(message));
 }
