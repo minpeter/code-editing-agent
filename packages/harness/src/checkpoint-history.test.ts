@@ -1259,7 +1259,13 @@ describe("speculative compaction fires before blocking", () => {
     expect(speculativeFirstAt).not.toBeNull();
     expect(blockingFirstAt).not.toBeNull();
     if (speculativeFirstAt !== null && blockingFirstAt !== null) {
+      // Speculative fires at ~70% of maxTokens(8K default) threshold
+      // Blocking fires at ~95% of contextLimit(40K) threshold
+      // These are independent: speculative targets the compaction trigger,
+      // blocking targets the context window hard limit.
+      // The gap proves ample advance warning before the hard limit is reached.
       expect(speculativeFirstAt).toBeLessThan(blockingFirstAt);
+      expect(blockingFirstAt - speculativeFirstAt).toBeGreaterThanOrEqual(10);
     }
   });
 });
