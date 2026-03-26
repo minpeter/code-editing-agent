@@ -219,6 +219,206 @@ describe("CheckpointHistory", () => {
       expect(previousSummarySeen).toBe("first summary");
     });
 
+    it("creates dual summary with turn context when split happens mid-turn", async () => {
+      const summarizeCalls: Array<{
+        messages: ModelMessage[];
+        previousSummary?: string;
+        reserveTokens: number;
+      }> = [];
+
+      const trailingToolMessage: ModelMessage = {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_2",
+            toolName: "read_file",
+            output: { type: "text", value: "second result" },
+          },
+        ],
+      };
+
+      let h: CheckpointHistory;
+      h = new CheckpointHistory({
+        compaction: {
+          enabled: true,
+          keepRecentTokens: 50,
+          reserveTokens: 100,
+          summarizeFn: (messages, previousSummary) => {
+            summarizeCalls.push({
+              messages,
+              previousSummary,
+              reserveTokens: h.getCompactionConfig().reserveTokens,
+            });
+            return Promise.resolve(
+              summarizeCalls.length === 1
+                ? "history summary"
+                : "turn prefix summary"
+            );
+          },
+        },
+      });
+
+      h.addUserMessage("Investigate checkpoint compaction");
+      h.addModelMessages([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call_1",
+              toolName: "read_file",
+              input: { path: "a.ts" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_1",
+              toolName: "read_file",
+              output: { type: "text", value: "first result" },
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call_2",
+              toolName: "read_file",
+              input: { path: "b.ts" },
+            },
+          ],
+        },
+        trailingToolMessage,
+      ]);
+
+      (
+        h as unknown as { resolveCompactionSplitIndex: () => number }
+      ).resolveCompactionSplitIndex = () => 4;
+
+      const result = await h.compact();
+      expect(result.success).toBe(true);
+      expect(summarizeCalls).toHaveLength(2);
+      expect(summarizeCalls[0]?.reserveTokens).toBe(80);
+      expect(summarizeCalls[1]?.reserveTokens).toBe(50);
+      expect(summarizeCalls[0]?.messages.map((m) => m.role)).toEqual(["user"]);
+      expect(summarizeCalls[1]?.messages.map((m) => m.role)).toEqual([
+        "assistant",
+        "tool",
+        "assistant",
+      ]);
+
+      const summaryMessage = h
+        .getAll()
+        .find((message) => message.id === result.summaryMessageId);
+      expect(summaryMessage?.message.role).toBe("assistant");
+      expect(summaryMessage?.message.content).toBe(
+        "history summary\n\n---\n\n**Turn Context:**\n\nturn prefix summary"
+      );
+    });
+
+    it("passes previousSummary only to history summary call during split-turn dual summary", async () => {
+      const summarizeCalls: Array<{
+        previousSummary?: string;
+        reserveTokens: number;
+      }> = [];
+
+      const trailingToolMessage: ModelMessage = {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_2",
+            toolName: "read_file",
+            output: { type: "text", value: "second result" },
+          },
+        ],
+      };
+
+      let callIndex = 0;
+      const h = new CheckpointHistory({
+        compaction: {
+          enabled: true,
+          keepRecentTokens: 1,
+          reserveTokens: 100,
+          summarizeFn: (_messages, previousSummary) => {
+            summarizeCalls.push({
+              previousSummary,
+              reserveTokens: h.getCompactionConfig().reserveTokens,
+            });
+            callIndex += 1;
+            if (callIndex === 1) {
+              return Promise.resolve("seed summary");
+            }
+            return Promise.resolve(`summary-${callIndex}`);
+          },
+        },
+      });
+
+      h.addUserMessage("old user request ".repeat(50));
+      h.addModelMessages([
+        { role: "assistant", content: "old assistant reply" },
+      ]);
+      const first = await h.compact();
+      expect(first.success).toBe(true);
+
+      h.updateCompaction({ keepRecentTokens: 50 });
+      h.addUserMessage("continue analysis");
+      h.addModelMessages([
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call_1",
+              toolName: "read_file",
+              input: { path: "a.ts" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_1",
+              toolName: "read_file",
+              output: { type: "text", value: "first result" },
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "call_2",
+              toolName: "read_file",
+              input: { path: "b.ts" },
+            },
+          ],
+        },
+        trailingToolMessage,
+      ]);
+
+      (
+        h as unknown as { resolveCompactionSplitIndex: () => number }
+      ).resolveCompactionSplitIndex = () => 6;
+
+      const second = await h.compact();
+      expect(second.success).toBe(true);
+      expect(summarizeCalls).toHaveLength(3);
+      expect(summarizeCalls[1]?.previousSummary).toBe("seed summary");
+      expect(summarizeCalls[2]?.previousSummary).toBeUndefined();
+      expect(summarizeCalls[1]?.reserveTokens).toBe(80);
+      expect(summarizeCalls[2]?.reserveTokens).toBe(50);
+    });
+
     it("getEstimatedTokens() decreases after compact", async () => {
       const h = new CheckpointHistory({
         compaction: {

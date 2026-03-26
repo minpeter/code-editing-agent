@@ -99,6 +99,53 @@ function hasToolCalls(message: ModelMessage): boolean {
   );
 }
 
+function hasToolResults(message: ModelMessage): boolean {
+  if (message.role !== "tool" || !Array.isArray(message.content)) {
+    return false;
+  }
+
+  return message.content.some(
+    (part) =>
+      typeof part === "object" && part !== null && part.type === "tool-result"
+  );
+}
+
+function getToolCallIds(message: ModelMessage): string[] {
+  if (message.role !== "assistant" || !Array.isArray(message.content)) {
+    return [];
+  }
+
+  return message.content.flatMap((part) => {
+    if (
+      typeof part === "object" &&
+      part !== null &&
+      part.type === "tool-call" &&
+      typeof part.toolCallId === "string"
+    ) {
+      return [part.toolCallId];
+    }
+    return [];
+  });
+}
+
+function getToolResultIds(message: ModelMessage): string[] {
+  if (message.role !== "tool" || !Array.isArray(message.content)) {
+    return [];
+  }
+
+  return message.content.flatMap((part) => {
+    if (
+      typeof part === "object" &&
+      part !== null &&
+      part.type === "tool-result" &&
+      typeof part.toolCallId === "string"
+    ) {
+      return [part.toolCallId];
+    }
+    return [];
+  });
+}
+
 function trimTrailingAssistantNewlines(message: ModelMessage): ModelMessage {
   if (message.role !== "assistant") {
     return message;
@@ -583,10 +630,13 @@ export class CheckpointHistory {
       };
     }
 
-    const summaryText = await summarizeFn(
-      toSummarizeForSummary.map((message) => message.message),
-      previousSummary
-    );
+    const summaryText = await this.buildCompactionSummaryText({
+      activeMessages,
+      previousSummary,
+      splitIndex,
+      summarizeFn,
+      toSummarizeForSummary,
+    });
 
     if (!summaryText || summaryText.trim().length === 0) {
       return {
@@ -916,6 +966,142 @@ export class CheckpointHistory {
       keepRecentTokens: this.compactionConfig.keepRecentTokens ?? 2000,
       messages: activeMessages,
     });
+  }
+
+  private async buildCompactionSummaryText(params: {
+    activeMessages: CheckpointMessage[];
+    previousSummary?: string;
+    splitIndex: number;
+    summarizeFn: (
+      messages: ModelMessage[],
+      previousSummary?: string
+    ) => Promise<string>;
+    toSummarizeForSummary: CheckpointMessage[];
+  }): Promise<string> {
+    const {
+      activeMessages,
+      previousSummary,
+      splitIndex,
+      summarizeFn,
+      toSummarizeForSummary,
+    } = params;
+
+    const splitTurnStart = this.findSplitTurnStartIndex({
+      messagesToSummarize: toSummarizeForSummary,
+      messagesAfterSplit: activeMessages.slice(splitIndex),
+    });
+
+    if (splitTurnStart === null) {
+      return summarizeFn(
+        toSummarizeForSummary.map((message) => message.message),
+        previousSummary
+      );
+    }
+
+    const reserveTokens =
+      this.compactionConfig.reserveTokens ??
+      DEFAULT_COMPACTION_CONFIG.reserveTokens;
+    const historyReserveTokens = Math.floor(reserveTokens * 0.8);
+    const turnPrefixReserveTokens = Math.floor(reserveTokens * 0.5);
+
+    const historyMessages = toSummarizeForSummary.slice(0, splitTurnStart);
+    const turnPrefixMessages = toSummarizeForSummary.slice(splitTurnStart);
+
+    const historySummary =
+      historyMessages.length > 0
+        ? await this.summarizeWithReserveTokens(
+            summarizeFn,
+            historyMessages,
+            historyReserveTokens,
+            previousSummary
+          )
+        : (previousSummary ?? "");
+    const turnPrefixSummary = await this.summarizeWithReserveTokens(
+      summarizeFn,
+      turnPrefixMessages,
+      turnPrefixReserveTokens
+    );
+
+    return `${historySummary}\n\n---\n\n**Turn Context:**\n\n${turnPrefixSummary}`;
+  }
+
+  private findSplitTurnStartIndex(params: {
+    messagesAfterSplit: CheckpointMessage[];
+    messagesToSummarize: CheckpointMessage[];
+  }): number | null {
+    const { messagesToSummarize, messagesAfterSplit } = params;
+    if (messagesToSummarize.length === 0 || messagesAfterSplit.length === 0) {
+      return null;
+    }
+
+    const lastToSummarize = messagesToSummarize.at(-1);
+    if (!(lastToSummarize && hasToolCalls(lastToSummarize.message))) {
+      return null;
+    }
+
+    const toolCallIds = getToolCallIds(lastToSummarize.message);
+    if (toolCallIds.length === 0) {
+      return null;
+    }
+
+    const matchingResultAfterSplit = messagesAfterSplit.some((message) => {
+      if (!hasToolResults(message.message)) {
+        return false;
+      }
+
+      const resultIds = new Set(getToolResultIds(message.message));
+      return toolCallIds.some((toolCallId) => resultIds.has(toolCallId));
+    });
+
+    if (!matchingResultAfterSplit) {
+      return null;
+    }
+
+    let startIndex = messagesToSummarize.length - 1;
+    while (startIndex >= 2) {
+      const maybePreviousTool = messagesToSummarize[startIndex - 1];
+      const maybePreviousCall = messagesToSummarize[startIndex - 2];
+      if (
+        maybePreviousTool?.message.role === "tool" &&
+        hasToolResults(maybePreviousTool.message) &&
+        maybePreviousCall &&
+        hasToolCalls(maybePreviousCall.message)
+      ) {
+        startIndex -= 2;
+        continue;
+      }
+      break;
+    }
+
+    return startIndex;
+  }
+
+  private async summarizeWithReserveTokens(
+    summarizeFn: (
+      messages: ModelMessage[],
+      previousSummary?: string
+    ) => Promise<string>,
+    messages: CheckpointMessage[],
+    reserveTokens: number,
+    previousSummary?: string
+  ): Promise<string> {
+    const originalReserveTokens = this.compactionConfig.reserveTokens;
+    this.compactionConfig = {
+      ...this.compactionConfig,
+      reserveTokens,
+    };
+
+    try {
+      return await summarizeFn(
+        messages.map((message) => message.message),
+        previousSummary
+      );
+    } finally {
+      this.compactionConfig = {
+        ...this.compactionConfig,
+        reserveTokens: originalReserveTokens,
+      };
+    }
   }
 
   private getRecoveryBudget(): number {
