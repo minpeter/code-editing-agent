@@ -1197,7 +1197,7 @@ describe("20K spike prevention — integration", () => {
   });
 });
 
-describe("speculative compaction fires before blocking (RED)", () => {
+describe("speculative compaction fires before blocking", () => {
   it("shouldStartSpeculativeCompactionForNextTurn returns true BEFORE isAtHardContextLimit as messages grow", () => {
     const h = new CheckpointHistory({
       compaction: {
@@ -1215,7 +1215,7 @@ describe("speculative compaction fires before blocking (RED)", () => {
     let speculativeFirstAt: number | null = null;
     let blockingFirstAt: number | null = null;
 
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 100; i++) {
       h.addUserMessage(`read file ${i}`);
       h.addModelMessages([
         {
