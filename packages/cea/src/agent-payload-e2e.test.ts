@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const payloadState = vi.hoisted(() => ({
   calls: [] as Record<string, unknown>[],
+  usage: undefined as
+    | {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+      }
+    | undefined,
 }));
 
 const mockedStreamText = vi.fn((options: Record<string, unknown>) => {
@@ -12,8 +19,8 @@ const mockedStreamText = vi.fn((options: Record<string, unknown>) => {
     finishReason: Promise.resolve("stop"),
     fullStream: {} as never,
     response: Promise.resolve({ messages: [] }),
-    usage: Promise.resolve(undefined),
-    totalUsage: Promise.resolve(undefined),
+    usage: Promise.resolve(payloadState.usage),
+    totalUsage: Promise.resolve(payloadState.usage),
   } as never;
 });
 
@@ -53,6 +60,7 @@ async function capturePayloadFromHistory(history: CheckpointHistoryInstance) {
 describe("AgentManager Friendli payload E2E", () => {
   beforeEach(() => {
     payloadState.calls.length = 0;
+    payloadState.usage = undefined;
     mockedStreamText.mockClear();
   });
 
@@ -145,5 +153,32 @@ describe("AgentManager Friendli payload E2E", () => {
       "assistant",
       "tool",
     ]);
+  });
+
+  it("measures usage with a one-token probe and normalizes input token accounting", async () => {
+    payloadState.usage = {
+      inputTokens: 321,
+      outputTokens: 1,
+      totalTokens: 322,
+    };
+
+    const manager = new AgentManager(createFriendliStub(), null);
+    manager.setProvider("friendli");
+    manager.setModelId("MiniMaxAI/MiniMax-M2.5");
+
+    const usage = await manager.measureUsage([
+      { role: "user", content: "measure this context" },
+    ]);
+
+    expect(usage).toEqual({
+      promptTokens: 321,
+      inputTokens: 321,
+      completionTokens: 1,
+      outputTokens: 1,
+      totalTokens: 322,
+    });
+
+    const payload = getLast(payloadState.calls);
+    expect(payload?.maxOutputTokens).toBe(1);
   });
 });

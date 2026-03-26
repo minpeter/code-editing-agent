@@ -4,6 +4,7 @@ import {
   type CompactionConfig,
   createAgent,
   createModelSummarizer,
+  estimateTokens,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
 } from "@ai-sdk-tool/harness";
@@ -60,6 +61,66 @@ export type AgentStreamOptions = Pick<
 export type AgentStreamResult = HarnessAgentStreamResult;
 
 export type ProviderType = "friendli" | "anthropic";
+
+export interface UsageMeasurement {
+  completionTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  promptTokens: number;
+  totalTokens: number;
+}
+
+const TOKEN_PROBE_SENTINEL = ".";
+
+const getUsageNumber = (
+  usage: Record<string, unknown>,
+  ...keys: string[]
+): number | undefined => {
+  for (const key of keys) {
+    const value = usage[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const normalizeUsageMeasurement = (usage: unknown): UsageMeasurement | null => {
+  if (!usage || typeof usage !== "object") {
+    return null;
+  }
+
+  const usageRecord = usage as Record<string, unknown>;
+  const promptTokens = getUsageNumber(
+    usageRecord,
+    "promptTokens",
+    "inputTokens"
+  );
+  const completionTokens = getUsageNumber(
+    usageRecord,
+    "completionTokens",
+    "outputTokens"
+  );
+  const totalTokens = getUsageNumber(usageRecord, "totalTokens");
+
+  if (
+    promptTokens === undefined &&
+    completionTokens === undefined &&
+    totalTokens === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    promptTokens: promptTokens ?? 0,
+    inputTokens: promptTokens ?? 0,
+    completionTokens: completionTokens ?? 0,
+    outputTokens: completionTokens ?? 0,
+    totalTokens:
+      totalTokens ?? Math.max(0, (promptTokens ?? 0) + (completionTokens ?? 0)),
+  };
+};
 
 /** Token limits shared across all provider types. */
 export interface ModelTokenLimits {
@@ -631,6 +692,67 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
       providerOptions,
       maxOutputTokens: effectiveMaxOutputTokens,
     });
+  }
+
+  async measureUsage(
+    messages: ModelMessage[]
+  ): Promise<UsageMeasurement | null> {
+    const probeMessages =
+      messages.length > 0
+        ? messages
+        : ([
+            {
+              role: "user",
+              content: TOKEN_PROBE_SENTINEL,
+            },
+          ] satisfies ModelMessage[]);
+    const { model, providerOptions } = this.buildModel("off");
+    const preparedMessages =
+      this.provider === "friendli"
+        ? applyFriendliInterleavedField(
+            probeMessages,
+            this.modelId,
+            DEFAULT_REASONING_MODE
+          )
+        : probeMessages;
+
+    const agent = createAgent({
+      model,
+      tools: this.toolRegistry,
+      instructions: await this.getInstructions(),
+      maxStepsPerTurn: 1,
+      experimental_repairToolCall: repairToolCall,
+    });
+    const stream = agent.stream({
+      messages: preparedMessages,
+      providerOptions,
+      maxOutputTokens: 1,
+    });
+    const usage = normalizeUsageMeasurement(
+      await Promise.all([stream.usage, stream.response]).then(
+        ([resolvedUsage]) => {
+          return resolvedUsage;
+        }
+      )
+    );
+
+    if (!usage) {
+      return null;
+    }
+
+    if (messages.length > 0) {
+      return usage;
+    }
+
+    const probeMessageTokens = estimateTokens(TOKEN_PROBE_SENTINEL);
+    const promptTokens = Math.max(0, usage.promptTokens - probeMessageTokens);
+    return {
+      promptTokens,
+      inputTokens: promptTokens,
+      completionTokens: usage.completionTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: promptTokens + usage.completionTokens,
+    };
   }
 }
 

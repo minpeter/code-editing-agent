@@ -27,12 +27,70 @@ type MaxOutputAwareMessageHistory = HeadlessMessageHistory & {
   getRecommendedMaxOutputTokens: CheckpointHistory["getRecommendedMaxOutputTokens"];
 };
 
+interface UsageMeasurement {
+  completionTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  promptTokens?: number;
+  totalTokens?: number;
+}
+
+function getUsageNumber(
+  usage: Record<string, unknown>,
+  ...keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    const value = usage[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeUsageMeasurement(
+  usage: UsageMeasurement | null | undefined
+): UsageMeasurement | null {
+  if (!usage) {
+    return null;
+  }
+
+  const usageRecord = usage as Record<string, unknown>;
+  const promptTokens = getUsageNumber(
+    usageRecord,
+    "promptTokens",
+    "inputTokens"
+  );
+  const completionTokens = getUsageNumber(
+    usageRecord,
+    "completionTokens",
+    "outputTokens"
+  );
+  const totalTokens = getUsageNumber(usageRecord, "totalTokens");
+
+  if (
+    promptTokens === undefined &&
+    completionTokens === undefined &&
+    totalTokens === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    promptTokens,
+    inputTokens: promptTokens,
+    completionTokens,
+    outputTokens: completionTokens,
+    totalTokens,
+  };
+}
+
 function hasUsageTracking(
   history: HeadlessMessageHistory
 ): history is UsageAwareMessageHistory {
   return (
-    "updateActualUsage" in history &&
-    typeof history.updateActualUsage === "function"
+    typeof Reflect.get(history as object, "updateActualUsage") === "function"
   );
 }
 
@@ -40,8 +98,8 @@ function hasRecommendedMaxOutputTokens(
   history: HeadlessMessageHistory
 ): history is MaxOutputAwareMessageHistory {
   return (
-    "getRecommendedMaxOutputTokens" in history &&
-    typeof history.getRecommendedMaxOutputTokens === "function"
+    typeof Reflect.get(history as object, "getRecommendedMaxOutputTokens") ===
+    "function"
   );
 }
 
@@ -59,10 +117,17 @@ function updateHistoryUsage(
     return;
   }
 
+  const normalizedUsage = normalizeUsageMeasurement(usage);
+  if (!normalizedUsage) {
+    return;
+  }
+
   history.updateActualUsage({
-    completionTokens: usage.completionTokens ?? 0,
-    promptTokens: usage.promptTokens ?? 0,
-    totalTokens: usage.totalTokens ?? 0,
+    completionTokens: normalizedUsage.completionTokens,
+    inputTokens: normalizedUsage.inputTokens,
+    outputTokens: normalizedUsage.outputTokens,
+    promptTokens: normalizedUsage.promptTokens,
+    totalTokens: normalizedUsage.totalTokens,
     updatedAt: new Date(),
   });
 }
@@ -83,6 +148,7 @@ export interface HeadlessRunnerConfig {
   emitEvent?: (event: TrajectoryEvent) => void;
   initialUserMessage?: InitialUserMessage;
   maxIterations?: number;
+  measureUsage?: (messages: ModelMessage[]) => Promise<UsageMeasurement | null>;
   messageHistory: HeadlessMessageHistory;
   modelId: string;
   onTodoReminder?: () => Promise<{
@@ -108,6 +174,38 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
   type StreamTurnResult = Awaited<ReturnType<typeof processStream>>;
   type StreamUsage = StreamTurnResult["usage"];
+  const measureUsageIfAvailable = async (
+    messages: ModelMessage[]
+  ): Promise<boolean> => {
+    if (!(config.measureUsage && hasUsageTracking(config.messageHistory))) {
+      return false;
+    }
+
+    const measured = normalizeUsageMeasurement(
+      await config.measureUsage(messages)
+    );
+    if (!measured) {
+      return false;
+    }
+
+    config.messageHistory.updateActualUsage({
+      completionTokens: measured.completionTokens,
+      inputTokens: measured.inputTokens,
+      outputTokens: measured.outputTokens,
+      promptTokens: measured.promptTokens,
+      totalTokens: measured.totalTokens,
+      updatedAt: new Date(),
+    });
+
+    emitMetric?.({
+      event: "usage_probe",
+      turn: turnNumber,
+      promptTokens: measured.promptTokens ?? measured.inputTokens ?? null,
+      totalTokens: measured.totalTokens ?? null,
+    });
+
+    return true;
+  };
   const baseCompactionCallbacks = isMetricsEnabled
     ? {
         onApplied: () => {
@@ -298,15 +396,30 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
 
     await blockAtHardContextLimit(0, phase);
 
-    const messages = await getMessagesForLLM(config.messageHistory);
+    let messages = await getMessagesForLLM(config.messageHistory);
+    const didProbe = await measureUsageIfAvailable(messages);
+    if (didProbe) {
+      await compactBeforeNextTurnIfNeeded();
+      await blockAtHardContextLimit(1, phase);
+      messages = await getMessagesForLLM(config.messageHistory);
+    }
+
     startSpeculativeCompaction();
-    const maxOutputTokens = getRecommendedMaxOutputTokens(
+    let maxOutputTokens = getRecommendedMaxOutputTokens(
       config.messageHistory,
       messages
     );
+    if (maxOutputTokens !== undefined && maxOutputTokens <= 0) {
+      await blockAtHardContextLimit(1, phase);
+      messages = await getMessagesForLLM(config.messageHistory);
+      maxOutputTokens = Math.max(
+        1,
+        getRecommendedMaxOutputTokens(config.messageHistory, messages) ?? 1
+      );
+    }
     const stream = await config.agent.stream({
       messages,
-      ...(maxOutputTokens ? { maxOutputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     });
     const processStreamResult = await processStream({
       emitEvent,

@@ -723,6 +723,36 @@ describe("CheckpointHistory", () => {
       expect(usage?.totalTokens).toBe(150);
     });
 
+    it("normalizes AI SDK inputTokens/outputTokens usage into prompt/completion tokens", () => {
+      const h = new CheckpointHistory({ compaction: { contextLimit: 5000 } });
+      h.updateActualUsage({
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+      });
+
+      const usage = h.getActualUsage();
+      expect(usage?.promptTokens).toBe(1000);
+      expect(usage?.completionTokens).toBe(500);
+      expect(usage?.totalTokens).toBe(1500);
+      expect(h.getContextUsage().used).toBe(1000);
+    });
+
+    it("preserves legacy prompt/completion usage shape", () => {
+      const h = new CheckpointHistory({ compaction: { contextLimit: 5000 } });
+      h.updateActualUsage({
+        promptTokens: 1000,
+        completionTokens: 500,
+        totalTokens: 1500,
+      });
+
+      const usage = h.getActualUsage();
+      expect(usage?.promptTokens).toBe(1000);
+      expect(usage?.completionTokens).toBe(500);
+      expect(usage?.totalTokens).toBe(1500);
+      expect(h.getContextUsage().used).toBe(1000);
+    });
+
     it("getActualUsage returns null when no usage recorded", () => {
       const h = new CheckpointHistory();
       expect(h.getActualUsage()).toBeNull();
@@ -831,6 +861,24 @@ describe("CheckpointHistory context limit methods", () => {
     const h = new CheckpointHistory();
     const n = h.getRecommendedMaxOutputTokens();
     expect(n).toBeGreaterThan(0);
+  });
+
+  it("getRecommendedMaxOutputTokens prefers actual prompt usage over message estimates", () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        contextLimit: 1000,
+        enabled: true,
+        reserveTokens: 100,
+      },
+    });
+    h.addUserMessage("x".repeat(20));
+    h.updateActualUsage({
+      inputTokens: 400,
+      outputTokens: 10,
+      totalTokens: 410,
+    });
+
+    expect(h.getRecommendedMaxOutputTokens(h.getMessagesForLLM())).toBe(425);
   });
 
   it("shouldStartSpeculativeCompactionForNextTurn returns false by default", () => {
@@ -1169,6 +1217,27 @@ describe("systemPromptTokens in estimated usage", () => {
     });
 
     expect(h.needsCompaction()).toBe(true);
+  });
+
+  it("does not double the intermediate-step reserve once actual usage has been measured", () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 20_480,
+        reserveTokens: 6464,
+        summarizeFn: async () => "summary",
+      },
+    });
+
+    h.updateActualUsage({
+      inputTokens: 7900,
+      outputTokens: 10,
+      totalTokens: 7910,
+    });
+
+    expect(h.isAtHardContextLimit(1, { phase: "intermediate-step" })).toBe(
+      false
+    );
   });
 });
 

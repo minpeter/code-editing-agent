@@ -5,6 +5,10 @@ import {
   type PreparedCompaction,
 } from "@ai-sdk-tool/harness";
 import { describe, expect, it } from "vitest";
+import {
+  formatCompactionAppliedNotice,
+  shouldDisplayBackgroundCompactionStatus,
+} from "./agent-tui";
 
 function createPreparedCompaction(id: string): PreparedCompaction {
   return {
@@ -44,6 +48,39 @@ function createPreparedCompaction(id: string): PreparedCompaction {
 }
 
 describe("agent-tui compaction core", () => {
+  it("labels background and blocking compaction notices differently", () => {
+    expect(
+      formatCompactionAppliedNotice({
+        detail: "−1200 tokens (now 4.0k)",
+        jobId: "background-compaction-1",
+      })
+    ).toBe("↻ Background compaction applied: −1200 tokens (now 4.0k)");
+    expect(
+      formatCompactionAppliedNotice({ detail: "−1200 tokens (now 4.0k)" })
+    ).toBe("↻ Blocking compaction applied: −1200 tokens (now 4.0k)");
+  });
+
+  it("suppresses background compaction status while blocking compaction is active", () => {
+    expect(
+      shouldDisplayBackgroundCompactionStatus({
+        blockingCompactionActive: false,
+        state: "running",
+      })
+    ).toBe(true);
+    expect(
+      shouldDisplayBackgroundCompactionStatus({
+        blockingCompactionActive: true,
+        state: "running",
+      })
+    ).toBe(false);
+    expect(
+      shouldDisplayBackgroundCompactionStatus({
+        blockingCompactionActive: false,
+        state: "clear",
+      })
+    ).toBe(false);
+  });
+
   it("does not block when context is below hard limit", async () => {
     let prepareCalls = 0;
     let applyReadyCalls = 0;

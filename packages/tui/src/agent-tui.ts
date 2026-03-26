@@ -394,11 +394,36 @@ export interface AgentTUIMessageHistory {
   }): void;
 }
 
+interface UsageMeasurement {
+  completionTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  promptTokens?: number;
+  totalTokens?: number;
+}
+
+export function shouldDisplayBackgroundCompactionStatus(params: {
+  blockingCompactionActive: boolean;
+  state: "clear" | "running";
+}): boolean {
+  return !params.blockingCompactionActive && params.state === "running";
+}
+
+export function formatCompactionAppliedNotice(params: {
+  detail: string;
+  jobId?: string;
+}): string {
+  return params.jobId
+    ? `↻ Background compaction applied: ${params.detail}`
+    : `↻ Blocking compaction applied: ${params.detail}`;
+}
+
 export interface AgentTUIConfig {
   agent: RunnableAgent;
   commands?: Command[];
   footer?: { text?: string };
   header?: { title: string; subtitle?: string };
+  measureUsage?: (messages: ModelMessage[]) => Promise<UsageMeasurement | null>;
   messageHistory: AgentTUIMessageHistory;
   onCommandAction?: (action: CommandAction) => void | Promise<void>;
   onSetup?: () => void | Promise<void>;
@@ -491,7 +516,59 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   let lastCtrlCPressAt = 0;
   let foregroundStatus: StatusSpinner | null = null;
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
+  let blockingCompactionActive = false;
   let commandInputListenerActive = false;
+
+  const getUsageNumber = (
+    usage: Record<string, unknown>,
+    ...keys: string[]
+  ): number | undefined => {
+    for (const key of keys) {
+      const value = usage[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+    }
+
+    return undefined;
+  };
+
+  const normalizeUsageMeasurement = (
+    usage: UsageMeasurement | null | undefined
+  ): UsageMeasurement | null => {
+    if (!usage) {
+      return null;
+    }
+
+    const usageRecord = usage as Record<string, unknown>;
+    const promptTokens = getUsageNumber(
+      usageRecord,
+      "promptTokens",
+      "inputTokens"
+    );
+    const completionTokens = getUsageNumber(
+      usageRecord,
+      "completionTokens",
+      "outputTokens"
+    );
+    const totalTokens = getUsageNumber(usageRecord, "totalTokens");
+
+    if (
+      promptTokens === undefined &&
+      completionTokens === undefined &&
+      totalTokens === undefined
+    ) {
+      return null;
+    }
+
+    return {
+      promptTokens,
+      inputTokens: promptTokens,
+      completionTokens,
+      outputTokens: completionTokens,
+      totalTokens,
+    };
+  };
 
   const createStatusSpinner = (message: string): StatusSpinner => {
     return new StatusSpinner(
@@ -578,22 +655,26 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const compactionOrchestrator = new CompactionOrchestrator(
     config.messageHistory,
     {
-      onApplied: ({ baseMessageCount, newMessageCount, tokenDelta }) => {
+      onApplied: ({ baseMessageCount, jobId, newMessageCount, tokenDelta }) => {
         const saved = Math.abs(tokenDelta);
         const usage = config.messageHistory.getContextUsage();
         const after = usage ? `${usage.used}` : "?";
         const summarizedCount = baseMessageCount - newMessageCount;
         const detail = buildCompactionDetail(saved, after, summarizedCount);
-        addCompactionNotice(`↻ Compacted: ${detail}`);
+        addCompactionNotice(formatCompactionAppliedNotice({ detail, jobId }));
         updateHeader();
         tui.requestRender();
       },
       onBlockingChange: (blocking) => {
         if (blocking) {
-          showLoader("Compacting...");
+          blockingCompactionActive = true;
+          backgroundStatuses.clear();
+          renderFooterStatuses();
+          showLoader("Blocking compaction...");
           return;
         }
 
+        blockingCompactionActive = false;
         clearStatus();
         updateHeader();
         tui.requestRender();
@@ -601,9 +682,23 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       onError: (message, error) => {
         console.error(`${message}:`, error);
       },
-      onJobStatus: (id, message, state) => {
+      onJobStatus: (id, _message, state) => {
+        if (
+          !shouldDisplayBackgroundCompactionStatus({
+            blockingCompactionActive,
+            state,
+          })
+        ) {
+          if (state === "clear") {
+            clearBackgroundStatus(id);
+          }
+          updateHeader();
+          tui.requestRender();
+          return;
+        }
+
         if (state === "running") {
-          setBackgroundStatus(id, message, "running");
+          setBackgroundStatus(id, "Background compaction...", "running");
         } else {
           clearBackgroundStatus(id);
         }
@@ -650,6 +745,31 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const compactBeforeNextTurnIfNeeded = async (): Promise<void> => {
     await compactionOrchestrator.checkAndCompact();
     applyReadySpeculativeCompaction();
+  };
+
+  const measureUsageIfAvailable = async (
+    messages: ModelMessage[]
+  ): Promise<boolean> => {
+    if (!config.measureUsage) {
+      return false;
+    }
+
+    const measured = normalizeUsageMeasurement(
+      await config.measureUsage(messages)
+    );
+    if (!measured) {
+      return false;
+    }
+
+    config.messageHistory.updateActualUsage({
+      completionTokens: measured.completionTokens,
+      inputTokens: measured.inputTokens,
+      outputTokens: measured.outputTokens,
+      promptTokens: measured.promptTokens,
+      totalTokens: measured.totalTokens,
+    });
+    updateHeader();
+    return true;
   };
 
   const cancelActiveStream = (): boolean => {
@@ -858,7 +978,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
     await blockAtHardContextLimit(0, phase);
 
-    const messagesForLLM = config.messageHistory.getMessagesForLLM();
+    let messagesForLLM = config.messageHistory.getMessagesForLLM();
+    const didProbe = await measureUsageIfAvailable(messagesForLLM);
+    if (didProbe) {
+      await compactBeforeNextTurnIfNeeded();
+      await blockAtHardContextLimit(1, phase);
+      messagesForLLM = config.messageHistory.getMessagesForLLM();
+    }
+
     startSpeculativeCompaction();
     return messagesForLLM;
   };
@@ -931,10 +1058,33 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     );
   };
 
+  const resolveTurnBudget = async (
+    phase: "new-turn" | "intermediate-step",
+    messagesForLLM: ModelMessage[]
+  ): Promise<{ maxOutputTokens?: number; messagesForLLM: ModelMessage[] }> => {
+    let nextMessages = messagesForLLM;
+    let maxOutputTokens =
+      config.messageHistory.getRecommendedMaxOutputTokens(nextMessages);
+
+    if (maxOutputTokens !== undefined && maxOutputTokens <= 0) {
+      await blockAtHardContextLimit(1, phase);
+      nextMessages = config.messageHistory.getMessagesForLLM();
+      maxOutputTokens = Math.max(
+        1,
+        config.messageHistory.getRecommendedMaxOutputTokens(nextMessages) ?? 1
+      );
+    }
+
+    return {
+      messagesForLLM: nextMessages,
+      maxOutputTokens,
+    };
+  };
+
   const runSingleStreamTurn = async (
     phase: "new-turn" | "intermediate-step"
   ): Promise<"completed" | "continue" | "interrupted"> => {
-    const messagesForLLM = await prepareMessages(phase);
+    let messagesForLLM = await prepareMessages(phase);
 
     showLoader("Working...");
     const streamAbortController = new AbortController();
@@ -942,12 +1092,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     streamInterruptRequested = false;
 
     try {
-      const maxOutputTokens =
-        config.messageHistory.getRecommendedMaxOutputTokens(messagesForLLM);
+      const budget = await resolveTurnBudget(phase, messagesForLLM);
+      messagesForLLM = budget.messagesForLLM;
       const stream = await config.agent.stream({
         messages: messagesForLLM,
         abortSignal: streamAbortController.signal,
-        ...(maxOutputTokens ? { maxOutputTokens } : {}),
+        ...(budget.maxOutputTokens !== undefined
+          ? { maxOutputTokens: budget.maxOutputTokens }
+          : {}),
       });
 
       const clearStreamingLoader = createStreamingLoaderClearer();
@@ -983,7 +1135,10 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
       applyReadySpeculativeCompaction();
       config.messageHistory.addModelMessages(response.messages);
-      config.messageHistory.updateActualUsage(usage);
+      const normalizedUsage = normalizeUsageMeasurement(usage);
+      if (normalizedUsage) {
+        config.messageHistory.updateActualUsage(normalizedUsage);
+      }
       updateHeader();
       await compactBeforeNextTurnIfNeeded();
 
@@ -1090,6 +1245,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       chatContainer.clear();
       addNewSessionMessage(chatContainer);
       await config.onCommandAction?.(commandResult.action);
+      await measureUsageIfAvailable([]);
       updateHeader();
 
       if (commandResult.message) {
@@ -1223,6 +1379,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   try {
     await config.onSetup?.();
+    await measureUsageIfAvailable([]);
     updateHeader();
 
     while (!shouldExit) {

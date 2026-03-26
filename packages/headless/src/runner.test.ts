@@ -9,6 +9,8 @@ function createMockStream(
   finishReason: "stop" | "tool-calls" = "stop",
   usage?: {
     completionTokens?: number;
+    inputTokens?: number;
+    outputTokens?: number;
     promptTokens?: number;
     totalTokens?: number;
   }
@@ -205,6 +207,57 @@ describe("runHeadless", () => {
 
     expect(streamCallCount).toBe(2);
     expect(secondCallMessages[0]?.role).toBe("user");
+  });
+
+  it("uses a usage probe to tighten the next stream budget", async () => {
+    const history = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        keepRecentTokens: 100,
+        maxTokens: 900,
+        reserveTokens: 100,
+        summarizeFn: async () => "summary",
+      },
+    });
+    history.setContextLimit(1000);
+
+    let probeCalls = 0;
+    let observedMaxOutputTokens: number | undefined;
+
+    await runHeadless({
+      agent: {
+        stream: ({ maxOutputTokens }) => {
+          observedMaxOutputTokens = maxOutputTokens;
+          return createMockStream(
+            [{ role: "assistant", content: "done" }],
+            "stop",
+            {
+              inputTokens: 420,
+              outputTokens: 10,
+              totalTokens: 430,
+            }
+          );
+        },
+      },
+      initialUserMessage: {
+        content: "measure the real prompt usage before streaming",
+      },
+      measureUsage: () => {
+        probeCalls += 1;
+        return Promise.resolve({
+          inputTokens: 400,
+          outputTokens: 1,
+          totalTokens: 401,
+        });
+      },
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-usage-probe",
+    });
+
+    expect(probeCalls).toBe(1);
+    expect(observedMaxOutputTokens).toBe(425);
+    expect(history.getContextUsage().source).toBe("actual");
   });
 
   it("blocks only when a follow-up hits the hard context limit", async () => {

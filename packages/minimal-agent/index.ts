@@ -79,7 +79,7 @@ function formatTokens(tokenCount: number): string {
 }
 
 function formatContextUsage(contextUsage: ContextUsage): string {
-  if (contextUsage.source === "estimated" && contextUsage.used === 0) {
+  if (contextUsage.limit <= 0) {
     return `?/${formatTokens(contextUsage.limit)} (?)`;
   }
 

@@ -5,7 +5,6 @@ import {
   type Command,
   type CommandContext,
   CompactionOrchestrator,
-  type ContextUsage,
   estimateTokens,
   parseCommand,
   type RunnableAgent,
@@ -57,6 +56,7 @@ import { createTranslateCommand } from "../commands/translate";
 import type { SkillInfo } from "../context/skills";
 import { loadAllSkills } from "../context/skills";
 import { isNonEnglish, translateToEnglish } from "../context/translation";
+import { formatContextUsage } from "../context-usage-format";
 import { env, validateProviderConfig } from "../env";
 import { setSpinnerOutputEnabled } from "../interaction/spinner";
 import { createToolRenderers } from "../interaction/tool-renderers";
@@ -93,21 +93,6 @@ const ANSI_GRAY = "\x1b[90m";
 
 const style = (prefix: string, text: string): string => {
   return `${prefix}${text}${ANSI_RESET}`;
-};
-
-const formatTokens = (n: number): string => {
-  if (n >= 1000) {
-    return `${(n / 1000).toFixed(1)}k`;
-  }
-  return String(n);
-};
-
-const formatContextUsage = (contextUsage: ContextUsage): string => {
-  if (contextUsage.source === "estimated" && contextUsage.used === 0) {
-    return `?/${formatTokens(contextUsage.limit)} (?)`;
-  }
-
-  return `${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
 };
 
 type SessionScopedHistory = CheckpointHistory & {
@@ -517,6 +502,7 @@ const mainCommand = defineCommand({
                 maxOutputTokens: opts.maxOutputTokens,
               }),
           },
+          measureUsage: (messages) => agentManager.measureUsage(messages),
           sessionId: sessionManager.getId(),
           emitEvent,
           initialUserMessage: {
@@ -1057,6 +1043,7 @@ const mainCommand = defineCommand({
     try {
       await createAgentTUI({
         agent: buildAgentStreamWithTodoContinuation(),
+        measureUsage: (messages) => agentManager.measureUsage(messages),
         messageHistory,
         skills,
         commands: createCliCommands(),
