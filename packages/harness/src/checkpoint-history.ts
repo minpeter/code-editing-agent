@@ -452,8 +452,7 @@ export class CheckpointHistory {
 
     const estimatedInputTokens = messagesForLLM
       ? messagesForLLM.reduce(
-          (total, message) =>
-            total + estimateTokens(extractMessageText(message)),
+          (total, message) => total + estimateMessageTokens(message),
           0
         ) + this.systemPromptTokens
       : this.getCurrentUsageTokens();
