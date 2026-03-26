@@ -3,8 +3,8 @@ import type { ModelMessage, TextPart } from "ai";
 // Constants for token estimation
 export const LATIN_CHARS_PER_TOKEN = 4;
 export const CJK_CHARS_PER_TOKEN = 1.5;
-export const TOOL_RESULT_CHARS_PER_TOKEN = 3;
-export const TOOL_CALL_CHARS_PER_TOKEN = 3;
+export const TOOL_RESULT_CHARS_PER_TOKEN = 4;
+export const TOOL_CALL_CHARS_PER_TOKEN = 4;
 
 // CJK Unicode ranges for improved token estimation
 const CJK_REGEX =
@@ -55,18 +55,84 @@ export function extractMessageText(message: ModelMessage): string {
     .join(" ");
 }
 
-function estimateCodeContentTokens(
-  text: string,
-  nonCjkCharsPerToken: number
-): number {
-  const cjkMatches = text.match(CJK_REGEX);
-  const cjkCount = cjkMatches ? cjkMatches.length : 0;
-  const nonCjkCount = text.length - cjkCount;
+function extractRawTextLength(output: unknown): number {
+  if (output == null) {
+    return 0;
+  }
 
-  const cjkTokens = cjkCount / CJK_CHARS_PER_TOKEN;
-  const nonCjkTokens = nonCjkCount / nonCjkCharsPerToken;
+  if (typeof output === "string") {
+    return output.length;
+  }
 
-  return Math.ceil(cjkTokens + nonCjkTokens);
+  if (typeof output === "object") {
+    const obj = output as Record<string, unknown>;
+
+    if (typeof obj.value === "string") {
+      return obj.value.length;
+    }
+
+    if (typeof obj.text === "string") {
+      return obj.text.length;
+    }
+
+    return JSON.stringify(output).length;
+  }
+
+  return String(output).length;
+}
+
+function estimateToolRoleMessageTokens(message: ModelMessage): number {
+  if (!Array.isArray(message.content)) {
+    return estimateTokens(message.content as string);
+  }
+
+  let totalTokens = 0;
+
+  for (const part of message.content) {
+    if (
+      typeof part === "object" &&
+      part !== null &&
+      "type" in part &&
+      part.type === "tool-result"
+    ) {
+      const rawLen = extractRawTextLength((part as { output: unknown }).output);
+      totalTokens += Math.ceil(rawLen / TOOL_RESULT_CHARS_PER_TOKEN);
+    }
+  }
+
+  return totalTokens;
+}
+
+function estimateArrayContentTokens(parts: ModelMessage["content"]): number {
+  if (!Array.isArray(parts)) {
+    return 0;
+  }
+
+  let totalTokens = 0;
+
+  for (const part of parts) {
+    if (typeof part !== "object" || part === null) {
+      continue;
+    }
+
+    if (part.type === "text") {
+      totalTokens += estimateTokens((part as TextPart).text);
+      continue;
+    }
+
+    if (part.type === "tool-call") {
+      const rawLen = part.toolName.length + extractRawTextLength(part.input);
+      totalTokens += Math.ceil(rawLen / TOOL_CALL_CHARS_PER_TOKEN);
+      continue;
+    }
+
+    if (part.type === "tool-result") {
+      const rawLen = extractRawTextLength(part.output);
+      totalTokens += Math.ceil(rawLen / TOOL_RESULT_CHARS_PER_TOKEN);
+    }
+  }
+
+  return totalTokens;
 }
 
 /**
@@ -79,42 +145,11 @@ export function estimateMessageTokens(message: ModelMessage): number {
   }
 
   if (message.role === "tool") {
-    const text = extractMessageText(message);
-    return estimateCodeContentTokens(text, TOOL_RESULT_CHARS_PER_TOKEN);
+    return estimateToolRoleMessageTokens(message);
   }
 
   if (Array.isArray(message.content)) {
-    let totalTokens = 0;
-
-    for (const part of message.content) {
-      if (typeof part !== "object" || part === null) {
-        continue;
-      }
-
-      if (part.type === "text") {
-        totalTokens += estimateTokens((part as TextPart).text);
-        continue;
-      }
-
-      if (part.type === "tool-call") {
-        const toolCallText = `${part.toolName} ${JSON.stringify(part.input)}`;
-        totalTokens += estimateCodeContentTokens(
-          toolCallText,
-          TOOL_CALL_CHARS_PER_TOKEN
-        );
-        continue;
-      }
-
-      if (part.type === "tool-result") {
-        const toolResultText = `${part.toolName} ${JSON.stringify(part.output)}`;
-        totalTokens += estimateCodeContentTokens(
-          toolResultText,
-          TOOL_RESULT_CHARS_PER_TOKEN
-        );
-      }
-    }
-
-    return totalTokens;
+    return estimateArrayContentTokens(message.content);
   }
 
   return estimateTokens(extractMessageText(message));
