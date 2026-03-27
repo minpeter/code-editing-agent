@@ -1,0 +1,6 @@
+[compaction-debug] contextLimit overridden: 202752 → 32000, reserve=10101, keepRecent=9600
+[compaction-metric] {"ts":1774574626285,"event":"usage_probe","turn":1,"promptTokens":7106,"totalTokens":7107}
+[compaction-metric] {"ts":1774574627743,"event":"turn_complete","turn":1,"estimatedTokens":7106,"source":"actual","contextLimit":32000,"actualTokens":7192}
+[compaction-metric] {"ts":1774574628218,"event":"usage_probe","turn":1,"promptTokens":9625,"totalTokens":9626}
+[compaction-metric] {"ts":1774574635799,"event":"turn_complete","turn":1,"estimatedTokens":9692,"source":"actual","contextLimit":32000,"actualTokens":10264}
+[headless] Completed in 9.88s

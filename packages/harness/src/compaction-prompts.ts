@@ -222,9 +222,23 @@ function logSummarizerUsage(
   );
 }
 
-const DEFAULT_SUMMARIZER_MAX_OUTPUT = 4096;
+const MAX_SUMMARIZER_OUTPUT_TOKENS = 4096;
 const MIN_SUMMARIZER_OUTPUT_TOKENS = 64;
+const SUMMARIZER_OUTPUT_RATIO = 0.1;
 const SMALL_CONTEXT_THRESHOLD = 4096;
+
+function computeSummarizerMaxOutput(contextLimit: number): number {
+  if (contextLimit <= 0) {
+    return MAX_SUMMARIZER_OUTPUT_TOKENS;
+  }
+  return Math.max(
+    MIN_SUMMARIZER_OUTPUT_TOKENS,
+    Math.min(
+      MAX_SUMMARIZER_OUTPUT_TOKENS,
+      Math.floor(contextLimit * SUMMARIZER_OUTPUT_RATIO)
+    )
+  );
+}
 
 export function buildSummaryInput(
   messages: CheckpointMessage[],
@@ -258,10 +272,10 @@ export function createModelSummarizer(
   options?: ModelSummarizerOptions
 ): (messages: SummarizerInput, previousSummary?: string) => Promise<string> {
   const fullPrompt = options?.prompt ?? DEFAULT_COMPACTION_USER_PROMPT;
-  const configuredMaxOutput =
-    options?.maxOutputTokens ?? DEFAULT_SUMMARIZER_MAX_OUTPUT;
   const instructionsSource = options?.instructions;
   const contextLimit = options?.contextLimit ?? 0;
+  const configuredMaxOutput =
+    options?.maxOutputTokens ?? computeSummarizerMaxOutput(contextLimit);
 
   return async (
     messages: SummarizerInput,

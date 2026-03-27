@@ -925,22 +925,19 @@ export const computeAdaptiveThresholdRatio = (
     return 0.5;
   }
 
-  if (contextLength <= 8000) {
+  if (contextLength <= 16_000) {
+    return 0.45;
+  }
+  if (contextLength <= 32_000) {
     return 0.5;
   }
-  if (contextLength <= 20_000) {
+  if (contextLength <= 64_000) {
     return 0.55;
   }
-  if (contextLength <= 40_000) {
+  if (contextLength <= 128_000) {
     return 0.6;
   }
-  if (contextLength <= 80_000) {
-    return 0.65;
-  }
-  if (contextLength <= 200_000) {
-    return 0.7;
-  }
-  return 0.7;
+  return 0.65;
 };
 
 export const computeCompactionMaxTokens = (

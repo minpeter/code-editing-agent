@@ -1,9 +1,9 @@
 ═══════════════════════════════════════════════════════════════════
   Multi-Prompt Compaction Benchmark Summary
-  Generated: 2026-03-26T18:54:18.136Z
-  Context limits: 8000, 20000, 40000, 80000
+  Generated: 2026-03-27T01:41:21.469Z
+  Context limits: 32000
   Max iterations: 12
-  Total run time: 46m 5s
+  Total run time: 18m 17s
 ═══════════════════════════════════════════════════════════════════
 
 ┌─ explore: Codebase exploration (read-heavy) (read-heavy)
@@ -11,10 +11,7 @@
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  8000    │      13 │    11 │   8918 │     8417 │    12 │   no │ 4m 54s
-│  20000   │      10 │     2 │  15081 │    27875 │    12 │   no │ 4m 13s
-│  40000   │       0 │     0 │  25444 │    23321 │     5 │  yes │ 0m 31s
-│  80000   │       0 │     0 │  19513 │    18177 │     3 │  yes │ 0m 21s
+│  32000   │       1 │     0 │  22023 │    21809 │     6 │  yes │ 0m 41s
 └──────────────────────────────────────────────────────────────
 
 ┌─ single-edit: Single file edit (short task) (short)
@@ -22,10 +19,7 @@
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  8000    │       6 │     3 │   8965 │     7782 │     4 │  yes │ 2m 42s
-│  20000   │       0 │     0 │  10190 │     9790 │     4 │  yes │ 0m 15s
-│  40000   │       0 │     0 │  10577 │     9625 │     2 │  yes │ 0m 11s
-│  80000   │       0 │     0 │  10533 │     9625 │     2 │  yes │ 0m 11s
+│  32000   │       0 │     0 │  10264 │     9625 │     2 │  yes │ 0m 10s
 └──────────────────────────────────────────────────────────────
 
 ┌─ bug-trace: Bug investigation (read + trace) (read-heavy)
@@ -33,10 +27,7 @@
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  8000    │      14 │    11 │   8639 │     8680 │    12 │   no │ 4m 18s
-│  20000   │       4 │     1 │  47042 │    43503 │     7 │  yes │ 4m 59s
-│  40000   │       1 │     0 │  25996 │    17364 │     2 │  yes │ 3m 43s
-│  80000   │       2 │     0 │  42974 │    45283 │     6 │  yes │ 1m 22s
+│  32000   │       3 │     0 │   8720 │    43682 │     3 │   no │ 13m 46s
 └──────────────────────────────────────────────────────────────
 
 ┌─ multi-file-refactor: Multi-file analysis (cross-module) (multi-step)
@@ -44,10 +35,7 @@
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  8000    │       4 │     1 │   9331 │     8919 │     2 │  yes │ 1m 8s
-│  20000   │       4 │     4 │  12915 │    51620 │    12 │   no │ 2m 26s
-│  40000   │       4 │     1 │  18720 │    47841 │    12 │   no │ 2m 20s
-│  80000   │       0 │     0 │   7304 │     9377 │     1 │   no │ 5m 0s
+│  32000   │       2 │     0 │  19567 │    73018 │    12 │   no │ 1m 28s
 └──────────────────────────────────────────────────────────────
 
 ┌─ write-heavy: Code generation (write-heavy) (write-heavy)
@@ -55,39 +43,36 @@
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  8000    │      12 │    12 │   8484 │     8539 │    12 │   no │ 4m 13s
-│  20000   │       1 │     0 │  14186 │    13082 │     4 │  yes │ 0m 15s
-│  40000   │       0 │     0 │  25807 │    13076 │     4 │  yes │ 1m 34s
-│  80000   │       0 │     0 │  23264 │    21761 │     7 │  yes │ 1m 30s
+│  32000   │       2 │     0 │  20273 │    25274 │     6 │  yes │ 2m 12s
 └──────────────────────────────────────────────────────────────
 
 ═══ Cross-Scenario Matrix: Compaction Count ═══
 
-scenario             │     8000 │    20000 │    40000 │    80000
-────────────────────────────────────────────────────────────────
-explore              │       13 │       10 │        0 │        0
-single-edit          │        6 │        0 │        0 │        0
-bug-trace            │       14 │        4 │        1 │        2
-multi-file-refactor  │        4 │        4 │        4 │        0
-write-heavy          │       12 │        1 │        0 │        0
+scenario             │    32000
+───────────────────────────────
+explore              │        1
+single-edit          │        0
+bug-trace            │        3
+multi-file-refactor  │        2
+write-heavy          │        2
 
 ═══ Cross-Scenario Matrix: Blocking Count ═══
 
-scenario             │     8000 │    20000 │    40000 │    80000
-────────────────────────────────────────────────────────────────
-explore              │       11 │        2 │        0 │        0
-single-edit          │        3 │        0 │        0 │        0
-bug-trace            │       11 │        1 │        0 │        0
-multi-file-refactor  │        1 │        4 │        1 │        0
-write-heavy          │       12 │        0 │        0 │        0
+scenario             │    32000
+───────────────────────────────
+explore              │        0
+single-edit          │        0
+bug-trace            │        0
+multi-file-refactor  │        0
+write-heavy          │        0
 
 ═══ Cross-Scenario Matrix: Completed ═══
 
-scenario             │     8000 │    20000 │    40000 │    80000
-────────────────────────────────────────────────────────────────
-explore              │       no │       no │      yes │      yes
-single-edit          │      yes │      yes │      yes │      yes
-bug-trace            │       no │      yes │      yes │      yes
-multi-file-refactor  │      yes │       no │       no │       no
-write-heavy          │       no │      yes │      yes │      yes
+scenario             │    32000
+───────────────────────────────
+explore              │      yes
+single-edit          │      yes
+bug-trace            │       no
+multi-file-refactor  │       no
+write-heavy          │      yes
 

@@ -156,12 +156,16 @@ summary`);
   });
 
   it("computeAdaptiveThresholdRatio returns context-adapted values", () => {
-    expect(computeAdaptiveThresholdRatio(8000)).toBe(0.5);
-    expect(computeAdaptiveThresholdRatio(20_000)).toBe(0.55);
-    expect(computeAdaptiveThresholdRatio(40_000)).toBe(0.6);
-    expect(computeAdaptiveThresholdRatio(80_000)).toBe(0.65);
-    expect(computeAdaptiveThresholdRatio(200_000)).toBe(0.7);
-    expect(computeAdaptiveThresholdRatio(400_000)).toBe(0.7);
+    expect(computeAdaptiveThresholdRatio(8000)).toBe(0.45);
+    expect(computeAdaptiveThresholdRatio(16_000)).toBe(0.45);
+    expect(computeAdaptiveThresholdRatio(20_000)).toBe(0.5);
+    expect(computeAdaptiveThresholdRatio(32_000)).toBe(0.5);
+    expect(computeAdaptiveThresholdRatio(40_000)).toBe(0.55);
+    expect(computeAdaptiveThresholdRatio(64_000)).toBe(0.55);
+    expect(computeAdaptiveThresholdRatio(80_000)).toBe(0.6);
+    expect(computeAdaptiveThresholdRatio(128_000)).toBe(0.6);
+    expect(computeAdaptiveThresholdRatio(200_000)).toBe(0.65);
+    expect(computeAdaptiveThresholdRatio(400_000)).toBe(0.65);
     expect(computeAdaptiveThresholdRatio(0)).toBe(0.5);
   });
 
