@@ -1,0 +1,67 @@
+---
+
+## Crush 코드베이스 개요
+
+**Crush**는 Charm이 만든 Go 기반 터미널 AI 코딩 어시스턴트입니다. 사용자가 CLI에서 LLM과 대화하며 코드를 읽고, 쓰고, 실행할 수 있게 해줍니다.
+
+---
+
+### 핵심 아키텍처
+
+```
+main.go → internal/cmd → internal/app → internal/agent → fantasy(LLM)
+                                      ↓
+                              internal/ui (BubbleTea TUI)
+```
+
+| 레이어 | 역할 |
+|--------|------|
+| `main.go` | 진입점. pprof 프로파일러 선택 실행 후 `cmd.Execute()` |
+| `internal/cmd/` | Cobra CLI 명령어 (`run`, `login`, `models`, `stats`, `session` 등) |
+| `internal/app/app.go` | 최상위 서비스 와이어링. DB, 에이전트, LSP, MCP, 이벤트 초기화 |
+| `internal/agent/` | 핵심 오케스트레이션. LLM 대화 루프, 도구 실행, 세션 관리 |
+| `internal/ui/` | BubbleTea v2 기반 TUI (채팅, 다이얼로그, 자동완성 등) |
+
+---
+
+### 에이전트 시스템
+
+- **`agent.go`** — `SessionAgent`: 세션별 LLM 대화를 관리. 자동 요약, 토큰 관리, 큐잉 처리
+- **`coordinator.go`** — `Coordinator`: 여러 에이전트(`coder`, `task`)를 조율하는 인터페이스
+- **`tools/`** — 에이전트가 사용할 수 있는 도구들 (각각 `.go` + `.md` 설명 파일 쌍):
+  - `bash`, `edit`, `multiedit`, `view`, `grep`, `glob`, `ls` — 파일/쉘 조작
+  - `fetch`, `web_fetch`, `web_search` — 웹 접근
+  - `lsp_restart`, `references`, `diagnostics` — LSP 코드 인텔리전스
+  - `todos`, `sourcegraph`, `mcp/` — 작업 관리 및 외부 도구 연동
+
+---
+
+### 지원 LLM 프로바이더
+
+`charm.land/fantasy` 추상화 레이어를 통해 통합:
+- Anthropic, OpenAI, Google Gemini, AWS Bedrock, Azure, OpenRouter, Vercel, GitHub Copilot, Hyper, MiniMax
+
+---
+
+### 주요 인프라
+
+| 패키지 | 역할 |
+|--------|------|
+| `internal/config/` | `crush.json` 설정 로드, 프로바이더·모델 해석 |
+| `internal/db/` | SQLite + sqlc (세션, 메시지, 파일 추적 영속화) |
+| `internal/lsp/` | LSP 클라이언트 매니저 (자동 탐지, 온디맨드 기동) |
+| `internal/permission/` | 도구 실행 권한 체크 및 허용 목록 |
+| `internal/pubsub/` | 에이전트↔UI 간 비동기 메시지 브로커 |
+| `internal/session/` | 세션 CRUD |
+| `internal/shell/` | 백그라운드 bash 실행 지원 |
+| `internal/skills/` | 커스텀 스킬 파일 로드 |
+| `internal/oauth/` | Copilot·Hyper OAuth 토큰 관리 |
+
+---
+
+### 빌드 특징
+
+- **CGO 비활성화** (`CGO_ENABLED=0`, `GOEXPERIMENT=greenteagc`)
+- **순수 Go SQLite** (modernc 또는 ncruces 드라이버)
+- **시스템 프롬프트**: `internal/agent/templates/*.md.tpl` Go 템플릿으로 런타임 주입
+- **Context files**: 작업 디렉토리의 `AGENTS.md`, `CRUSH.md`, `CLAUDE.md` 등을 자동으로 읽어 에이전트 지침에 포함

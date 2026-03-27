@@ -1,0 +1,31 @@
+
+
+이 코드베이스는 **pi monorepo**로, AI 에이전트 구축과 LLM(Large Language Model) 배포 관리를 위한 도구들의 모음입니다.
+
+## 프로젝트 개요
+
+**pi**는 다양한 LLM 프로바이더(OpenAI, Anthropic, Google 등)를 위한 통합 API와 코딩 에이전트, Terminal UI, Web UI 등을 포함하는 도구 세트입니다.
+
+## 주요 패키지
+
+| 패키지 | 설명 |
+|--------|------|
+| **pi-ai** | OpenAI, Anthropic, Google 등 다양한 LLM 프로바이더를 위한 통합 API |
+| **pi-agent-core** | 도구 호출과 상태 관리를 지원하는 에이전트 런타임 |
+| **pi-coding-agent** | 인터랙티브 코딩 에이전트 CLI |
+| **pi-mom** | 슬랙 봇 - 메시지를 pi 코딩 에이전트에 위임 |
+| **pi-tui** | 차분 렌더링(differential rendering)을 지원하는 터미널 UI 라이브러리 |
+| **pi-web-ui** | AI 채팅 인터페이스를 위한 웹 컴포넌트 |
+| **pi-pods** | GPU 파드에서 vLLM 배포를 관리하는 CLI |
+
+## 개발 관련 명령어
+
+```bash
+npm install    # 의존성 설치
+npm run build  # 모든 패키지 빌드
+npm run check  # 린트, 포맷, 타입 체크
+./test.sh      # 테스트 실행
+./pi-test.sh   # 소스에서 pi 실행
+```
+
+개별 패키지에 대해 더 자세히 알고 싶으시면 말씀해 주세요.

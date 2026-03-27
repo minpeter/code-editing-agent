@@ -1,0 +1,57 @@
+이 코드베이스는 **Crush** — [Charm](https://charm.sh)이 Go로 만든 터미널 기반 AI 코딩 어시스턴트입니다.
+
+---
+
+## 전체 개요
+
+Claude Code, Cursor 등과 유사하게, **터미널(CLI)에서 LLM과 대화하며 코드를 읽고 쓰고 실행**하는 도구입니다. 모듈 경로는 `github.com/charmbracelet/crush`.
+
+---
+
+## 주요 아키텍처
+
+### 진입점
+- `main.go` → `internal/cmd` (Cobra CLI) → `internal/app/app.go` (전체 와이어링)
+
+### 핵심 레이어
+
+| 레이어 | 경로 | 역할 |
+|---|---|---|
+| **Agent** | `internal/agent/` | LLM 대화 루프 실행, 툴 호출 조율 |
+| **Coordinator** | `internal/agent/coordinator.go` | 여러 SessionAgent 관리, 프로바이더 빌드 |
+| **Tools** | `internal/agent/tools/` | bash, edit, view, grep, glob, fetch 등 30여개 툴 |
+| **Config** | `internal/config/` | crush.json 파싱, 모델/프로바이더 설정 |
+| **UI** | `internal/ui/` | Bubble Tea v2 기반 TUI |
+| **DB** | `internal/db/` | SQLite + sqlc (세션, 메시지, 비용 저장) |
+| **LSP** | `internal/lsp/` | Language Server Protocol 연동 (코드 인텔리전스) |
+
+### 지원 LLM 프로바이더 (fantasy 추상화 레이어)
+- Anthropic, OpenAI, Google (Gemini/Vertex), Azure, AWS Bedrock
+- OpenRouter, Vercel, OpenAI-compat, Hyper, Copilot, MiniMax 등
+
+### 빌트인 툴 목록
+`bash`, `edit`, `multiedit`, `view`, `write`, `grep`, `glob`, `ls`, `fetch`, `download`, `sourcegraph`, `todos`, `lsp_diagnostics`, `lsp_references`, `lsp_restart`, MCP 연동 툴 등
+
+---
+
+## 핵심 흐름
+
+```
+사용자 입력 (TUI)
+  → Coordinator.Run()
+    → SessionAgent.Run()  (fantasy 라이브러리로 LLM 호출)
+      → 툴 호출 (bash/edit/view 등)
+      → 결과를 LLM에 피드백
+      → 루프 반복
+  → SQLite에 메시지/비용 저장
+  → TUI에 pub/sub으로 결과 전달
+```
+
+---
+
+## 특이사항
+- **CGO 없이 빌드** (`CGO_ENABLED=0`, `GOEXPERIMENT=greenteagc`)
+- 시스템 프롬프트는 Go 템플릿 (`internal/agent/templates/*.md.tpl`)
+- 프로젝트별 지시사항은 `AGENTS.md`, `CRUSH.md`, `CLAUDE.md` 등을 자동 읽음
+- **MCP(Model Context Protocol)** 서버 확장 지원
+- **Skills** 시스템으로 커스텀 역할 정의 가능

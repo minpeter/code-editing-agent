@@ -1,0 +1,61 @@
+
+
+이 코드베이스는 **Pi Monorepo**로, AI 에이전트 구축 및 LLM 배포 관리를 위한 도구들입니다.
+
+## 프로젝트 구조
+
+```
+pi-mono/
+├── packages/
+│   ├── ai/           # @mariozechner/pi-ai
+│   ├── agent/        # @mariozechner/pi-agent-core
+│   ├── coding-agent/ # @mariozechner/pi-coding-agent
+│   ├── mom/          # @mariozechner/pi-mom
+│   ├── tui/          # @mariozechner/pi-tui
+│   ├── web-ui/       # @mariozechner/pi-web-ui
+│   └── pods/         # @mariozechner/pi-pods
+```
+
+## 주요 패키지 설명
+
+### 1. **@mariozechner/pi-ai** (packages/ai)
+- **통합 LLM API**: OpenAI, Anthropic, Google, Azure, Mistral, Groq, Cerebras, xAI, Amazon Bedrock 등 20+ 프러버너 지원
+- 도구 호출(Function Calling), 이미지 입력, Thinking/Reasoning, 크로스 프러버너 핸들오프 지원
+- 토큰 및 비용 추적, 컨텍스트 직렬화
+
+### 2. **@mariozechner/pi-coding-agent** (packages/coding-agent)
+- **대화형 CLI 코딩 에이전트** (`pi` 명령어)
+- `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` 도구 제공
+- 세션 관리, 트리 브랜칭, 컨텍스트 압축
+- 확장(Extensions), 스킬(Skills), 프롬프트 템플릿, 테마 지원
+- NPCai 플랫폼: https://shittycodingagent.ai
+
+### 3. **@mariozechner/pi-tui** (packages/tui)
+- **터미널 UI 라이브러리**
+- 차등 렌더링(Differential Rendering), 동기화된 출력(CSI 2026)
+- 내장 컴포넌트: Text, Editor, Input, Markdown, SelectList, SettingsList, Image 등
+
+### 4. **@mariozechner/pi-agent-core** (packages/agent)
+- **에이전트 런타임**: 상태 관리, 도구 실행, 이벤트 스트리밍
+- pi-ai 기반
+- steering/follow-up 메시지 지원
+
+### 5. **@mariozechner/pi-mom** (packages/mom)
+- **Slack bot** (Master Of Mischief)
+- LLM 기반 자율 실행 에이전트
+- Docker 샌드박스 지원, 파일/ bash 도구
+- 자체 도구 설치 및 관리, 스킬 시스템
+
+### 6. **@mariozechner/pi-web-ui** (packages/web-ui)
+- AI 채팅용 **웹 컴포넌트**
+
+### 7. **@mariozechner/pi-pods** (packages/pods)
+- vLLM 배포 관리용 CLI (GPU pods)
+
+## 기술 스택
+- **언어**: TypeScript
+- **빌드**: Turborepo
+- **테스트**: Vitest
+- **라이선스**: MIT
+
+프로젝트主页: https://pi.dev
