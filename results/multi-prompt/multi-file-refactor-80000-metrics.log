@@ -1,4 +1,14 @@
-[compaction-debug] contextLimit overridden: 202752 → 80000, reserve=25252, keepRecent=24000
-[compaction-metric] {"ts":1774550507156,"event":"usage_probe","turn":1,"promptTokens":7125,"totalTokens":7126}
-[compaction-metric] {"ts":1774550509259,"event":"turn_complete","turn":1,"estimatedTokens":7120,"source":"actual","contextLimit":80000,"actualTokens":7304}
-[compaction-metric] {"ts":1774550509678,"event":"usage_probe","turn":1,"promptTokens":9377,"totalTokens":9378}
+[compaction-debug] contextLimit overridden: 196608 → 80000, reserve=26041, keepRecent=24000
+[compaction-metric] {"ts":1774578382843,"event":"usage_probe","turn":1,"promptTokens":7115,"totalTokens":7116}
+[compaction-metric] {"ts":1774578386291,"event":"turn_complete","turn":1,"estimatedTokens":7120,"source":"actual","contextLimit":80000,"actualTokens":7313}
+[compaction-metric] {"ts":1774578386909,"event":"usage_probe","turn":1,"promptTokens":8933,"totalTokens":8934}
+[compaction-metric] {"ts":1774578390770,"event":"turn_complete","turn":1,"estimatedTokens":9028,"source":"actual","contextLimit":80000,"actualTokens":9217}
+[compaction-metric] {"ts":1774578391386,"event":"usage_probe","turn":1,"promptTokens":9380,"totalTokens":9381}
+[compaction-metric] {"ts":1774578394859,"event":"turn_complete","turn":1,"estimatedTokens":9541,"source":"actual","contextLimit":80000,"actualTokens":9714}
+[compaction-metric] {"ts":1774578395687,"event":"usage_probe","turn":1,"promptTokens":11955,"totalTokens":11956}
+[compaction-metric] {"ts":1774578403150,"event":"turn_complete","turn":1,"estimatedTokens":12156,"source":"actual","contextLimit":80000,"actualTokens":12550}
+[compaction-metric] {"ts":1774578404085,"event":"usage_probe","turn":1,"promptTokens":19035,"totalTokens":19036}
+[compaction-metric] {"ts":1774578408743,"event":"turn_complete","turn":1,"estimatedTokens":19278,"source":"actual","contextLimit":80000,"actualTokens":19487}
+[compaction-metric] {"ts":1774578409598,"event":"usage_probe","turn":1,"promptTokens":20988,"totalTokens":20989}
+[compaction-metric] {"ts":1774578468787,"event":"turn_complete","turn":1,"estimatedTokens":21287,"source":"actual","contextLimit":80000,"actualTokens":25004}
+[headless] Completed in 86.51s

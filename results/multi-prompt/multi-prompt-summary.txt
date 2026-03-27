@@ -1,78 +1,38 @@
 ═══════════════════════════════════════════════════════════════════
   Multi-Prompt Compaction Benchmark Summary
-  Generated: 2026-03-27T01:41:21.469Z
-  Context limits: 32000
+  Generated: 2026-03-27T02:27:48.806Z
+  Context limits: 8000, 20000, 32000, 40000, 80000
   Max iterations: 12
-  Total run time: 18m 17s
+  Total run time: 8m 52s
 ═══════════════════════════════════════════════════════════════════
-
-┌─ explore: Codebase exploration (read-heavy) (read-heavy)
-│  Prompt: 코드베이스를 탐색하고, 이 코드 베이스에 대해서 설명해줘
-│
-│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
-│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  32000   │       1 │     0 │  22023 │    21809 │     6 │  yes │ 0m 41s
-└──────────────────────────────────────────────────────────────
-
-┌─ single-edit: Single file edit (short task) (short)
-│  Prompt: packages/harness/src/compaction-types.ts 파일을 읽고, CompactionConfig 인터페이스에 있는 모든 필...
-│
-│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
-│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  32000   │       0 │     0 │  10264 │     9625 │     2 │  yes │ 0m 10s
-└──────────────────────────────────────────────────────────────
-
-┌─ bug-trace: Bug investigation (read + trace) (read-heavy)
-│  Prompt: packages/harness/src/compaction-orchestrator.ts 에서 blockAtHardLimit이 호출되는 전체 흐름을...
-│
-│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
-│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  32000   │       3 │     0 │   8720 │    43682 │     3 │   no │ 13m 46s
-└──────────────────────────────────────────────────────────────
 
 ┌─ multi-file-refactor: Multi-file analysis (cross-module) (multi-step)
 │  Prompt: packages/harness/src/index.ts에서 export되는 모든 public API를 분석해줘. 각 export가 어떤 파일에서 ...
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  32000   │       2 │     0 │  19567 │    73018 │    12 │   no │ 1m 28s
-└──────────────────────────────────────────────────────────────
-
-┌─ write-heavy: Code generation (write-heavy) (write-heavy)
-│  Prompt: packages/harness/src/compaction-types.ts를 읽고, 모든 인터페이스와 타입에 대한 단위 테스트 파일 package...
-│
-│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
-│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  32000   │       2 │     0 │  20273 │    25274 │     6 │  yes │ 2m 12s
+│  8000    │       2 │     2 │   9687 │     7612 │     2 │   no │ 0m 25s
+│  20000   │       5 │     1 │  11477 │    66165 │    12 │   no │ 2m 16s
+│  32000   │       0 │     0 │  14425 │    13306 │     4 │   no │ 1m 30s
+│  40000   │       4 │     2 │  17341 │    73526 │    12 │   no │ 3m 15s
+│  80000   │       0 │     0 │  25004 │    20988 │     6 │  yes │ 1m 27s
 └──────────────────────────────────────────────────────────────
 
 ═══ Cross-Scenario Matrix: Compaction Count ═══
 
-scenario             │    32000
-───────────────────────────────
-explore              │        1
-single-edit          │        0
-bug-trace            │        3
-multi-file-refactor  │        2
-write-heavy          │        2
+scenario             │     8000 │    20000 │    32000 │    40000 │    80000
+───────────────────────────────────────────────────────────────────────────
+multi-file-refactor  │        2 │        5 │        0 │        4 │        0
 
 ═══ Cross-Scenario Matrix: Blocking Count ═══
 
-scenario             │    32000
-───────────────────────────────
-explore              │        0
-single-edit          │        0
-bug-trace            │        0
-multi-file-refactor  │        0
-write-heavy          │        0
+scenario             │     8000 │    20000 │    32000 │    40000 │    80000
+───────────────────────────────────────────────────────────────────────────
+multi-file-refactor  │        2 │        1 │        0 │        2 │        0
 
 ═══ Cross-Scenario Matrix: Completed ═══
 
-scenario             │    32000
-───────────────────────────────
-explore              │      yes
-single-edit          │      yes
-bug-trace            │       no
-multi-file-refactor  │       no
-write-heavy          │      yes
+scenario             │     8000 │    20000 │    32000 │    40000 │    80000
+───────────────────────────────────────────────────────────────────────────
+multi-file-refactor  │       no │       no │       no │       no │      yes
 

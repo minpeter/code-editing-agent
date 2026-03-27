@@ -1,38 +1,84 @@
-[compaction-debug] contextLimit overridden: 202752 → 32000, reserve=10101, keepRecent=9600
-[compaction-metric] {"ts":1774575463101,"event":"usage_probe","turn":1,"promptTokens":7125,"totalTokens":7126}
-[compaction-metric] {"ts":1774575465999,"event":"turn_complete","turn":1,"estimatedTokens":7125,"source":"actual","contextLimit":32000,"actualTokens":7372}
-[compaction-metric] {"ts":1774575466645,"event":"usage_probe","turn":1,"promptTokens":12661,"totalTokens":12662}
-[compaction-metric] {"ts":1774575477732,"event":"turn_complete","turn":1,"estimatedTokens":12797,"source":"actual","contextLimit":32000,"actualTokens":13629}
-[compaction-metric] {"ts":1774575483873,"event":"usage_probe","turn":1,"promptTokens":73018,"totalTokens":73019}
-[compaction-metric] {"ts":1774575483873,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774575501982,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":34347,"tokensAfter":1152}
-[compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774575501982,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774575504479,"event":"turn_complete","turn":1,"estimatedTokens":8141,"source":"actual","contextLimit":32000,"actualTokens":8343}
-[compaction-metric] {"ts":1774575504822,"event":"usage_probe","turn":1,"promptTokens":9433,"totalTokens":9434}
-[compaction-metric] {"ts":1774575509405,"event":"turn_complete","turn":1,"estimatedTokens":9595,"source":"actual","contextLimit":32000,"actualTokens":10017}
-[compaction-metric] {"ts":1774575509971,"event":"usage_probe","turn":1,"promptTokens":13671,"totalTokens":13672}
-[compaction-metric] {"ts":1774575509972,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774575513456,"event":"turn_complete","turn":1,"estimatedTokens":14076,"source":"actual","contextLimit":32000,"actualTokens":14312}
-[compaction-metric] {"ts":1774575513932,"event":"usage_probe","turn":1,"promptTokens":16023,"totalTokens":16024}
-[compaction-metric] {"ts":1774575517582,"event":"turn_complete","turn":1,"estimatedTokens":16553,"source":"actual","contextLimit":32000,"actualTokens":16824}
-[compaction-metric] {"ts":1774575518228,"event":"usage_probe","turn":1,"promptTokens":18486,"totalTokens":18487}
-[compaction-metric] {"ts":1774575523284,"event":"turn_complete","turn":1,"estimatedTokens":19178,"source":"actual","contextLimit":32000,"actualTokens":19567}
-[compaction-metric] {"ts":1774575523471,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774575523958,"event":"usage_probe","turn":1,"promptTokens":19703,"totalTokens":19704}
-[compaction-metric] {"ts":1774575523958,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774575528174,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":4046,"tokensAfter":358}
-[compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774575528174,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774575528174,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774575530707,"event":"turn_complete","turn":1,"estimatedTokens":7385,"source":"actual","contextLimit":32000,"actualTokens":7561}
-[compaction-metric] {"ts":1774575531066,"event":"usage_probe","turn":1,"promptTokens":8653,"totalTokens":8654}
-[compaction-metric] {"ts":1774575539618,"event":"turn_complete","turn":1,"estimatedTokens":8813,"source":"actual","contextLimit":32000,"actualTokens":9684}
-[compaction-metric] {"ts":1774575539907,"event":"usage_probe","turn":1,"promptTokens":9038,"totalTokens":9039}
-[compaction-metric] {"ts":1774575542679,"event":"turn_complete","turn":1,"estimatedTokens":9947,"source":"actual","contextLimit":32000,"actualTokens":10142}
-[compaction-metric] {"ts":1774575543202,"event":"usage_probe","turn":1,"promptTokens":12577,"totalTokens":12578}
-[compaction-metric] {"ts":1774575546206,"event":"turn_complete","turn":1,"estimatedTokens":13568,"source":"actual","contextLimit":32000,"actualTokens":13809}
-[compaction-metric] {"ts":1774575546206,"event":"job_status","turn":1,"id":"background-compaction-2","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774575546933,"event":"usage_probe","turn":1,"promptTokens":13008,"totalTokens":13009}
-[compaction-metric] {"ts":1774575549256,"event":"turn_complete","turn":1,"estimatedTokens":14081,"source":"actual","contextLimit":32000,"actualTokens":14292}
-[headless] Completed in 86.92s
+[compaction-debug] contextLimit overridden: 196608 → 32000, reserve=10416, keepRecent=9600
+[compaction-metric] {"ts":1774578098410,"event":"usage_probe","turn":1,"promptTokens":7115,"totalTokens":7116}
+[compaction-metric] {"ts":1774578100901,"event":"turn_complete","turn":1,"estimatedTokens":7115,"source":"actual","contextLimit":32000,"actualTokens":7227}
+[compaction-metric] {"ts":1774578101510,"event":"usage_probe","turn":1,"promptTokens":8397,"totalTokens":8398}
+[compaction-metric] {"ts":1774578118525,"event":"turn_complete","turn":1,"estimatedTokens":8468,"source":"actual","contextLimit":32000,"actualTokens":9391}
+[compaction-metric] {"ts":1774578119071,"event":"usage_probe","turn":1,"promptTokens":8933,"totalTokens":8934}
+[compaction-metric] {"ts":1774578125042,"event":"turn_complete","turn":1,"estimatedTokens":9711,"source":"actual","contextLimit":32000,"actualTokens":10091}
+[compaction-metric] {"ts":1774578125867,"event":"usage_probe","turn":1,"promptTokens":13306,"totalTokens":13307}
+[compaction-metric] {"ts":1774578125867,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774578132318,"event":"turn_complete","turn":1,"estimatedTokens":14118,"source":"actual","contextLimit":32000,"actualTokens":14425}
+[compaction-metric] {"ts":1774578143431,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+APICallError [AI_APICallError]: input is too long (received 4465852 tokens; max 196608)
+    at friendliaiFailedResponseHandler (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-error.ts:98:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async postToApi (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.15_zod@4.3.6/node_modules/@ai-sdk/provider-utils/src/post-to-api.ts:118:28)
+    at async FriendliAIChatLanguageModel.doStream (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-chat-language-model.ts:447:50)
+    at async wrapStream (/Users/minpeter/github.com/minpeter/plugsuits/packages/cea/src/middleware/trim-leading-newlines.ts:38:33)
+    at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1670:27)
+    at async <anonymous> (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/telemetry/record-span.ts:32:24)
+    at async _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:96:12)
+    at async streamStep (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1622:17)
+    at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:2135:9) {
+  cause: undefined,
+  url: 'https://api.friendli.ai/serverless/v1/chat/completions',
+  requestBodyValues: {
+    parse_reasoning: true,
+    model: 'MiniMaxAI/MiniMax-M2.1',
+    stream: true,
+    max_tokens: 1,
+    temperature: undefined,
+    top_p: undefined,
+    top_k: undefined,
+    frequency_penalty: undefined,
+    presence_penalty: undefined,
+    response_format: undefined,
+    stop: undefined,
+    seed: undefined,
+    min_p: undefined,
+    repetition_penalty: undefined,
+    xtc_threshold: undefined,
+    xtc_probability: undefined,
+    messages: [
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object]
+    ],
+    tools: [
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object]
+    ],
+    tool_choice: 'auto',
+    parallel_tool_calls: undefined,
+    stream_options: { include_usage: true }
+  },
+  statusCode: 422,
+  responseHeaders: {
+    'access-control-allow-credentials': 'true',
+    connection: 'keep-alive',
+    'content-length': '69',
+    'content-type': 'application/json',
+    date: 'Fri, 27 Mar 2026 02:23:07 GMT',
+    server: 'envoy',
+    vary: 'Origin',
+    'x-envoy-upstream-service-time': '53813',
+    'x-friendli-lb-weight': '2',
+    'x-ratelimit-limit-requests': '100',
+    'x-ratelimit-remaining-requests': '91',
+    'x-ratelimit-reset-requests': '25'
+  },
+  responseBody: '{"message":"input is too long (received 4465852 tokens; max 196608)"}',
+  isRetryable: false,
+  data: {
+    message: 'input is too long (received 4465852 tokens; max 196608)'
+  },
+  [Symbol(vercel.ai.error)]: true,
+  [Symbol(vercel.ai.error.AI_APICallError)]: true
+}
