@@ -1,42 +1,36 @@
-[compaction-debug] contextLimit overridden: 200000 → 8000, reserve=2560, keepRecent=2400
-[compaction-metric] {"ts":1774579327751,"event":"usage_probe","turn":1,"promptTokens":7408,"totalTokens":7409}
-[compaction-metric] {"ts":1774579327751,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579335180,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":64,"tokensAfter":101}
+[compaction-debug] contextLimit overridden: 202752 → 8000, reserve=2525, keepRecent=2400
+[compaction-metric] {"ts":1774580534582,"event":"usage_probe","turn":1,"promptTokens":7129,"totalTokens":7130}
+[compaction-metric] {"ts":1774580534583,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580540788,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":64,"tokensAfter":501}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579335181,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774579336613,"event":"turn_complete","turn":1,"estimatedTokens":7442,"source":"actual","contextLimit":8000,"actualTokens":7527}
-[compaction-metric] {"ts":1774579336613,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579351029,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":1397,"tokensAfter":118}
+[compaction-metric] {"ts":1774580540788,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580540789,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580543852,"event":"turn_complete","turn":1,"estimatedTokens":7543,"source":"actual","contextLimit":8000,"actualTokens":7691}
+[compaction-metric] {"ts":1774580543852,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774580543852,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580546787,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580554972,"event":"blocking_end","turn":1,"durationMs":11120}
+[compaction-metric] {"ts":1774580557708,"event":"usage_probe","turn":1,"promptTokens":7327,"totalTokens":7328}
+[compaction-metric] {"ts":1774580557708,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580559395,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":228,"tokensAfter":124}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579351029,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774579351700,"event":"usage_probe","turn":1,"promptTokens":7464,"totalTokens":7465}
-[compaction-metric] {"ts":1774579351700,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579356525,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":118,"tokensAfter":628}
+[compaction-metric] {"ts":1774580559395,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580559395,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580560375,"event":"turn_complete","turn":1,"estimatedTokens":7188,"source":"actual","contextLimit":8000,"actualTokens":7221}
+[compaction-metric] {"ts":1774580560375,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580569592,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":182,"tokensAfter":490}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579356525,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774579356525,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774579358717,"event":"turn_complete","turn":1,"estimatedTokens":7959,"source":"actual","contextLimit":8000,"actualTokens":8085}
-[compaction-metric] {"ts":1774579358717,"event":"blocking_start","turn":1}
-[compaction-metric] {"ts":1774579358718,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579361544,"event":"blocking_end","turn":1,"durationMs":2827}
-[compaction-metric] {"ts":1774579362121,"event":"usage_probe","turn":1,"promptTokens":7532,"totalTokens":7533}
-[compaction-metric] {"ts":1774579362121,"event":"blocking_start","turn":1}
-[compaction-metric] {"ts":1774579362122,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579362938,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579365290,"event":"blocking_end","turn":1,"durationMs":3169}
-[compaction-metric] {"ts":1774579366552,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579366553,"event":"turn_complete","turn":1,"estimatedTokens":7781,"source":"actual","contextLimit":8000,"actualTokens":7893}
-[compaction-metric] {"ts":1774579366553,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579372675,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":1793,"tokensAfter":2736}
+[compaction-metric] {"ts":1774580569592,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580569592,"event":"job_status","turn":1,"id":"background-compaction-2","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580574127,"event":"job_status","turn":1,"id":"background-compaction-2","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580576019,"event":"usage_probe","turn":1,"promptTokens":7656,"totalTokens":7657}
+[compaction-metric] {"ts":1774580576019,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580581882,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":490,"tokensAfter":565}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579372675,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774579372675,"event":"job_status","turn":1,"id":"background-compaction-2","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774579372676,"event":"blocking_start","turn":1}
-[compaction-metric] {"ts":1774579372676,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579378827,"event":"job_status","turn":1,"id":"background-compaction-2","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579378902,"event":"blocking_end","turn":1,"durationMs":6226}
-[compaction] Hard limit still exceeded after retries — some context may be lost due to small context window. Proceeding with truncated context.
-[compaction-metric] {"ts":1774579378902,"event":"still_exceeded","turn":1}
+[compaction-metric] {"ts":1774580581882,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580581882,"event":"job_status","turn":1,"id":"background-compaction-2","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580581882,"event":"job_status","turn":1,"id":"background-compaction-3","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580587996,"event":"job_status","turn":1,"id":"background-compaction-3","message":"","state":"clear"}
 RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reached. Please try again in a moment.
     at _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:111:13)
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
@@ -128,9 +122,9 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
     url: 'https://api.friendli.ai/serverless/v1/chat/completions',
     requestBodyValues: {
       parse_reasoning: true,
-      model: 'deepseek-ai/DeepSeek-V3.2',
+      model: 'zai-org/GLM-5',
       stream: true,
-      max_tokens: 1,
+      max_tokens: 1591,
       temperature: undefined,
       top_p: undefined,
       top_k: undefined,
@@ -156,7 +150,7 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
       connection: 'keep-alive',
       'content-length': '64',
       'content-type': 'application/json; charset=utf-8',
-      date: 'Fri, 27 Mar 2026 02:43:05 GMT',
+      date: 'Fri, 27 Mar 2026 03:03:08 GMT',
       vary: 'Origin',
       'x-content-type-options': 'nosniff'
     },
@@ -168,4 +162,24 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
   },
   [Symbol(vercel.ai.error)]: true,
   [Symbol(vercel.ai.error.AI_RetryError)]: true
+}
+[compaction-metric] {"ts":1774580588070,"event":"job_status","turn":1,"id":"background-compaction-3","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580588070,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":565,"tokensAfter":699}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580588070,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580588070,"event":"compaction_start","turn":1}
+Unhandled rejection: NoOutputGeneratedError [AI_NoOutputGeneratedError]: No output generated. Check the stream for errors.
+    at Object.flush (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1077:17)
+    at invokePromiseCallback (node:internal/webstreams/util:172:10)
+    at Object.<anonymous> (node:internal/webstreams/util:177:23)
+    at transformStreamDefaultSinkCloseAlgorithm (node:internal/webstreams/transformstream:621:43)
+    at node:internal/webstreams/transformstream:379:11
+    at writableStreamDefaultControllerProcessClose (node:internal/webstreams/writablestream:1162:28)
+    at writableStreamDefaultControllerAdvanceQueueIfNeeded (node:internal/webstreams/writablestream:1253:5)
+    at writableStreamDefaultControllerClose (node:internal/webstreams/writablestream:1220:3)
+    at writableStreamClose (node:internal/webstreams/writablestream:722:3)
+    at writableStreamDefaultWriterClose (node:internal/webstreams/writablestream:1091:10) {
+  cause: undefined,
+  [Symbol(vercel.ai.error)]: true,
+  [Symbol(vercel.ai.error.AI_NoOutputGeneratedError)]: true
 }

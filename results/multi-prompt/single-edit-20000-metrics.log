@@ -1,25 +1,26 @@
-[compaction-debug] contextLimit overridden: 200000 → 20000, reserve=6400, keepRecent=6000
-[compaction-metric] {"ts":1774579326475,"event":"usage_probe","turn":1,"promptTokens":7390,"totalTokens":7391}
-[compaction-metric] {"ts":1774579329318,"event":"turn_complete","turn":1,"estimatedTokens":7390,"source":"actual","contextLimit":20000,"actualTokens":7492}
-[compaction-metric] {"ts":1774579329920,"event":"usage_probe","turn":1,"promptTokens":9981,"totalTokens":9982}
-[compaction-metric] {"ts":1774579329920,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774579337517,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579351796,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579351796,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":1343,"tokensAfter":613}
+[compaction-debug] contextLimit overridden: 202752 → 20000, reserve=6313, keepRecent=6000
+[compaction-metric] {"ts":1774580534123,"event":"usage_probe","turn":1,"promptTokens":7106,"totalTokens":7107}
+[compaction-metric] {"ts":1774580535648,"event":"turn_complete","turn":1,"estimatedTokens":7106,"source":"actual","contextLimit":20000,"actualTokens":7207}
+[compaction-metric] {"ts":1774580535976,"event":"usage_probe","turn":1,"promptTokens":9835,"totalTokens":9836}
+[compaction-metric] {"ts":1774580535977,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580545997,"event":"turn_complete","turn":1,"estimatedTokens":9917,"source":"actual","contextLimit":20000,"actualTokens":10931}
+[compaction-metric] {"ts":1774580546888,"event":"usage_probe","turn":1,"promptTokens":10223,"totalTokens":10224}
+[compaction-metric] {"ts":1774580547802,"event":"turn_complete","turn":1,"estimatedTokens":11090,"source":"actual","contextLimit":20000,"actualTokens":11168}
+[compaction-metric] {"ts":1774580548451,"event":"usage_probe","turn":1,"promptTokens":11198,"totalTokens":11199}
+[compaction-metric] {"ts":1774580549908,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580551339,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580551340,"event":"turn_complete","turn":1,"estimatedTokens":12092,"source":"actual","contextLimit":20000,"actualTokens":12377}
+[compaction-metric] {"ts":1774580551340,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580561923,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":1336,"tokensAfter":716}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579351796,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774579351797,"event":"turn_complete","turn":1,"estimatedTokens":10029,"source":"actual","contextLimit":20000,"actualTokens":11738}
-[compaction-metric] {"ts":1774579351797,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579357968,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":687,"tokensAfter":716}
+[compaction-metric] {"ts":1774580561923,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580563232,"event":"usage_probe","turn":1,"promptTokens":7865,"totalTokens":7866}
+[compaction-metric] {"ts":1774580564718,"event":"turn_complete","turn":1,"estimatedTokens":7865,"source":"actual","contextLimit":20000,"actualTokens":7994}
+[compaction-metric] {"ts":1774580565433,"event":"usage_probe","turn":1,"promptTokens":10808,"totalTokens":10809}
+[compaction-metric] {"ts":1774580565433,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580570240,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":2133,"tokensAfter":191}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579357968,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774579360779,"event":"usage_probe","turn":1,"promptTokens":8086,"totalTokens":8087}
-[compaction-metric] {"ts":1774579364009,"event":"turn_complete","turn":1,"estimatedTokens":8086,"source":"actual","contextLimit":20000,"actualTokens":8184}
-[compaction-metric] {"ts":1774579364535,"event":"usage_probe","turn":1,"promptTokens":10855,"totalTokens":10856}
-[compaction-metric] {"ts":1774579364535,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579377299,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":2058,"tokensAfter":627}
-[compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579377299,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580570240,"event":"applied","turn":1}
 RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reached. Please try again in a moment.
     at _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:111:13)
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
@@ -111,9 +112,9 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
     url: 'https://api.friendli.ai/serverless/v1/chat/completions',
     requestBodyValues: {
       parse_reasoning: true,
-      model: 'deepseek-ai/DeepSeek-V3.2',
+      model: 'zai-org/GLM-5',
       stream: true,
-      max_tokens: 8444,
+      max_tokens: 8889,
       temperature: undefined,
       top_p: undefined,
       top_k: undefined,
@@ -139,7 +140,7 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
       connection: 'keep-alive',
       'content-length': '64',
       'content-type': 'application/json; charset=utf-8',
-      date: 'Fri, 27 Mar 2026 02:43:03 GMT',
+      date: 'Fri, 27 Mar 2026 03:02:56 GMT',
       vary: 'Origin',
       'x-content-type-options': 'nosniff'
     },
@@ -152,4 +153,4 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
   [Symbol(vercel.ai.error)]: true,
   [Symbol(vercel.ai.error.AI_RetryError)]: true
 }
-[headless] Completed in 58.03s
+[headless] Completed in 44.18s

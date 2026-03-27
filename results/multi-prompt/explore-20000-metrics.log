@@ -1,150 +1,79 @@
-[compaction-debug] contextLimit overridden: 200000 → 20000, reserve=6400, keepRecent=6000
-[compaction-metric] {"ts":1774579326824,"event":"usage_probe","turn":1,"promptTokens":7359,"totalTokens":7360}
-[compaction-metric] {"ts":1774579328623,"event":"turn_complete","turn":1,"estimatedTokens":7359,"source":"actual","contextLimit":20000,"actualTokens":7486}
-[compaction-metric] {"ts":1774579329115,"event":"usage_probe","turn":1,"promptTokens":8252,"totalTokens":8253}
-[compaction-metric] {"ts":1774579329116,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774579331172,"event":"turn_complete","turn":1,"estimatedTokens":8329,"source":"actual","contextLimit":20000,"actualTokens":8454}
-[compaction-metric] {"ts":1774579332066,"event":"usage_probe","turn":1,"promptTokens":10390,"totalTokens":10391}
-[compaction-metric] {"ts":1774579334347,"event":"turn_complete","turn":1,"estimatedTokens":10547,"source":"actual","contextLimit":20000,"actualTokens":10705}
-[compaction-metric] {"ts":1774579334662,"event":"usage_probe","turn":1,"promptTokens":10654,"totalTokens":10655}
-[compaction-metric] {"ts":1774579336199,"event":"turn_complete","turn":1,"estimatedTokens":10920,"source":"actual","contextLimit":20000,"actualTokens":11028}
-[compaction-metric] {"ts":1774579336932,"event":"usage_probe","turn":1,"promptTokens":11389,"totalTokens":11390}
-[compaction-metric] {"ts":1774579337788,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579341146,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579341147,"event":"turn_complete","turn":1,"estimatedTokens":11712,"source":"actual","contextLimit":20000,"actualTokens":11844}
-[compaction-metric] {"ts":1774579341147,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579345856,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":2354,"tokensAfter":160}
+[compaction-debug] contextLimit overridden: 202752 → 20000, reserve=6313, keepRecent=6000
+[compaction-metric] {"ts":1774580534109,"event":"usage_probe","turn":1,"promptTokens":7076,"totalTokens":7077}
+[compaction-metric] {"ts":1774580536726,"event":"turn_complete","turn":1,"estimatedTokens":7076,"source":"actual","contextLimit":20000,"actualTokens":7307}
+[compaction-metric] {"ts":1774580538028,"event":"usage_probe","turn":1,"promptTokens":14022,"totalTokens":14023}
+[compaction-metric] {"ts":1774580538028,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580589931,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":4198,"tokensAfter":6554}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579345856,"event":"applied","turn":1}
-RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reached. Please try again in a moment.
-    at _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:111:13)
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at async streamStep (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1622:17)
-    at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:2135:9)
-    at async <anonymous> (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/telemetry/record-span.ts:32:24) {
-  cause: undefined,
-  reason: 'maxRetriesExceeded',
-  errors: [
-    APICallError [AI_APICallError]: Rate limit reached. Please try again in a moment.
-        at friendliaiFailedResponseHandler (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-error.ts:98:14)
-        at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-        at async postToApi (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.15_zod@4.3.6/node_modules/@ai-sdk/provider-utils/src/post-to-api.ts:118:28)
-        at async FriendliAIChatLanguageModel.doStream (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-chat-language-model.ts:447:50)
-        at async wrapStream (/Users/minpeter/github.com/minpeter/plugsuits/packages/cea/src/middleware/trim-leading-newlines.ts:38:33)
-        at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1670:27)
-        at async <anonymous> (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/telemetry/record-span.ts:32:24)
-        at async _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:96:12)
-        at async streamStep (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1622:17)
-        at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:2135:9) {
-      cause: undefined,
-      url: 'https://api.friendli.ai/serverless/v1/chat/completions',
-      requestBodyValues: [Object],
-      statusCode: 429,
-      responseHeaders: [Object],
-      responseBody: '{"message":"Rate limit reached. Please try again in a moment."}\n',
-      isRetryable: true,
-      data: [Object],
-      [Symbol(vercel.ai.error)]: true,
-      [Symbol(vercel.ai.error.AI_APICallError)]: true
-    },
-    APICallError [AI_APICallError]: Rate limit reached. Please try again in a moment.
-        at friendliaiFailedResponseHandler (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-error.ts:98:14)
-        at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-        at async postToApi (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.15_zod@4.3.6/node_modules/@ai-sdk/provider-utils/src/post-to-api.ts:118:28)
-        at async FriendliAIChatLanguageModel.doStream (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-chat-language-model.ts:447:50)
-        at async wrapStream (/Users/minpeter/github.com/minpeter/plugsuits/packages/cea/src/middleware/trim-leading-newlines.ts:38:33)
-        at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1670:27)
-        at async <anonymous> (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/telemetry/record-span.ts:32:24)
-        at async _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:96:12)
-        at async streamStep (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1622:17)
-        at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:2135:9) {
-      cause: undefined,
-      url: 'https://api.friendli.ai/serverless/v1/chat/completions',
-      requestBodyValues: [Object],
-      statusCode: 429,
-      responseHeaders: [Object],
-      responseBody: '{"message":"Rate limit reached. Please try again in a moment."}\n',
-      isRetryable: true,
-      data: [Object],
-      [Symbol(vercel.ai.error)]: true,
-      [Symbol(vercel.ai.error.AI_APICallError)]: true
-    },
-    APICallError [AI_APICallError]: Rate limit reached. Please try again in a moment.
-        at friendliaiFailedResponseHandler (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-error.ts:98:14)
-        at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-        at async postToApi (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.15_zod@4.3.6/node_modules/@ai-sdk/provider-utils/src/post-to-api.ts:118:28)
-        at async FriendliAIChatLanguageModel.doStream (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-chat-language-model.ts:447:50)
-        at async wrapStream (/Users/minpeter/github.com/minpeter/plugsuits/packages/cea/src/middleware/trim-leading-newlines.ts:38:33)
-        at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1670:27)
-        at async <anonymous> (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/telemetry/record-span.ts:32:24)
-        at async _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:96:12)
-        at async streamStep (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1622:17)
-        at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:2135:9) {
-      cause: undefined,
-      url: 'https://api.friendli.ai/serverless/v1/chat/completions',
-      requestBodyValues: [Object],
-      statusCode: 429,
-      responseHeaders: [Object],
-      responseBody: '{"message":"Rate limit reached. Please try again in a moment."}\n',
-      isRetryable: true,
-      data: [Object],
-      [Symbol(vercel.ai.error)]: true,
-      [Symbol(vercel.ai.error.AI_APICallError)]: true
-    }
-  ],
-  lastError: APICallError [AI_APICallError]: Rate limit reached. Please try again in a moment.
-      at friendliaiFailedResponseHandler (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-error.ts:98:14)
-      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-      at async postToApi (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.15_zod@4.3.6/node_modules/@ai-sdk/provider-utils/src/post-to-api.ts:118:28)
-      at async FriendliAIChatLanguageModel.doStream (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-chat-language-model.ts:447:50)
-      at async wrapStream (/Users/minpeter/github.com/minpeter/plugsuits/packages/cea/src/middleware/trim-leading-newlines.ts:38:33)
-      at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1670:27)
-      at async <anonymous> (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/telemetry/record-span.ts:32:24)
-      at async _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:96:12)
-      at async streamStep (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1622:17)
-      at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:2135:9) {
-    cause: undefined,
-    url: 'https://api.friendli.ai/serverless/v1/chat/completions',
-    requestBodyValues: {
-      parse_reasoning: true,
-      model: 'deepseek-ai/DeepSeek-V3.2',
-      stream: true,
-      max_tokens: 1,
-      temperature: undefined,
-      top_p: undefined,
-      top_k: undefined,
-      frequency_penalty: undefined,
-      presence_penalty: undefined,
-      response_format: undefined,
-      stop: undefined,
-      seed: undefined,
-      min_p: undefined,
-      repetition_penalty: undefined,
-      xtc_threshold: undefined,
-      xtc_probability: undefined,
-      chat_template_kwargs: [Object],
-      messages: [Array],
-      tools: [Array],
-      tool_choice: 'auto',
-      parallel_tool_calls: undefined,
-      stream_options: [Object]
-    },
-    statusCode: 429,
-    responseHeaders: {
-      'access-control-allow-credentials': 'true',
-      connection: 'keep-alive',
-      'content-length': '64',
-      'content-type': 'application/json; charset=utf-8',
-      date: 'Fri, 27 Mar 2026 02:42:32 GMT',
-      vary: 'Origin',
-      'x-content-type-options': 'nosniff'
-    },
-    responseBody: '{"message":"Rate limit reached. Please try again in a moment."}\n',
-    isRetryable: true,
-    data: { message: 'Rate limit reached. Please try again in a moment.' },
-    [Symbol(vercel.ai.error)]: true,
-    [Symbol(vercel.ai.error.AI_APICallError)]: true
-  },
-  [Symbol(vercel.ai.error)]: true,
-  [Symbol(vercel.ai.error.AI_RetryError)]: true
-}
+[compaction-metric] {"ts":1774580589931,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580589931,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580599176,"event":"turn_complete","turn":1,"estimatedTokens":14249,"source":"actual","contextLimit":20000,"actualTokens":14531}
+[compaction-metric] {"ts":1774580599177,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774580599177,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580606432,"event":"blocking_end","turn":1,"durationMs":7255}
+[compaction-metric] {"ts":1774580607023,"event":"usage_probe","turn":1,"promptTokens":11901,"totalTokens":11902}
+[compaction-metric] {"ts":1774580609562,"event":"turn_complete","turn":1,"estimatedTokens":12075,"source":"actual","contextLimit":20000,"actualTokens":12332}
+[compaction-metric] {"ts":1774580609713,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580610379,"event":"usage_probe","turn":1,"promptTokens":17937,"totalTokens":17938}
+[compaction-metric] {"ts":1774580610379,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580617421,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":6329,"tokensAfter":775}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580617421,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580617421,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580619179,"event":"turn_complete","turn":1,"estimatedTokens":7785,"source":"actual","contextLimit":20000,"actualTokens":7972}
+[compaction-metric] {"ts":1774580619623,"event":"usage_probe","turn":1,"promptTokens":10800,"totalTokens":10801}
+[compaction-metric] {"ts":1774580619623,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580626299,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":2245,"tokensAfter":913}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580626299,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580629420,"event":"turn_complete","turn":1,"estimatedTokens":7928,"source":"actual","contextLimit":20000,"actualTokens":8236}
+[compaction-metric] {"ts":1774580630107,"event":"usage_probe","turn":1,"promptTokens":14257,"totalTokens":14258}
+[compaction-metric] {"ts":1774580630107,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580640670,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":4705,"tokensAfter":951}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580640670,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580642773,"event":"turn_complete","turn":1,"estimatedTokens":7954,"source":"actual","contextLimit":20000,"actualTokens":8149}
+[compaction-metric] {"ts":1774580643253,"event":"usage_probe","turn":1,"promptTokens":10966,"totalTokens":10967}
+[compaction-metric] {"ts":1774580643253,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580650620,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":2420,"tokensAfter":896}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580650621,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580653106,"event":"turn_complete","turn":1,"estimatedTokens":7923,"source":"actual","contextLimit":20000,"actualTokens":8142}
+[compaction-metric] {"ts":1774580653548,"event":"usage_probe","turn":1,"promptTokens":10935,"totalTokens":10936}
+[compaction-metric] {"ts":1774580653548,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580669999,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":2365,"tokensAfter":1064}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580670000,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580672167,"event":"turn_complete","turn":1,"estimatedTokens":8553,"source":"actual","contextLimit":20000,"actualTokens":8801}
+[compaction-metric] {"ts":1774580672167,"event":"job_status","turn":1,"id":"background-compaction-2","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580673217,"event":"usage_probe","turn":1,"promptTokens":14716,"totalTokens":14717}
+[compaction-metric] {"ts":1774580673217,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774580673217,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580724566,"event":"job_status","turn":1,"id":"background-compaction-2","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580756511,"event":"blocking_end","turn":1,"durationMs":83294}
+[compaction-metric] {"ts":1774580759210,"event":"job_status","turn":1,"id":"background-compaction-2","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580759211,"event":"turn_complete","turn":1,"estimatedTokens":7954,"source":"actual","contextLimit":20000,"actualTokens":8178}
+[compaction-metric] {"ts":1774580759994,"event":"usage_probe","turn":1,"promptTokens":14981,"totalTokens":14982}
+[compaction-metric] {"ts":1774580759994,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580766752,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":4756,"tokensAfter":7131}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580766752,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580766752,"event":"job_status","turn":1,"id":"background-compaction-3","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580770115,"event":"turn_complete","turn":1,"estimatedTokens":15287,"source":"actual","contextLimit":20000,"actualTokens":15567}
+[compaction-metric] {"ts":1774580770116,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774580770116,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580779832,"event":"job_status","turn":1,"id":"background-compaction-3","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580782936,"event":"blocking_end","turn":1,"durationMs":12821}
+[compaction-metric] {"ts":1774580783302,"event":"usage_probe","turn":1,"promptTokens":8227,"totalTokens":8228}
+[compaction-metric] {"ts":1774580783302,"event":"job_status","turn":1,"id":"background-compaction-3","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580783302,"event":"job_status","turn":1,"id":"background-compaction-4","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580787007,"event":"turn_complete","turn":1,"estimatedTokens":8227,"source":"actual","contextLimit":20000,"actualTokens":8594}
+[compaction-metric] {"ts":1774580788253,"event":"usage_probe","turn":1,"promptTokens":20375,"totalTokens":20376}
+[compaction-metric] {"ts":1774580788253,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774580788253,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580794329,"event":"job_status","turn":1,"id":"background-compaction-4","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580806847,"event":"blocking_end","turn":1,"durationMs":18594}
+[compaction-metric] {"ts":1774580810761,"event":"job_status","turn":1,"id":"background-compaction-4","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580810762,"event":"turn_complete","turn":1,"estimatedTokens":8359,"source":"actual","contextLimit":20000,"actualTokens":8716}
+[compaction-metric] {"ts":1774580810762,"event":"job_status","turn":1,"id":"background-compaction-5","message":"Background compaction...","state":"running"}
+[headless] Completed in 278.57s

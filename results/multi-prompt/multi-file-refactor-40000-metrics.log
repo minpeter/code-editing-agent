@@ -1,9 +1,20 @@
-[compaction-debug] contextLimit overridden: 200000 → 40000, reserve=12800, keepRecent=12000
-[compaction-metric] {"ts":1774579327970,"event":"usage_probe","turn":1,"promptTokens":7409,"totalTokens":7410}
-[compaction-metric] {"ts":1774579331552,"event":"turn_complete","turn":1,"estimatedTokens":7414,"source":"actual","contextLimit":40000,"actualTokens":7598}
-[compaction-metric] {"ts":1774579331879,"event":"usage_probe","turn":1,"promptTokens":8741,"totalTokens":8742}
-[compaction-metric] {"ts":1774579344536,"event":"turn_complete","turn":1,"estimatedTokens":8874,"source":"actual","contextLimit":40000,"actualTokens":10108}
-[compaction-metric] {"ts":1774579345096,"event":"usage_probe","turn":1,"promptTokens":12112,"totalTokens":12113}
+[compaction-debug] contextLimit overridden: 202752 → 40000, reserve=12626, keepRecent=12000
+[compaction-metric] {"ts":1774580533700,"event":"usage_probe","turn":1,"promptTokens":7125,"totalTokens":7126}
+[compaction-metric] {"ts":1774580535949,"event":"turn_complete","turn":1,"estimatedTokens":7120,"source":"actual","contextLimit":40000,"actualTokens":7309}
+[compaction-metric] {"ts":1774580536369,"event":"usage_probe","turn":1,"promptTokens":9400,"totalTokens":9401}
+[compaction-metric] {"ts":1774580543908,"event":"turn_complete","turn":1,"estimatedTokens":9528,"source":"actual","contextLimit":40000,"actualTokens":10365}
+[compaction-metric] {"ts":1774580550677,"event":"usage_probe","turn":1,"promptTokens":69977,"totalTokens":69978}
+[compaction-metric] {"ts":1774580550677,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580567665,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":32282,"tokensAfter":1113}
+[compaction] Applied: context reduced, some older messages were summarized
+[compaction-metric] {"ts":1774580567665,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580569483,"event":"turn_complete","turn":1,"estimatedTokens":8089,"source":"actual","contextLimit":40000,"actualTokens":8255}
+[compaction-metric] {"ts":1774580570049,"event":"usage_probe","turn":1,"promptTokens":9362,"totalTokens":9363}
+[compaction-metric] {"ts":1774580574187,"event":"turn_complete","turn":1,"estimatedTokens":9512,"source":"actual","contextLimit":40000,"actualTokens":9866}
+[compaction-metric] {"ts":1774580574513,"event":"usage_probe","turn":1,"promptTokens":10112,"totalTokens":10113}
+[compaction-metric] {"ts":1774580576809,"event":"turn_complete","turn":1,"estimatedTokens":10427,"source":"actual","contextLimit":40000,"actualTokens":10638}
+[compaction-metric] {"ts":1774580577202,"event":"usage_probe","turn":1,"promptTokens":11608,"totalTokens":11609}
+[compaction-metric] {"ts":1774580581802,"event":"turn_complete","turn":1,"estimatedTokens":11964,"source":"actual","contextLimit":40000,"actualTokens":12473}
 RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reached. Please try again in a moment.
     at _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:111:13)
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
@@ -95,9 +106,9 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
     url: 'https://api.friendli.ai/serverless/v1/chat/completions',
     requestBodyValues: {
       parse_reasoning: true,
-      model: 'deepseek-ai/DeepSeek-V3.2',
+      model: 'zai-org/GLM-5',
       stream: true,
-      max_tokens: 12824,
+      max_tokens: 1,
       temperature: undefined,
       top_p: undefined,
       top_k: undefined,
@@ -123,7 +134,7 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
       connection: 'keep-alive',
       'content-length': '64',
       'content-type': 'application/json; charset=utf-8',
-      date: 'Fri, 27 Mar 2026 02:42:31 GMT',
+      date: 'Fri, 27 Mar 2026 03:03:07 GMT',
       vary: 'Origin',
       'x-content-type-options': 'nosniff'
     },
@@ -136,4 +147,3 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
   [Symbol(vercel.ai.error)]: true,
   [Symbol(vercel.ai.error.AI_RetryError)]: true
 }
-[headless] Completed in 25.77s

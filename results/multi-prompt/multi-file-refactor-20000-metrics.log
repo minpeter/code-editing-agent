@@ -1,25 +1,16 @@
-[compaction-debug] contextLimit overridden: 200000 → 20000, reserve=6400, keepRecent=6000
-[compaction-metric] {"ts":1774579326240,"event":"usage_probe","turn":1,"promptTokens":7409,"totalTokens":7410}
-[compaction-metric] {"ts":1774579328655,"event":"turn_complete","turn":1,"estimatedTokens":7409,"source":"actual","contextLimit":20000,"actualTokens":7532}
-[compaction-metric] {"ts":1774579329080,"event":"usage_probe","turn":1,"promptTokens":8741,"totalTokens":8742}
-[compaction-metric] {"ts":1774579329080,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774579336408,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579347306,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579347306,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":732,"tokensAfter":624}
+[compaction-debug] contextLimit overridden: 202752 → 20000, reserve=6313, keepRecent=6000
+[compaction-metric] {"ts":1774580533999,"event":"usage_probe","turn":1,"promptTokens":7125,"totalTokens":7126}
+[compaction-metric] {"ts":1774580536240,"event":"turn_complete","turn":1,"estimatedTokens":7125,"source":"actual","contextLimit":20000,"actualTokens":7367}
+[compaction-metric] {"ts":1774580536691,"event":"usage_probe","turn":1,"promptTokens":9415,"totalTokens":9416}
+[compaction-metric] {"ts":1774580536691,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580548666,"event":"turn_complete","turn":1,"estimatedTokens":9581,"source":"actual","contextLimit":20000,"actualTokens":11109}
+[compaction-metric] {"ts":1774580552223,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
+[compaction-metric] {"ts":1774580557708,"event":"usage_probe","turn":1,"promptTokens":70011,"totalTokens":70012}
+[compaction-metric] {"ts":1774580557708,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774580568579,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":32201,"tokensAfter":911}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579347307,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774579347307,"event":"turn_complete","turn":1,"estimatedTokens":8813,"source":"actual","contextLimit":20000,"actualTokens":10613}
-[compaction-metric] {"ts":1774579347307,"event":"job_status","turn":1,"id":"background-compaction-2","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774579347814,"event":"usage_probe","turn":1,"promptTokens":9659,"totalTokens":9660}
-[compaction-metric] {"ts":1774579351158,"event":"turn_complete","turn":1,"estimatedTokens":11120,"source":"actual","contextLimit":20000,"actualTokens":11357}
-[compaction-metric] {"ts":1774579351699,"event":"usage_probe","turn":1,"promptTokens":10991,"totalTokens":10992}
-[compaction-metric] {"ts":1774579353351,"event":"job_status","turn":1,"id":"background-compaction-2","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579364159,"event":"job_status","turn":1,"id":"background-compaction-2","message":"","state":"clear"}
-[compaction-metric] {"ts":1774579364159,"event":"turn_complete","turn":1,"estimatedTokens":12638,"source":"actual","contextLimit":20000,"actualTokens":13544}
-[compaction-metric] {"ts":1774579364160,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774579371374,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":1768,"tokensAfter":723}
-[compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774579371374,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580568579,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774580568580,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
 RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reached. Please try again in a moment.
     at _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:111:13)
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
@@ -111,9 +102,9 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
     url: 'https://api.friendli.ai/serverless/v1/chat/completions',
     requestBodyValues: {
       parse_reasoning: true,
-      model: 'deepseek-ai/DeepSeek-V3.2',
+      model: 'zai-org/GLM-5',
       stream: true,
-      max_tokens: 1,
+      max_tokens: 8277,
       temperature: undefined,
       top_p: undefined,
       top_k: undefined,
@@ -139,7 +130,7 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
       connection: 'keep-alive',
       'content-length': '64',
       'content-type': 'application/json; charset=utf-8',
-      date: 'Fri, 27 Mar 2026 02:42:57 GMT',
+      date: 'Fri, 27 Mar 2026 03:02:54 GMT',
       vary: 'Origin',
       'x-content-type-options': 'nosniff'
     },
@@ -152,3 +143,4 @@ RetryError [AI_RetryError]: Failed after 3 attempts. Last error: Rate limit reac
   [Symbol(vercel.ai.error)]: true,
   [Symbol(vercel.ai.error.AI_RetryError)]: true
 }
+[headless] Completed in 41.56s

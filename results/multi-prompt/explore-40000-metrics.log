@@ -1,10 +1,11 @@
-[compaction-debug] contextLimit overridden: 200000 → 40000, reserve=12800, keepRecent=12000
-[compaction-metric] {"ts":1774579326599,"event":"usage_probe","turn":1,"promptTokens":7359,"totalTokens":7360}
-[compaction-metric] {"ts":1774579329266,"event":"turn_complete","turn":1,"estimatedTokens":7364,"source":"actual","contextLimit":40000,"actualTokens":7500}
-[compaction-metric] {"ts":1774579329594,"event":"usage_probe","turn":1,"promptTokens":7729,"totalTokens":7730}
-[compaction-metric] {"ts":1774579330745,"event":"turn_complete","turn":1,"estimatedTokens":7806,"source":"actual","contextLimit":40000,"actualTokens":7901}
-[compaction-metric] {"ts":1774579331123,"event":"usage_probe","turn":1,"promptTokens":8560,"totalTokens":8561}
-[compaction-metric] {"ts":1774579335681,"event":"turn_complete","turn":1,"estimatedTokens":8682,"source":"actual","contextLimit":40000,"actualTokens":8815}
-[compaction-metric] {"ts":1774579336020,"event":"usage_probe","turn":1,"promptTokens":8717,"totalTokens":8718}
-[compaction-metric] {"ts":1774579485458,"event":"turn_complete","turn":1,"estimatedTokens":8906,"source":"actual","contextLimit":40000,"actualTokens":24616}
-[headless] Completed in 159.70s
+[compaction-debug] contextLimit overridden: 202752 → 40000, reserve=12626, keepRecent=12000
+[compaction-metric] {"ts":1774580534555,"event":"usage_probe","turn":1,"promptTokens":7076,"totalTokens":7077}
+[compaction-metric] {"ts":1774580538312,"event":"turn_complete","turn":1,"estimatedTokens":7071,"source":"actual","contextLimit":40000,"actualTokens":7301}
+[compaction-metric] {"ts":1774580539191,"event":"usage_probe","turn":1,"promptTokens":14779,"totalTokens":14780}
+[compaction-metric] {"ts":1774580541966,"event":"turn_complete","turn":1,"estimatedTokens":14906,"source":"actual","contextLimit":40000,"actualTokens":15028}
+[compaction-metric] {"ts":1774580543247,"event":"usage_probe","turn":1,"promptTokens":20868,"totalTokens":20869}
+[compaction-metric] {"ts":1774580543247,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774580547006,"event":"turn_complete","turn":1,"estimatedTokens":21046,"source":"actual","contextLimit":40000,"actualTokens":21260}
+[compaction-metric] {"ts":1774580547711,"event":"usage_probe","turn":1,"promptTokens":23563,"totalTokens":23564}
+[compaction-metric] {"ts":1774580561042,"event":"turn_complete","turn":1,"estimatedTokens":23842,"source":"actual","contextLimit":40000,"actualTokens":24245}
+[headless] Completed in 28.43s
