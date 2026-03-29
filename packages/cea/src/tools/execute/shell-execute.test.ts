@@ -53,6 +53,38 @@ describe("executeCommand", () => {
       expect(result.output).toContain("shell-test-");
       expect(result.exitCode).toBe(0);
     });
+
+    it("rejects cat on source files and tells the model to use read_file", async () => {
+      const result = await executeCommand("cat packages/harness/src/index.ts");
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toContain("Use read_file");
+    });
+
+    it("rejects head/tail/wc style shell inspection on source files", async () => {
+      const result = await executeCommand(
+        "head -100 packages/harness/src/index.ts"
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toContain("glob_files");
+    });
+
+    it("rejects ls and suggests glob_files", async () => {
+      const result = await executeCommand("ls -la");
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toContain("glob_files");
+    });
+
+    it("rejects npm in a pnpm workspace", async () => {
+      const result = await executeCommand("npm test", {
+        workdir: "/Users/minpeter/github.com/minpeter/plugsuits",
+      });
+
+      expect(result.exitCode).toBe(2);
+      expect(result.output).toContain("uses pnpm");
+    });
   });
 
   describe("exit code propagation", () => {

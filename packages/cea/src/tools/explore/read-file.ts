@@ -3,6 +3,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { readTextAsset } from "../../utils/text-asset";
 import { formatBlock, safeReadFileEnhanced } from "../utils/safety-utils";
+import { truncateToolOutput } from "../utils/tool-output-truncation";
 
 const READ_FILE_DESCRIPTION = readTextAsset("./read-file.txt", import.meta.url);
 
@@ -94,7 +95,7 @@ export async function executeReadFile({
     formatBlock(`${fileName} ${rangeStr}`, result.numberedContent),
   ];
 
-  return output.join("\n");
+  return (await truncateToolOutput("read_file", output.join("\n"))).text;
 }
 
 export const readFileTool = tool({

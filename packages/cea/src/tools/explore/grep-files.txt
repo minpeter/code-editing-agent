@@ -4,9 +4,15 @@
 **When to use**:
 - Finding function/variable usages
 - Locating specific code patterns and messages
+- Mapping APIs or call flows before deciding which exact files/lines to open with `read_file`
 
 **Output format**:
 - Match lines are emitted as `path:{line_number}#{hash_id}|content`
 - The `{line_number}#{hash_id}` anchor is directly compatible with `edit_file` hashline refs
 
 **DO NOT use shell**: Prefer this over `grep`, `rg`, `ag`
+
+**Guidelines**:
+- Narrow the search with `path`, `include`, or `fixed_strings` whenever possible.
+- For broad inventory tasks, use `grep_files` to shortlist targets before opening files with `read_file`.
+- If a grep result is truncated, do **not** run another broad grep over the same subtree. Narrow the path/include or switch to targeted `read_file` on the strongest hits you already have.

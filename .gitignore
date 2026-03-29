@@ -10,5 +10,6 @@ __pycache__
 
 .cea
 .sisyphus/
+.plugsuits
 *.tsbuildinfo
 .turbo

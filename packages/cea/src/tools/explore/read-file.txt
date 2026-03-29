@@ -22,3 +22,5 @@
 **Guidelines**:
 - Prefer `around_line` after `grep_files` hits
 - Re-run `read_file` before retrying stale hashline edits
+- For broad analysis or mapping tasks, do **not** read many files in full. Read index/export files first, then use `grep_files`, then open only the smallest relevant slices.
+- If a file is long, prefer `limit`, `offset`, or `around_line` instead of reading the whole file at once.

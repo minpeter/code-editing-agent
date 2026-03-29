@@ -7,6 +7,7 @@ import { readTextAsset } from "../../utils/text-asset";
 import { ensureTool } from "../../utils/tools-manager";
 import { formatLineTag } from "../utils/hashline/hash-computation";
 import { formatBlock } from "../utils/safety-utils";
+import { truncateToolOutput } from "../utils/tool-output-truncation";
 
 const GREP_FILES_DESCRIPTION = readTextAsset(
   "./grep-files.txt",
@@ -14,6 +15,11 @@ const GREP_FILES_DESCRIPTION = readTextAsset(
 );
 
 const MAX_MATCHES = 20_000;
+const DEFAULT_EXCLUDE_GLOBS = [
+  "!results/**",
+  "!.sisyphus/**",
+  "!.plugsuits/**",
+];
 /** Maximum bytes to buffer from ripgrep stdout before killing the process. */
 const MAX_STDOUT_BUFFER_BYTES = 10 * 1024 * 1024; // 10 MB
 /** Maximum bytes to buffer from ripgrep stderr. */
@@ -222,6 +228,10 @@ export async function executeGrep({
     args.push("--glob", include);
   }
 
+  for (const excludeGlob of DEFAULT_EXCLUDE_GLOBS) {
+    args.push("--glob", excludeGlob);
+  }
+
   if (context !== undefined) {
     args.push("--context", context.toString());
   }
@@ -261,7 +271,7 @@ export async function executeGrep({
     output.push(formatBlock("grep results", "(no matches)"));
   }
 
-  return output.join("\n");
+  return (await truncateToolOutput("grep_files", output.join("\n"))).text;
 }
 
 export const grepTool = tool({
