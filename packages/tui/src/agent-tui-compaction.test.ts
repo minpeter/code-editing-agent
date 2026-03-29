@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatCompactionAppliedNotice,
   retryStreamTurnOnContextOverflow,
+  retryStreamTurnOnNoOutput,
   shouldDisplayBackgroundCompactionStatus,
 } from "./agent-tui";
 
@@ -123,6 +124,38 @@ describe("agent-tui compaction core", () => {
 
     expect(result).toEqual({ handled: false });
     expect(compactionCalls).toBe(0);
+    expect(retryCalls).toBe(0);
+  });
+
+  it("retries no-output errors up to the configured retry budget", async () => {
+    let retryCalls = 0;
+
+    const result = await retryStreamTurnOnNoOutput({
+      error: new Error("No output generated. Check the stream for errors."),
+      noOutputRetryCount: 2,
+      retry: () => {
+        retryCalls += 1;
+        return Promise.resolve("completed" as const);
+      },
+    });
+
+    expect(result).toEqual({ handled: true, result: "completed" });
+    expect(retryCalls).toBe(1);
+  });
+
+  it("stops retrying no-output errors after three attempts", async () => {
+    let retryCalls = 0;
+
+    const result = await retryStreamTurnOnNoOutput({
+      error: new Error("No output generated. Check the stream for errors."),
+      noOutputRetryCount: 3,
+      retry: () => {
+        retryCalls += 1;
+        return Promise.resolve("completed" as const);
+      },
+    });
+
+    expect(result).toEqual({ handled: false });
     expect(retryCalls).toBe(0);
   });
 

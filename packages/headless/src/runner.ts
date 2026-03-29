@@ -36,6 +36,18 @@ interface UsageMeasurement {
   totalTokens?: number;
 }
 
+const MAX_NO_OUTPUT_RETRIES = 3;
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isNoOutputGeneratedError(error: unknown): boolean {
+  return (
+    error instanceof Error && error.message.includes("No output generated")
+  );
+}
+
 function getUsageNumber(
   usage: Record<string, unknown>,
   ...keys: string[]
@@ -419,6 +431,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       );
     }
     let overflowRetried = false;
+    let noOutputRetryCount = 0;
     const executeStream = async (
       streamMessages: ModelMessage[],
       streamMaxOutputTokens: number | undefined
@@ -456,6 +469,21 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           );
           return executeStream(retryMessages, retryMaxOutput);
         }
+
+        if (
+          noOutputRetryCount < MAX_NO_OUTPUT_RETRIES &&
+          isNoOutputGeneratedError(error)
+        ) {
+          noOutputRetryCount += 1;
+          await sleepMs(250 * noOutputRetryCount);
+          const retryMessages = await getMessagesForLLM(config.messageHistory);
+          const retryMaxOutput = getRecommendedMaxOutputTokens(
+            config.messageHistory,
+            retryMessages
+          );
+          return executeStream(retryMessages, retryMaxOutput);
+        }
+
         throw error;
       }
     };

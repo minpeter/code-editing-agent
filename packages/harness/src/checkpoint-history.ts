@@ -40,6 +40,7 @@ const DEFAULT_COMPACTION_CONFIG: NormalizedCompactionConfig = {
 };
 
 const DEFAULT_PRUNING_CONFIG: Required<PruningConfig> = {
+  eagerPruneToolNames: [],
   enabled: false,
   minSavingsTokens: 200,
   protectedToolNames: [],

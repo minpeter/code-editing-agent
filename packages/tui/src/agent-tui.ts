@@ -440,6 +440,29 @@ export async function retryStreamTurnOnContextOverflow<T>(params: {
   };
 }
 
+export async function retryStreamTurnOnNoOutput<T>(params: {
+  error: unknown;
+  noOutputRetryCount: number;
+  retry: () => Promise<T>;
+}): Promise<{ handled: false } | { handled: true; result: T }> {
+  if (
+    params.noOutputRetryCount >= 3 ||
+    !(params.error instanceof Error) ||
+    !params.error.message.includes("No output generated")
+  ) {
+    return { handled: false };
+  }
+
+  await new Promise((resolve) =>
+    setTimeout(resolve, 250 * (params.noOutputRetryCount + 1))
+  );
+
+  return {
+    handled: true,
+    result: await params.retry(),
+  };
+}
+
 export interface AgentTUIConfig {
   agent: RunnableAgent;
   commands?: Command[];
@@ -1169,6 +1192,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   const handleStreamTurnError = async (params: {
     error: unknown;
+    noOutputRetryCount: number;
     overflowRetried: boolean;
     phase: "new-turn" | "intermediate-step";
     streamAbortController: AbortController;
@@ -1191,12 +1215,27 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       return overflowRetry.result;
     }
 
+    const noOutputRetry = await retryStreamTurnOnNoOutput({
+      error: params.error,
+      noOutputRetryCount: params.noOutputRetryCount,
+      retry: async () =>
+        runSingleStreamTurn(
+          params.phase,
+          params.overflowRetried,
+          params.noOutputRetryCount + 1
+        ),
+    });
+    if (noOutputRetry.handled) {
+      return noOutputRetry.result;
+    }
+
     throw params.error;
   };
 
   const runSingleStreamTurn = async (
     phase: "new-turn" | "intermediate-step",
-    overflowRetried = false
+    overflowRetried = false,
+    noOutputRetryCount = 0
   ): Promise<"completed" | "continue" | "interrupted"> => {
     let messagesForLLM = await prepareMessages(phase);
 
@@ -1249,6 +1288,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     } catch (error) {
       return await handleStreamTurnError({
         error,
+        noOutputRetryCount,
         overflowRetried,
         phase,
         streamAbortController,

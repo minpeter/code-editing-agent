@@ -129,12 +129,49 @@ export interface CompactionConfig {
   thresholdRatio?: number;
 }
 
+/**
+ * Configuration options for message pruning.
+ * 메시지 구축(pruning) 설정 옵션입니다.
+ */
 export interface PruningConfig {
-  enabled?: boolean; // default: false
-  minSavingsTokens?: number; // default: 200
-  protectedToolNames?: string[]; // tools to never prune
-  protectRecentTokens?: number; // default: 2000
-  replacementText?: string; // default: "[output pruned — too large]"
+  /**
+   * Tool names to eagerly prune when detected in messages.
+   * 메시지에서 감지되면 즉시 구축할 도구 이름입니다.
+   * @default []
+   */
+  eagerPruneToolNames?: string[];
+  /**
+   * Whether message pruning is enabled.
+   * 메시지 구축 활성화 여부입니다.
+   * @default false
+   */
+  enabled?: boolean;
+  /**
+   * Minimum tokens to save for pruning to be worthwhile.
+   * 구축이 의미 있기 위한 최소 절약 토큰 수입니다.
+   * @default 200
+   * @minimum 0
+   */
+  minSavingsTokens?: number;
+  /**
+   * Tools to never prune, even if they exceed limits.
+   * 제한을 초과해도 절대 구축하지 않을 도구입니다.
+   * @default []
+   */
+  protectedToolNames?: string[];
+  /**
+   * Number of recent tokens to protect from pruning.
+   * 구축에서 보호할 최근 토큰 수입니다.
+   * @default 2000
+   * @minimum 0
+   */
+  protectRecentTokens?: number;
+  /**
+   * Text to replace pruned message content.
+   * 구축된 메시지 내용을 대체할 텍스트입니다.
+   * @default "[output pruned — too large]"
+   */
+  replacementText?: string;
 }
 
 // --- Continuation ---

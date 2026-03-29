@@ -339,6 +339,7 @@ const buildAgentStreamWithTodoContinuation = (): RunnableAgent => {
 
 const updateCompactionForCurrentModel = async (): Promise<void> => {
   messageHistory.updateCompaction(agentManager.buildCompactionConfig());
+  messageHistory.updatePruning(agentManager.buildPruningConfig());
   const instructions = await agentManager.getInstructions();
   messageHistory.setSystemPromptTokens(estimateTokens(instructions));
 };

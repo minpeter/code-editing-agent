@@ -47,7 +47,9 @@ export function createAgent(config: AgentConfig): Agent {
         messages: opts.messages,
         providerOptions: opts.providerOptions,
         maxOutputTokens: opts.maxOutputTokens,
+        seed: opts.seed,
         stopWhen: stepCountIs(config.maxStepsPerTurn ?? 1),
+        temperature: opts.temperature,
         abortSignal: opts.abortSignal,
         experimental_repairToolCall: config.experimental_repairToolCall,
       });

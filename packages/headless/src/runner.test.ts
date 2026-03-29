@@ -465,4 +465,77 @@ describe("runHeadless", () => {
     expect(assistantEvents).toHaveLength(1);
     expect(assistantEvents[0]).toMatchObject({ content: "ok" });
   });
+
+  it("retries once on no output generated error", async () => {
+    const events: TrajectoryEvent[] = [];
+    const history = new CheckpointHistory();
+    let streamCallCount = 0;
+    const noOutputError = new Error(
+      "No output generated. Check the stream for errors."
+    );
+
+    const agent = {
+      stream: () => {
+        streamCallCount += 1;
+        if (streamCallCount === 1) {
+          return Promise.reject(noOutputError);
+        }
+        return createMockStream([{ role: "assistant", content: "success" }]);
+      },
+    };
+
+    await runHeadless({
+      agent,
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: {
+        content: "test empty-output retry",
+      },
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-no-output-retry",
+    });
+
+    expect(streamCallCount).toBe(2);
+    const assistantEvents = events.filter((e) => e.type === "assistant");
+    expect(assistantEvents).toHaveLength(1);
+    expect(assistantEvents[0]).toMatchObject({ content: "ok" });
+  });
+
+  it("retries multiple times on no output generated error before succeeding", async () => {
+    const events: TrajectoryEvent[] = [];
+    const history = new CheckpointHistory();
+    let streamCallCount = 0;
+    const noOutputError = new Error(
+      "No output generated. Check the stream for errors."
+    );
+
+    const agent = {
+      stream: () => {
+        streamCallCount += 1;
+        if (streamCallCount < 4) {
+          return Promise.reject(noOutputError);
+        }
+        return createMockStream([{ role: "assistant", content: "success" }]);
+      },
+    };
+
+    await runHeadless({
+      agent,
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: {
+        content: "test repeated no-output retry",
+      },
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-no-output-retry-multi",
+    });
+
+    expect(streamCallCount).toBe(4);
+    const assistantEvents = events.filter((e) => e.type === "assistant");
+    expect(assistantEvents).toHaveLength(1);
+  });
 });

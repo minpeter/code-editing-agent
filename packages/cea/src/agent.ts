@@ -7,6 +7,7 @@ import {
   estimateTokens,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
+  type PruningConfig,
 } from "@ai-sdk-tool/harness";
 import { createFriendli } from "@friendliai/ai-provider";
 import {
@@ -53,6 +54,11 @@ const DEFAULT_CONTEXT_LENGTH = 200_000;
 const TRANSLATION_MAX_OUTPUT_TOKENS = 4000;
 
 type ProviderOptions = AiProviderOptions | undefined;
+
+interface BenchmarkSamplingOverrides {
+  seed?: number;
+  temperature?: number;
+}
 
 export type AgentStreamOptions = Pick<
   HarnessAgentStreamOptions,
@@ -119,6 +125,20 @@ const normalizeUsageMeasurement = (usage: unknown): UsageMeasurement | null => {
     outputTokens: completionTokens ?? 0,
     totalTokens:
       totalTokens ?? Math.max(0, (promptTokens ?? 0) + (completionTokens ?? 0)),
+  };
+};
+
+const getBenchmarkSamplingOverrides = (): BenchmarkSamplingOverrides => {
+  const seed = process.env.BENCHMARK_SEED
+    ? Number.parseInt(process.env.BENCHMARK_SEED, 10)
+    : undefined;
+  const temperature = process.env.BENCHMARK_TEMPERATURE
+    ? Number.parseFloat(process.env.BENCHMARK_TEMPERATURE)
+    : undefined;
+
+  return {
+    seed: Number.isFinite(seed) ? seed : undefined,
+    temperature: Number.isFinite(temperature) ? temperature : undefined,
   };
 };
 
@@ -657,6 +677,15 @@ export class AgentManager {
     };
   }
 
+  buildPruningConfig(overrides?: Partial<PruningConfig>): PruningConfig {
+    return {
+      eagerPruneToolNames: ["read_file", "grep_files"],
+      enabled: true,
+      protectRecentTokens: 40_000,
+      ...overrides,
+    };
+  }
+
   getModelId(): string {
     return this.modelId;
   }
@@ -835,6 +864,7 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
       abortSignal: options.abortSignal,
       providerOptions,
       maxOutputTokens: effectiveMaxOutputTokens,
+      ...getBenchmarkSamplingOverrides(),
     });
   }
 

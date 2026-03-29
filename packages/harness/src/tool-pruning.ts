@@ -49,6 +49,7 @@ export interface ProgressivePruneResult {
 interface PrunableToolResultRef {
   messageIndex: number;
   partIndex: number;
+  toolName: string;
 }
 
 function estimateCheckpointTokens(messages: CheckpointMessage[]): number {
@@ -82,15 +83,13 @@ function resolveProtectedFromIndex(
 function collectPrunableToolResultRefs(
   messages: CheckpointMessage[],
   protectedFromIndex: number,
-  protectedToolNames: Set<string>
+  protectedToolNames: Set<string>,
+  eagerPruneToolNames: Set<string>
 ): PrunableToolResultRef[] {
   const refs: PrunableToolResultRef[] = [];
+  const eagerRefsByTool = new Map<string, PrunableToolResultRef[]>();
 
   for (let messageIndex = 0; messageIndex < messages.length; messageIndex++) {
-    if (messageIndex >= protectedFromIndex) {
-      continue;
-    }
-
     const modelMessage = messages[messageIndex].message;
     if (modelMessage.role !== "tool" || !Array.isArray(modelMessage.content)) {
       continue;
@@ -108,8 +107,23 @@ function collectPrunableToolResultRefs(
       if (protectedToolNames.has(part.toolName)) {
         continue;
       }
-      refs.push({ messageIndex, partIndex });
+
+      const ref = { messageIndex, partIndex, toolName: part.toolName };
+      if (messageIndex < protectedFromIndex) {
+        refs.push(ref);
+        continue;
+      }
+
+      if (eagerPruneToolNames.has(part.toolName)) {
+        const toolRefs = eagerRefsByTool.get(part.toolName) ?? [];
+        toolRefs.push(ref);
+        eagerRefsByTool.set(part.toolName, toolRefs);
+      }
     }
+  }
+
+  for (const toolRefs of eagerRefsByTool.values()) {
+    refs.push(...toolRefs.slice(0, Math.max(0, toolRefs.length - 2)));
   }
 
   return refs;
@@ -182,6 +196,7 @@ export function progressivePrune(
   const protectRecentTokens =
     config.protectRecentTokens ?? DEFAULT_PROGRESSIVE_PROTECT_RECENT_TOKENS;
   const protectedToolNames = new Set(config.protectedToolNames ?? []);
+  const eagerPruneToolNames = new Set(config.eagerPruneToolNames ?? []);
   const replacementText =
     config.replacementText ?? DEFAULT_PROGRESSIVE_REPLACEMENT_TEXT;
 
@@ -192,7 +207,8 @@ export function progressivePrune(
   const prunableRefs = collectPrunableToolResultRefs(
     messages,
     protectedFromIndex,
-    protectedToolNames
+    protectedToolNames,
+    eagerPruneToolNames
   );
 
   let level4Result: ProgressivePruneResult | null = null;

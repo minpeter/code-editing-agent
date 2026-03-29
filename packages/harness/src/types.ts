@@ -53,7 +53,9 @@ export interface AgentStreamOptions {
   maxOutputTokens?: StreamTextOptions["maxOutputTokens"];
   messages: ModelMessage[];
   providerOptions?: StreamTextOptions["providerOptions"];
+  seed?: StreamTextOptions["seed"];
   system?: string;
+  temperature?: StreamTextOptions["temperature"];
 }
 
 /** Result of a single streaming turn from {@link Agent.stream}. */

@@ -243,4 +243,12 @@ summary`);
     const state = config.getStructuredState?.();
     expect(state === undefined || typeof state === "string").toBe(true);
   });
+
+  it("buildPruningConfig enables eager pruning for read-heavy tools", () => {
+    const config = agentManager.buildPruningConfig();
+
+    expect(config.enabled).toBe(true);
+    expect(config.protectRecentTokens).toBe(40_000);
+    expect(config.eagerPruneToolNames).toEqual(["read_file", "grep_files"]);
+  });
 });
