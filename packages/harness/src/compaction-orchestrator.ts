@@ -18,6 +18,26 @@ export interface SpeculativeCompactionJob {
 
 export type CompactionPhase = "new-turn" | "intermediate-step";
 
+export type BlockingCompactionReason =
+  | "auto-compact"
+  | "hard-limit"
+  | "manual"
+  | "overflow-recovery";
+
+export type BlockingCompactionStage =
+  | "completed"
+  | "compacting"
+  | "pruning"
+  | "starting";
+
+export interface BlockingCompactionEvent {
+  blocking: boolean;
+  reason: BlockingCompactionReason;
+  stage: BlockingCompactionStage;
+  tokensAfter?: number;
+  tokensBefore?: number;
+}
+
 export interface CompactionAppliedDetail {
   baseMessageCount: number;
   jobId?: string;
@@ -34,7 +54,7 @@ export interface CompactionCallbacks {
 
 export interface CompactionOrchestratorCallbacks extends CompactionCallbacks {
   onApplied?: (detail: CompactionAppliedDetail) => void;
-  onBlockingChange?: (blocking: boolean) => void;
+  onBlockingChange?: (event: BlockingCompactionEvent) => void;
   onError?: (message: string, error: unknown) => void;
   onJobStatus?: (
     id: string,
@@ -379,11 +399,44 @@ export class CompactionOrchestrator {
 
   async handleOverflow(error?: unknown): Promise<OverflowRecoveryResult> {
     const history = this.requireHistory();
+    const tokensBefore = history.getEstimatedTokens();
+
+    this.callbacks.onBlockingChange?.({
+      blocking: true,
+      reason: "overflow-recovery",
+      stage: "starting",
+      tokensBefore,
+    });
+
+    try {
+      this.callbacks.onBlockingChange?.({
+        blocking: true,
+        reason: "overflow-recovery",
+        stage: "compacting",
+        tokensBefore,
+      });
+      return await this.handleOverflowInternal(error);
+    } finally {
+      this.callbacks.onBlockingChange?.({
+        blocking: false,
+        reason: "overflow-recovery",
+        stage: "completed",
+        tokensBefore,
+        tokensAfter: history.getEstimatedTokens(),
+      });
+    }
+  }
+
+  private async handleOverflowInternal(
+    error?: unknown
+  ): Promise<OverflowRecoveryResult> {
+    const history = this.requireHistory();
 
     if (!history.handleContextOverflow) {
       const fallback = await this.runCompaction(history, {
         auto: true,
         aggressive: true,
+        suppressBlockingEvents: true,
       });
       return {
         success: fallback.success,
@@ -581,8 +634,20 @@ export class CompactionOrchestrator {
       return false;
     }
 
-    this.callbacks.onBlockingChange?.(true);
+    const tokensBefore = history.getEstimatedTokens();
+    this.callbacks.onBlockingChange?.({
+      blocking: true,
+      reason: "hard-limit",
+      stage: "starting",
+      tokensBefore,
+    });
     try {
+      this.callbacks.onBlockingChange?.({
+        blocking: true,
+        reason: "hard-limit",
+        stage: "pruning",
+        tokensBefore,
+      });
       const pruneHandled = await this.tryPruneBeforeOverflow(
         history,
         additionalTokens,
@@ -590,10 +655,24 @@ export class CompactionOrchestrator {
       );
 
       if (!pruneHandled) {
-        await this.handleOverflow(new Error("context_limit_hard_block"));
+        this.callbacks.onBlockingChange?.({
+          blocking: true,
+          reason: "hard-limit",
+          stage: "compacting",
+          tokensBefore,
+        });
+        await this.handleOverflowInternal(
+          new Error("context_limit_hard_block")
+        );
       }
     } finally {
-      this.callbacks.onBlockingChange?.(false);
+      this.callbacks.onBlockingChange?.({
+        blocking: false,
+        reason: "hard-limit",
+        stage: "completed",
+        tokensBefore,
+        tokensAfter: history.getEstimatedTokens(),
+      });
     }
 
     if (this.isAtHardLimit(history, additionalTokens, phase)) {
@@ -790,10 +869,28 @@ export class CompactionOrchestrator {
 
   private async runCompaction(
     history: CompactionHistoryLike,
-    options: { aggressive?: boolean; auto: boolean }
+    options: {
+      aggressive?: boolean;
+      auto: boolean;
+      suppressBlockingEvents?: boolean;
+    }
   ): Promise<CompactionResult> {
     this.compactionInProgress = true;
     this.callbacks.onCompactionStart?.();
+
+    const emitBlocking = !options.suppressBlockingEvents;
+    const reason: BlockingCompactionReason = options.auto
+      ? "auto-compact"
+      : "manual";
+    const tokensBefore = history.getEstimatedTokens();
+    if (emitBlocking) {
+      this.callbacks.onBlockingChange?.({
+        blocking: true,
+        reason,
+        stage: "compacting",
+        tokensBefore,
+      });
+    }
 
     try {
       const result = toCompactionResult(await history.compact(options));
@@ -807,6 +904,15 @@ export class CompactionOrchestrator {
       };
     } finally {
       this.compactionInProgress = false;
+      if (emitBlocking) {
+        this.callbacks.onBlockingChange?.({
+          blocking: false,
+          reason,
+          stage: "completed",
+          tokensBefore,
+          tokensAfter: history.getEstimatedTokens(),
+        });
+      }
     }
   }
 

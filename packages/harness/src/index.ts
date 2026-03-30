@@ -25,6 +25,9 @@ export {
   resolveRegisteredCommandName,
 } from "./commands";
 export type {
+  BlockingCompactionEvent,
+  BlockingCompactionReason,
+  BlockingCompactionStage,
   CompactionAppliedDetail,
   CompactionOrchestratorCallbacks,
   CompactionPhase,

@@ -311,6 +311,98 @@ describe("CompactionOrchestrator", () => {
       expect(handleContextOverflow).toHaveBeenCalledTimes(1);
     });
 
+    it("fires BlockingCompactionEvent lifecycle: starting → pruning → compacting → completed", async () => {
+      const stages: string[] = [];
+      const events: {
+        blocking: boolean;
+        reason: string;
+        stage: string;
+        tokensBefore?: number;
+        tokensAfter?: number;
+      }[] = [];
+      const history = createHistory({ contextLimit: 40, reserveTokens: 20 });
+      history.addUserMessage(
+        "this message is definitely long enough to exceed"
+      );
+
+      vi.spyOn(history, "handleContextOverflow").mockResolvedValue({
+        success: true,
+        strategy: "compact",
+        tokensBefore: 120,
+        tokensAfter: 40,
+      });
+
+      const orchestrator = new CompactionOrchestrator(history, {
+        onBlockingChange: (event) => {
+          stages.push(event.stage);
+          events.push({ ...event });
+        },
+      });
+
+      await orchestrator.blockAtHardLimit(40, "new-turn");
+
+      expect(stages[0]).toBe("starting");
+      expect(stages[1]).toBe("pruning");
+      expect(stages.at(-1)).toBe("completed");
+      const startEvent = events.find((e) => e.stage === "starting");
+      const endEvent = events.find((e) => e.stage === "completed");
+      expect(startEvent?.reason).toBe("hard-limit");
+      expect(startEvent?.tokensBefore).toBeTypeOf("number");
+      expect(endEvent?.reason).toBe("hard-limit");
+      expect(endEvent?.tokensAfter).toBeTypeOf("number");
+      expect(events[0]?.blocking).toBe(true);
+      expect(events.at(-1)?.blocking).toBe(false);
+    });
+
+    it("fires BlockingCompactionEvent with reason 'overflow-recovery' from handleOverflow", async () => {
+      const stages: string[] = [];
+      const history = createHistory({ contextLimit: 40, reserveTokens: 20 });
+      history.addUserMessage("message");
+
+      vi.spyOn(history, "handleContextOverflow").mockResolvedValue({
+        success: true,
+        strategy: "compact",
+        tokensBefore: 120,
+        tokensAfter: 40,
+      });
+
+      const orchestrator = new CompactionOrchestrator(history, {
+        onBlockingChange: (event) => {
+          stages.push(event.stage);
+        },
+      });
+
+      await orchestrator.handleOverflow(new Error("context_length_exceeded"));
+
+      expect(stages[0]).toBe("starting");
+      expect(stages[1]).toBe("compacting");
+      expect(stages.at(-1)).toBe("completed");
+    });
+
+    it("guarantees start/end pairing even when overflow recovery throws", async () => {
+      const events: { blocking: boolean; stage: string }[] = [];
+      const history = createHistory({ contextLimit: 40, reserveTokens: 20 });
+      history.addUserMessage("message");
+
+      vi.spyOn(history, "handleContextOverflow").mockRejectedValue(
+        new Error("summarization failed")
+      );
+
+      const orchestrator = new CompactionOrchestrator(history, {
+        onBlockingChange: (event) => {
+          events.push({ blocking: event.blocking, stage: event.stage });
+        },
+      });
+
+      await orchestrator.handleOverflow(new Error("context_length_exceeded"));
+
+      const startEvents = events.filter((e) => e.blocking);
+      const endEvents = events.filter((e) => !e.blocking);
+      expect(startEvents.length).toBeGreaterThanOrEqual(1);
+      expect(endEvents.length).toBe(1);
+      expect(endEvents[0]?.stage).toBe("completed");
+    });
+
     it("emits onPruneSkipped with no-prune-config when prune is unavailable", async () => {
       const onPruneSkipped = vi.fn();
       const handleContextOverflow = vi.fn().mockResolvedValue({

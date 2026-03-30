@@ -295,10 +295,15 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
                 error: String(error),
               });
             },
-            onBlockingChange: (blocking: boolean) => {
-              if (blocking) {
+            onBlockingChange: (event) => {
+              if (event.blocking) {
                 blockingStartTime = Date.now();
-                emitMetric?.({ event: "blocking_start", turn: turnNumber });
+                emitMetric?.({
+                  event: "blocking_start",
+                  turn: turnNumber,
+                  reason: event.reason,
+                  tokensBefore: event.tokensBefore,
+                });
                 return;
               }
 
@@ -311,6 +316,9 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
                 event: "blocking_end",
                 turn: turnNumber,
                 durationMs,
+                reason: event.reason,
+                tokensBefore: event.tokensBefore,
+                tokensAfter: event.tokensAfter,
               });
             },
             onJobStatus: (

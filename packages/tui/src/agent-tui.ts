@@ -710,17 +710,20 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         updateHeader();
         tui.requestRender();
       },
-      onBlockingChange: (blocking) => {
-        if (blocking) {
+      onBlockingChange: (event) => {
+        if (event.blocking) {
           blockingCompactionActive = true;
           backgroundStatuses.clear();
-          renderFooterStatuses();
-          showLoader("Blocking compaction...");
+          setBackgroundStatus(
+            "blocking-compaction",
+            "Compacting...",
+            "running"
+          );
           return;
         }
 
         blockingCompactionActive = false;
-        clearStatus();
+        clearBackgroundStatus("blocking-compaction");
         updateHeader();
         tui.requestRender();
       },
@@ -790,27 +793,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const compactBeforeNextTurnIfNeeded = async (): Promise<void> => {
     await compactionOrchestrator.checkAndCompact();
     applyReadySpeculativeCompaction();
-  };
-
-  const runBlockingOverflowCompaction = async (
-    error: unknown
-  ): Promise<boolean> => {
-    blockingCompactionActive = true;
-    backgroundStatuses.clear();
-    renderFooterStatuses();
-    showLoader("Blocking compaction...");
-
-    try {
-      const result = await compactionOrchestrator.handleOverflow(error);
-      updateHeader();
-      tui.requestRender();
-      return result.success;
-    } finally {
-      blockingCompactionActive = false;
-      clearStatus();
-      updateHeader();
-      tui.requestRender();
-    }
   };
 
   const measureUsageIfAvailable = async (
@@ -1208,7 +1190,12 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     const overflowRetry = await retryStreamTurnOnContextOverflow({
       error: params.error,
       overflowRetried: params.overflowRetried,
-      runBlockingCompaction: () => runBlockingOverflowCompaction(params.error),
+      runBlockingCompaction: async () => {
+        const result = await compactionOrchestrator.handleOverflow(
+          params.error
+        );
+        return result.success;
+      },
       retry: async () => runSingleStreamTurn(params.phase, true),
     });
     if (overflowRetry.handled) {
