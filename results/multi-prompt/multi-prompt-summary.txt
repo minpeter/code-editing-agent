@@ -1,36 +1,23 @@
 ═══════════════════════════════════════════════════════════════════
   Multi-Prompt Compaction Benchmark Summary
-  Generated: 2026-03-28T19:55:14.263Z
-  Context limits: 128000, 200000
-  Max iterations: 30
-  Total run time: 4m 2s
+  Generated: 2026-03-30T08:23:32.927Z
+  Context limits: 32000, 40000, 50000, 60000, 80000, 128000, 200000
+  Max iterations: 40
+  Total run time: 39m 49s
 ═══════════════════════════════════════════════════════════════════
 
-┌─ explore: Codebase exploration (read-heavy) (read-heavy)
-│  Prompt: 코드베이스를 탐색하고, 이 코드 베이스에 대해서 설명해줘
+┌─ write-heavy: Code generation (write-heavy) (write-heavy)
+│  Prompt: packages/harness/src/compaction-types.ts를 읽고, 모든 인터페이스와 타입에 대한 단위 테스트 파일 package...
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  128000  │       0 │     0 │  22930 │    21292 │     6 │  yes │ 0m 45s
-│  200000  │       0 │     0 │  30634 │    29042 │     5 │  yes │ 0m 45s
-└──────────────────────────────────────────────────────────────
-
-┌─ single-edit: Single file edit (short task) (short)
-│  Prompt: packages/harness/src/compaction-types.ts 파일을 읽고, CompactionConfig 인터페이스에 있는 모든 필...
-│
-│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
-│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  128000  │       0 │     0 │  11881 │    11337 │     2 │  yes │ 0m 18s
-│  200000  │       0 │     0 │  11915 │    11337 │     2 │  yes │ 0m 14s
-└──────────────────────────────────────────────────────────────
-
-┌─ bug-trace: Bug investigation (read + trace) (read-heavy)
-│  Prompt: packages/harness/src/compaction-orchestrator.ts 에서 blockAtHardLimit이 호출되는 전체 흐름을...
-│
-│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
-│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  128000  │       0 │     0 │  38860 │    36080 │    14 │  yes │ 1m 21s
-│  200000  │       0 │     0 │  33630 │    31263 │    10 │  yes │ 1m 8s
+│  32000   │       4 │     0 │  22802 │    21977 │    17 │  yes │ 4m 10s
+│  40000   │       1 │     0 │  24941 │    23999 │     9 │  yes │ 2m 18s
+│  50000   │       0 │     0 │  26520 │    25514 │    10 │  yes │ 1m 46s
+│  60000   │       0 │     0 │  30425 │    29111 │    12 │  yes │ 1m 43s
+│  80000   │       0 │     0 │  24491 │    22425 │     7 │  yes │ 2m 9s
+│  128000  │       0 │     0 │  28879 │    27096 │    11 │  yes │ 1m 36s
+│  200000  │       0 │     0 │  23368 │    22535 │     7 │  yes │ 1m 12s
 └──────────────────────────────────────────────────────────────
 
 ┌─ multi-file-refactor: Multi-file analysis (cross-module) (multi-step)
@@ -38,46 +25,84 @@
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  128000  │       0 │     0 │  23555 │    19544 │    16 │  yes │ 1m 38s
-│  200000  │       0 │     0 │  20036 │    15558 │     9 │  yes │ 1m 9s
+│  32000   │       0 │     0 │  18443 │    14342 │     7 │  yes │ 0m 38s
+│  40000   │       2 │     0 │  26618 │    23508 │    18 │  yes │ 1m 36s
+│  50000   │       0 │     0 │  37627 │    19290 │    15 │  yes │ 2m 19s
+│  60000   │       0 │     0 │  20494 │    14867 │     7 │  yes │ 0m 51s
+│  80000   │       0 │     0 │  24676 │    20059 │     8 │  yes │ 0m 41s
+│  128000  │       0 │     0 │  23693 │    18021 │    14 │  yes │ 0m 54s
+│  200000  │       0 │     0 │  38746 │    20653 │    22 │  yes │ 1m 48s
 └──────────────────────────────────────────────────────────────
 
-┌─ write-heavy: Code generation (write-heavy) (write-heavy)
-│  Prompt: packages/harness/src/compaction-types.ts를 읽고, 모든 인터페이스와 타입에 대한 단위 테스트 파일 package...
+┌─ bug-trace: Bug investigation (read + trace) (read-heavy)
+│  Prompt: packages/harness/src/compaction-orchestrator.ts 에서 blockAtHardLimit이 호출되는 전체 흐름을...
 │
 │  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
 │  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
-│  128000  │       0 │     0 │  27630 │    26772 │    11 │  yes │ 2m 7s
-│  200000  │       0 │     0 │  32275 │    15801 │     8 │  yes │ 1m 35s
+│  32000   │       0 │     0 │  26194 │    14233 │    13 │  yes │ 1m 9s
+│  40000   │       2 │     0 │  30207 │    29336 │    32 │  yes │ 1m 22s
+│  50000   │       0 │     0 │  27656 │    24987 │    20 │  yes │ 0m 43s
+│  60000   │       0 │     0 │  34271 │    31626 │    27 │  yes │ 1m 8s
+│  80000   │       0 │     0 │  30088 │    27726 │    16 │  yes │ 0m 39s
+│  128000  │       0 │     0 │  33351 │    31232 │    16 │  yes │ 0m 36s
+│  200000  │       0 │     0 │  30897 │    28576 │    15 │  yes │ 0m 41s
+└──────────────────────────────────────────────────────────────
+
+┌─ explore: Codebase exploration (read-heavy) (read-heavy)
+│  Prompt: 코드베이스를 탐색하고, 이 코드 베이스에 대해서 설명해줘
+│
+│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
+│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
+│  32000   │       1 │     0 │   9544 │    16722 │     3 │  yes │ 0m 18s
+│  40000   │       0 │     0 │  20444 │    18581 │     8 │  yes │ 0m 22s
+│  50000   │       0 │     0 │  19560 │    18137 │     4 │  yes │ 0m 15s
+│  60000   │       0 │     0 │  17877 │    16828 │     5 │  yes │ 0m 13s
+│  80000   │       0 │     0 │  18292 │    16828 │     5 │  yes │ 0m 16s
+│  128000  │       0 │     0 │  17895 │    16828 │     5 │  yes │ 0m 13s
+│  200000  │       0 │     0 │  17895 │    16828 │     5 │  yes │ 0m 14s
+└──────────────────────────────────────────────────────────────
+
+┌─ single-edit: Single file edit (short task) (short)
+│  Prompt: packages/harness/src/compaction-types.ts 파일을 읽고, CompactionConfig 인터페이스에 있는 모든 필...
+│
+│  limit   │ compact │ block │ maxTok │ probeMax │ turns │ done │ time
+│  ────────┼─────────┼───────┼────────┼──────────┼───────┼──────┼──────
+│  32000   │       0 │     0 │  11984 │    11337 │     2 │  yes │ 0m 10s
+│  40000   │       0 │     0 │  11987 │    11337 │     2 │  yes │ 0m 6s
+│  50000   │       0 │     0 │  11987 │    11337 │     2 │  yes │ 0m 6s
+│  60000   │       0 │     0 │  11987 │    11337 │     2 │  yes │ 0m 6s
+│  80000   │       0 │     0 │  11987 │    11337 │     2 │  yes │ 0m 6s
+│  128000  │       0 │     0 │  11987 │    11337 │     2 │  yes │ 0m 6s
+│  200000  │       0 │     0 │  11987 │    11337 │     2 │  yes │ 0m 6s
 └──────────────────────────────────────────────────────────────
 
 ═══ Cross-Scenario Matrix: Compaction Count ═══
 
-scenario             │   128000 │   200000
-──────────────────────────────────────────
-explore              │        0 │        0
-single-edit          │        0 │        0
-bug-trace            │        0 │        0
-multi-file-refactor  │        0 │        0
-write-heavy          │        0 │        0
+scenario             │    32000 │    40000 │    50000 │    60000 │    80000 │   128000 │   200000
+─────────────────────────────────────────────────────────────────────────────────────────────────
+write-heavy          │        4 │        1 │        0 │        0 │        0 │        0 │        0
+multi-file-refactor  │        0 │        2 │        0 │        0 │        0 │        0 │        0
+bug-trace            │        0 │        2 │        0 │        0 │        0 │        0 │        0
+explore              │        1 │        0 │        0 │        0 │        0 │        0 │        0
+single-edit          │        0 │        0 │        0 │        0 │        0 │        0 │        0
 
 ═══ Cross-Scenario Matrix: Blocking Count ═══
 
-scenario             │   128000 │   200000
-──────────────────────────────────────────
-explore              │        0 │        0
-single-edit          │        0 │        0
-bug-trace            │        0 │        0
-multi-file-refactor  │        0 │        0
-write-heavy          │        0 │        0
+scenario             │    32000 │    40000 │    50000 │    60000 │    80000 │   128000 │   200000
+─────────────────────────────────────────────────────────────────────────────────────────────────
+write-heavy          │        0 │        0 │        0 │        0 │        0 │        0 │        0
+multi-file-refactor  │        0 │        0 │        0 │        0 │        0 │        0 │        0
+bug-trace            │        0 │        0 │        0 │        0 │        0 │        0 │        0
+explore              │        0 │        0 │        0 │        0 │        0 │        0 │        0
+single-edit          │        0 │        0 │        0 │        0 │        0 │        0 │        0
 
 ═══ Cross-Scenario Matrix: Completed ═══
 
-scenario             │   128000 │   200000
-──────────────────────────────────────────
-explore              │      yes │      yes
-single-edit          │      yes │      yes
-bug-trace            │      yes │      yes
-multi-file-refactor  │      yes │      yes
-write-heavy          │      yes │      yes
+scenario             │    32000 │    40000 │    50000 │    60000 │    80000 │   128000 │   200000
+─────────────────────────────────────────────────────────────────────────────────────────────────
+write-heavy          │      yes │      yes │      yes │      yes │      yes │      yes │      yes
+multi-file-refactor  │      yes │      yes │      yes │      yes │      yes │      yes │      yes
+bug-trace            │      yes │      yes │      yes │      yes │      yes │      yes │      yes
+explore              │      yes │      yes │      yes │      yes │      yes │      yes │      yes
+single-edit          │      yes │      yes │      yes │      yes │      yes │      yes │      yes
 

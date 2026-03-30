@@ -1,24 +1,23 @@
-[compaction-debug] contextLimit overridden: 202752 → 8000, reserve=2525, keepRecent=2400
-[compaction-metric] {"ts":1774580534541,"event":"usage_probe","turn":1,"promptTokens":7125,"totalTokens":7126}
-[compaction-metric] {"ts":1774580534541,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774580540220,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":66,"tokensAfter":420}
+[compaction-debug] contextLimit overridden: 196608 → 8000, reserve=1200, keepRecent=2400
+[compaction-metric] {"ts":1774855150136,"event":"usage_probe","turn":1,"promptTokens":7906,"totalTokens":7907}
+[compaction-metric] {"ts":1774855150136,"event":"compaction_start","turn":1}
+[compaction-metric] {"ts":1774855156889,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":165,"tokensAfter":843}
 [compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774580540220,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774580540220,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
-[compaction-metric] {"ts":1774580542174,"event":"turn_complete","turn":1,"estimatedTokens":7463,"source":"actual","contextLimit":8000,"actualTokens":7637}
-[compaction-metric] {"ts":1774580542174,"event":"blocking_start","turn":1}
-[compaction-metric] {"ts":1774580542174,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774580542180,"event":"blocking_end","turn":1,"durationMs":6}
-[compaction-metric] {"ts":1774580542675,"event":"usage_probe","turn":1,"promptTokens":7655,"totalTokens":7656}
-[compaction-metric] {"ts":1774580542675,"event":"blocking_start","turn":1}
-[compaction-metric] {"ts":1774580542675,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774580544493,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774580548988,"event":"blocking_end","turn":1,"durationMs":6313}
-[compaction-metric] {"ts":1774580589419,"event":"job_status","turn":1,"id":"background-compaction-1","message":"","state":"clear"}
-[compaction-metric] {"ts":1774580589420,"event":"turn_complete","turn":1,"estimatedTokens":7922,"source":"actual","contextLimit":8000,"actualTokens":9270}
-[compaction-metric] {"ts":1774580589420,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774580601655,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":3341,"tokensAfter":806}
-[compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774580601655,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774580601655,"event":"job_status","turn":1,"id":"background-compaction-2","message":"Background compaction...","state":"running"}
-[headless] Completed in 68.99s
+[compaction-metric] {"ts":1774855156889,"event":"applied","turn":1}
+[compaction-metric] {"ts":1774855156890,"event":"job_status","turn":1,"id":"background-compaction-1","message":"Background compaction...","state":"running"}
+[compaction-metric] {"ts":1774855159545,"event":"turn_complete","turn":1,"estimatedTokens":8557,"source":"actual","contextLimit":8000,"actualTokens":8737}
+[compaction-metric] {"ts":1774855159545,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774855159546,"event":"blocking_end","turn":1,"durationMs":1}
+[compaction] Hard limit still exceeded after retries — some context may be lost due to small context window. Proceeding with truncated context.
+[compaction-metric] {"ts":1774855159546,"event":"still_exceeded","turn":1}
+[compaction-metric] {"ts":1774855159978,"event":"usage_probe","turn":1,"promptTokens":9830,"totalTokens":9831}
+[compaction-metric] {"ts":1774855159978,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774855159978,"event":"blocking_end","turn":1,"durationMs":0}
+[compaction] Hard limit still exceeded after retries — some context may be lost due to small context window. Proceeding with truncated context.
+[compaction-metric] {"ts":1774855159978,"event":"still_exceeded","turn":1}
+[compaction-metric] {"ts":1774855159978,"event":"blocking_start","turn":1}
+[compaction-metric] {"ts":1774855159979,"event":"blocking_end","turn":1,"durationMs":1}
+[compaction] Hard limit still exceeded after retries — some context may be lost due to small context window. Proceeding with truncated context.
+[compaction-metric] {"ts":1774855159979,"event":"still_exceeded","turn":1}
+[compaction-metric] {"ts":1774855167509,"event":"turn_complete","turn":1,"estimatedTokens":9964,"source":"actual","contextLimit":8000,"actualTokens":10476}
+[headless] Completed in 17.66s

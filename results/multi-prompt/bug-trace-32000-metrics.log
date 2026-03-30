@@ -1,72 +1,28 @@
 [compaction-debug] contextLimit overridden: 196608 → 32000, reserve=4800, keepRecent=9600
-[compaction-metric] {"ts":1774619627967,"event":"usage_probe","turn":1,"promptTokens":7109,"totalTokens":7110}
-[compaction-metric] {"ts":1774619633952,"event":"turn_complete","turn":1,"estimatedTokens":7114,"source":"actual","contextLimit":32000,"actualTokens":7290}
-[compaction-metric] {"ts":1774619636033,"event":"usage_probe","turn":1,"promptTokens":16244,"totalTokens":16245}
-[compaction-metric] {"ts":1774619636033,"event":"compaction_start","turn":1}
-[compaction-metric] {"ts":1774619660483,"event":"compaction_complete","turn":1,"success":true,"tokensBefore":4985,"tokensAfter":878}
-[compaction] Applied: context reduced, some older messages were summarized
-[compaction-metric] {"ts":1774619660483,"event":"applied","turn":1}
-[compaction-metric] {"ts":1774619665900,"event":"turn_complete","turn":1,"estimatedTokens":7890,"source":"actual","contextLimit":32000,"actualTokens":8043}
-APICallError [AI_APICallError]: Error occurred while deserializing json body!
-    at friendliaiFailedResponseHandler (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-error.ts:98:14)
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at async postToApi (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@ai-sdk+provider-utils@4.0.15_zod@4.3.6/node_modules/@ai-sdk/provider-utils/src/post-to-api.ts:118:28)
-    at async FriendliAIChatLanguageModel.doStream (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/@friendliai+ai-provider@1.1.7_zod@4.3.6/node_modules/@friendliai/ai-provider/src/friendli-chat-language-model.ts:447:50)
-    at async wrapStream (/Users/minpeter/github.com/minpeter/plugsuits/packages/cea/src/middleware/trim-leading-newlines.ts:38:33)
-    at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1670:27)
-    at async <anonymous> (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/telemetry/record-span.ts:32:24)
-    at async _retryWithExponentialBackoff (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/util/retry-with-exponential-backoff.ts:96:12)
-    at async streamStep (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:1622:17)
-    at async fn (/Users/minpeter/github.com/minpeter/plugsuits/node_modules/.pnpm/ai@6.0.116_zod@4.3.6/node_modules/ai/src/generate-text/stream-text.ts:2135:9) {
-  cause: undefined,
-  url: 'https://api.friendli.ai/serverless/v1/chat/completions',
-  requestBodyValues: {
-    parse_reasoning: true,
-    model: 'MiniMaxAI/MiniMax-M2.5',
-    stream: true,
-    max_tokens: 1,
-    temperature: undefined,
-    top_p: undefined,
-    top_k: undefined,
-    frequency_penalty: undefined,
-    presence_penalty: undefined,
-    response_format: undefined,
-    stop: undefined,
-    seed: undefined,
-    min_p: undefined,
-    repetition_penalty: undefined,
-    xtc_threshold: undefined,
-    xtc_probability: undefined,
-    messages: [
-      [Object], [Object],
-      [Object], [Object],
-      [Object], [Object],
-      [Object]
-    ],
-    tools: [
-      [Object], [Object],
-      [Object], [Object],
-      [Object], [Object],
-      [Object], [Object],
-      [Object], [Object]
-    ],
-    tool_choice: 'auto',
-    parallel_tool_calls: undefined,
-    stream_options: { include_usage: true }
-  },
-  statusCode: 400,
-  responseHeaders: {
-    'access-control-allow-credentials': 'true',
-    connection: 'keep-alive',
-    'content-length': '60',
-    'content-type': 'application/json; charset=utf-8',
-    date: 'Fri, 27 Mar 2026 13:55:27 GMT',
-    vary: 'Origin',
-    'x-content-type-options': 'nosniff'
-  },
-  responseBody: '{"message":"Error occurred while deserializing json body!"}\n',
-  isRetryable: false,
-  data: { message: 'Error occurred while deserializing json body!' },
-  [Symbol(vercel.ai.error)]: true,
-  [Symbol(vercel.ai.error.AI_APICallError)]: true
-}
+[compaction-metric] {"ts":1774858463866,"event":"usage_probe","turn":1,"promptTokens":7882,"totalTokens":7883}
+[compaction-metric] {"ts":1774858465390,"event":"turn_complete","turn":1,"estimatedTokens":7887,"source":"actual","contextLimit":32000,"actualTokens":8088}
+[compaction-metric] {"ts":1774858465583,"event":"usage_probe","turn":1,"promptTokens":8093,"totalTokens":8094}
+[compaction-metric] {"ts":1774858466404,"event":"turn_complete","turn":1,"estimatedTokens":8240,"source":"actual","contextLimit":32000,"actualTokens":8308}
+[compaction-metric] {"ts":1774858466651,"event":"usage_probe","turn":1,"promptTokens":8576,"totalTokens":8577}
+[compaction-metric] {"ts":1774858468097,"event":"turn_complete","turn":1,"estimatedTokens":8749,"source":"actual","contextLimit":32000,"actualTokens":8912}
+[compaction-metric] {"ts":1774858468429,"event":"usage_probe","turn":1,"promptTokens":9423,"totalTokens":9424}
+[compaction-metric] {"ts":1774858469331,"event":"turn_complete","turn":1,"estimatedTokens":9682,"source":"actual","contextLimit":32000,"actualTokens":9786}
+[compaction-metric] {"ts":1774858470026,"event":"usage_probe","turn":1,"promptTokens":10492,"totalTokens":10493}
+[compaction-metric] {"ts":1774858471412,"event":"turn_complete","turn":1,"estimatedTokens":10778,"source":"actual","contextLimit":32000,"actualTokens":10903}
+[compaction-metric] {"ts":1774858471617,"event":"usage_probe","turn":1,"promptTokens":10725,"totalTokens":10726}
+[compaction-metric] {"ts":1774858472467,"event":"turn_complete","turn":1,"estimatedTokens":11068,"source":"actual","contextLimit":32000,"actualTokens":11169}
+[compaction-metric] {"ts":1774858472719,"event":"usage_probe","turn":1,"promptTokens":11271,"totalTokens":11272}
+[compaction-metric] {"ts":1774858473983,"event":"turn_complete","turn":1,"estimatedTokens":11638,"source":"actual","contextLimit":32000,"actualTokens":11774}
+[compaction-metric] {"ts":1774858474184,"event":"usage_probe","turn":1,"promptTokens":11442,"totalTokens":11443}
+[compaction-metric] {"ts":1774858476977,"event":"turn_complete","turn":1,"estimatedTokens":11861,"source":"actual","contextLimit":32000,"actualTokens":12171}
+[compaction-metric] {"ts":1774858477368,"event":"usage_probe","turn":1,"promptTokens":11601,"totalTokens":11602}
+[compaction-metric] {"ts":1774858478467,"event":"turn_complete","turn":1,"estimatedTokens":12252,"source":"actual","contextLimit":32000,"actualTokens":12360}
+[compaction-metric] {"ts":1774858478818,"event":"usage_probe","turn":1,"promptTokens":12314,"totalTokens":12315}
+[compaction-metric] {"ts":1774858479740,"event":"turn_complete","turn":1,"estimatedTokens":13001,"source":"actual","contextLimit":32000,"actualTokens":13104}
+[compaction-metric] {"ts":1774858480075,"event":"usage_probe","turn":1,"promptTokens":13020,"totalTokens":13021}
+[compaction-metric] {"ts":1774858481682,"event":"turn_complete","turn":1,"estimatedTokens":13733,"source":"actual","contextLimit":32000,"actualTokens":13906}
+[compaction-metric] {"ts":1774858482402,"event":"usage_probe","turn":1,"promptTokens":13223,"totalTokens":13224}
+[compaction-metric] {"ts":1774858484196,"event":"turn_complete","turn":1,"estimatedTokens":14038,"source":"actual","contextLimit":32000,"actualTokens":14235}
+[compaction-metric] {"ts":1774858484536,"event":"usage_probe","turn":1,"promptTokens":14233,"totalTokens":14234}
+[compaction-metric] {"ts":1774858531548,"event":"turn_complete","turn":1,"estimatedTokens":15173,"source":"actual","contextLimit":32000,"actualTokens":26194}
+[headless] Completed in 68.27s
