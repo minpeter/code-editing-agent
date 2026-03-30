@@ -1,24 +1,20 @@
 [compaction-debug] contextLimit overridden: 196608 → 128000, reserve=19200, keepRecent=38400
-[compaction-metric] {"ts":1774857761636,"event":"usage_probe","turn":1,"promptTokens":7878,"totalTokens":7879}
-[compaction-metric] {"ts":1774857762736,"event":"turn_complete","turn":1,"estimatedTokens":7883,"source":"actual","contextLimit":128000,"actualTokens":8030}
-[compaction-metric] {"ts":1774857762948,"event":"usage_probe","turn":1,"promptTokens":11569,"totalTokens":11570}
-[compaction-metric] {"ts":1774857763612,"event":"turn_complete","turn":1,"estimatedTokens":11662,"source":"actual","contextLimit":128000,"actualTokens":11739}
-[compaction-metric] {"ts":1774857763917,"event":"usage_probe","turn":1,"promptTokens":11756,"totalTokens":11757}
-[compaction-metric] {"ts":1774857764714,"event":"turn_complete","turn":1,"estimatedTokens":11881,"source":"actual","contextLimit":128000,"actualTokens":11974}
-[compaction-metric] {"ts":1774857765074,"event":"usage_probe","turn":1,"promptTokens":13071,"totalTokens":13072}
-[compaction-metric] {"ts":1774857834741,"event":"turn_complete","turn":1,"estimatedTokens":13234,"source":"actual","contextLimit":128000,"actualTokens":24405}
-[compaction-metric] {"ts":1774857835541,"event":"usage_probe","turn":1,"promptTokens":23553,"totalTokens":23554}
-[compaction-metric] {"ts":1774857836932,"event":"turn_complete","turn":1,"estimatedTokens":24443,"source":"actual","contextLimit":128000,"actualTokens":24527}
-[compaction-metric] {"ts":1774857837397,"event":"usage_probe","turn":1,"promptTokens":23669,"totalTokens":23670}
-[compaction-metric] {"ts":1774857839326,"event":"turn_complete","turn":1,"estimatedTokens":24575,"source":"actual","contextLimit":128000,"actualTokens":24646}
-[compaction-metric] {"ts":1774857839940,"event":"usage_probe","turn":1,"promptTokens":25766,"totalTokens":25767}
-[compaction-metric] {"ts":1774857843545,"event":"turn_complete","turn":1,"estimatedTokens":26691,"source":"actual","contextLimit":128000,"actualTokens":26926}
-[compaction-metric] {"ts":1774857844121,"event":"usage_probe","turn":1,"promptTokens":26015,"totalTokens":26016}
-[compaction-metric] {"ts":1774857846010,"event":"turn_complete","turn":1,"estimatedTokens":27066,"source":"actual","contextLimit":128000,"actualTokens":27161}
-[compaction-metric] {"ts":1774857846588,"event":"usage_probe","turn":1,"promptTokens":26429,"totalTokens":26430}
-[compaction-metric] {"ts":1774857848685,"event":"turn_complete","turn":1,"estimatedTokens":27499,"source":"actual","contextLimit":128000,"actualTokens":27632}
-[compaction-metric] {"ts":1774857849227,"event":"usage_probe","turn":1,"promptTokens":26545,"totalTokens":26546}
-[compaction-metric] {"ts":1774857850963,"event":"turn_complete","turn":1,"estimatedTokens":27666,"source":"actual","contextLimit":128000,"actualTokens":27735}
-[compaction-metric] {"ts":1774857851446,"event":"usage_probe","turn":1,"promptTokens":27096,"totalTokens":27097}
-[compaction-metric] {"ts":1774857856852,"event":"turn_complete","turn":1,"estimatedTokens":28234,"source":"actual","contextLimit":128000,"actualTokens":28879}
-[headless] Completed in 95.50s
+[compaction-metric] {"ts":1774874755786,"event":"usage_probe","turn":1,"promptTokens":7878,"totalTokens":7879}
+[compaction-metric] {"ts":1774874756985,"event":"turn_complete","turn":1,"estimatedTokens":7883,"source":"actual","contextLimit":128000,"actualTokens":8027}
+[compaction-metric] {"ts":1774874757260,"event":"usage_probe","turn":1,"promptTokens":11432,"totalTokens":11433}
+[compaction-metric] {"ts":1774874758856,"event":"turn_complete","turn":1,"estimatedTokens":11542,"source":"actual","contextLimit":128000,"actualTokens":11746}
+[compaction-metric] {"ts":1774874759077,"event":"usage_probe","turn":1,"promptTokens":11602,"totalTokens":11603}
+[compaction-metric] {"ts":1774874759842,"event":"turn_complete","turn":1,"estimatedTokens":11874,"source":"actual","contextLimit":128000,"actualTokens":11952}
+[compaction-metric] {"ts":1774874760086,"event":"usage_probe","turn":1,"promptTokens":11800,"totalTokens":11801}
+[compaction-metric] {"ts":1774874760949,"event":"turn_complete","turn":1,"estimatedTokens":12091,"source":"actual","contextLimit":128000,"actualTokens":12181}
+[compaction-metric] {"ts":1774874761214,"event":"usage_probe","turn":1,"promptTokens":12004,"totalTokens":12005}
+[compaction-metric] {"ts":1774874761978,"event":"turn_complete","turn":1,"estimatedTokens":12317,"source":"actual","contextLimit":128000,"actualTokens":12395}
+[compaction-metric] {"ts":1774874762251,"event":"usage_probe","turn":1,"promptTokens":12196,"totalTokens":12197}
+[compaction-metric] {"ts":1774874809171,"event":"turn_complete","turn":1,"estimatedTokens":12532,"source":"actual","contextLimit":128000,"actualTokens":19971}
+[compaction-metric] {"ts":1774874809782,"event":"usage_probe","turn":1,"promptTokens":19358,"totalTokens":19359}
+[compaction-metric] {"ts":1774874811032,"event":"turn_complete","turn":1,"estimatedTokens":20008,"source":"actual","contextLimit":128000,"actualTokens":20099}
+[compaction-metric] {"ts":1774874811404,"event":"usage_probe","turn":1,"promptTokens":19474,"totalTokens":19475}
+[compaction-metric] {"ts":1774874813161,"event":"turn_complete","turn":1,"estimatedTokens":20147,"source":"actual","contextLimit":128000,"actualTokens":20221}
+[compaction-metric] {"ts":1774874813573,"event":"usage_probe","turn":1,"promptTokens":20025,"totalTokens":20026}
+[compaction-metric] {"ts":1774874817653,"event":"turn_complete","turn":1,"estimatedTokens":20720,"source":"actual","contextLimit":128000,"actualTokens":21222}
+[headless] Completed in 62.23s
