@@ -80,17 +80,17 @@ const LARGE_FILES = [
 const SCENARIOS: Scenario[] = [
   {
     contextLimit: 32_000,
-    maxIterations: 20,
+    maxIterations: 40,
     prompt: buildPrompt(LARGE_FILES.slice(0, 4)),
   },
   {
     contextLimit: 40_000,
-    maxIterations: 20,
+    maxIterations: 40,
     prompt: buildPrompt(LARGE_FILES.slice(0, 7)),
   },
   {
     contextLimit: 80_000,
-    maxIterations: 20,
+    maxIterations: 40,
     prompt: buildPrompt(LARGE_FILES),
   },
 ];
@@ -150,6 +150,8 @@ async function runScenario(scenario: Scenario): Promise<void> {
 
   const env = {
     ...process.env,
+    BENCHMARK_SEED: process.env.BENCHMARK_SEED ?? "7",
+    BENCHMARK_TEMPERATURE: process.env.BENCHMARK_TEMPERATURE ?? "0",
     COMPACTION_DEBUG: "1",
     CONTEXT_LIMIT_OVERRIDE: String(contextLimit),
   };

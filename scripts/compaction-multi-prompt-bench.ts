@@ -23,7 +23,7 @@ const HEADLESS_SCRIPT = resolvePath(
 );
 const RESULTS_DIR = resolvePath(REPO_ROOT, "results", "multi-prompt");
 const SCENARIO_TIMEOUT_MS = 10 * 60 * 1000;
-const MAX_ITERATIONS = 30;
+const MAX_ITERATIONS = 40;
 
 // ─── Prompt Scenarios ───────────────────────────────────────────────
 interface PromptScenario {
@@ -74,6 +74,14 @@ const SCENARIOS: PromptScenario[] = [
   },
 ];
 
+const SCENARIO_PRIORITY: PromptScenario["id"][] = [
+  "write-heavy",
+  "multi-file-refactor",
+  "bug-trace",
+  "explore",
+  "single-edit",
+] as const;
+
 // ─── CLI Args ───────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const isDryRun = args.includes("--dry-run");
@@ -98,8 +106,10 @@ function readFlagValue(flag: string): string | undefined {
   return args[index + 1];
 }
 
-const parallelLimit = Number(readFlagValue("--parallel-limit") ?? "3");
+const requestedParallelLimit = readFlagValue("--parallel-limit");
 const staggerMs = Number(readFlagValue("--stagger-ms") ?? "750");
+const MAX_ATTEMPTS_PER_CELL = 3;
+const RETRY_COOLDOWN_MS = 8000;
 
 const extraArgs: string[] = [];
 for (let i = 0; i < args.length; i++) {
@@ -148,6 +158,7 @@ interface RunResult {
   contextLimit: number;
   durationMs: number;
   exitCode: number | null;
+  failureClass: string;
   maxTokensUsed: number;
   metricsPath: string;
   probeMax: number;
@@ -162,6 +173,19 @@ interface PendingRun {
   scenario: PromptScenario;
 }
 
+function resolveParallelLimit(taskCount: number): number {
+  if (requestedParallelLimit) {
+    return Number(requestedParallelLimit);
+  }
+
+  const minContextLimit = Math.min(...CONTEXT_LIMITS);
+  if (taskCount > 20 || minContextLimit < 64_000) {
+    return 1;
+  }
+
+  return 3;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────
 function tryParseJson<T>(s: string): T | null {
   try {
@@ -169,6 +193,57 @@ function tryParseJson<T>(s: string): T | null {
   } catch {
     return null;
   }
+}
+
+function computeSeed(
+  promptId: string,
+  contextLimit: number,
+  attempt: number
+): string {
+  const baseSeed = Number(process.env.BENCHMARK_SEED ?? "7");
+  const promptHash = [...promptId].reduce(
+    (sum, char) => sum + char.charCodeAt(0),
+    0
+  );
+  return String(baseSeed + promptHash + contextLimit + (attempt - 1));
+}
+
+function classifyOutcome(params: {
+  exitCode: number | null;
+  timedOut: boolean;
+  trajEvents: Record<string, unknown>[];
+}): { completed: boolean; failureClass: string } {
+  const hasError = params.trajEvents.some((event) => event.type === "error");
+  const hasAssistant = params.trajEvents.some(
+    (event) => event.type === "assistant"
+  );
+  const errorEvent = [...params.trajEvents]
+    .reverse()
+    .find((event) => event.type === "error");
+  const errorText = String(errorEvent?.error ?? errorEvent?.content ?? "");
+
+  if (!params.timedOut && params.exitCode === 0 && !hasError && hasAssistant) {
+    return { completed: true, failureClass: "success" };
+  }
+  if (params.timedOut) {
+    return { completed: false, failureClass: "timeout" };
+  }
+  if (errorText.includes("No output generated")) {
+    return { completed: false, failureClass: "no_output" };
+  }
+  if (errorText.includes("Max iterations")) {
+    return { completed: false, failureClass: "max_iterations" };
+  }
+  if (errorText.includes("terminated")) {
+    return { completed: false, failureClass: "terminated" };
+  }
+  if (!hasAssistant) {
+    return { completed: false, failureClass: "no_assistant" };
+  }
+  if (hasError) {
+    return { completed: false, failureClass: "error_event" };
+  }
+  return { completed: false, failureClass: "unknown_incomplete" };
 }
 
 function parseMetrics(content: string): MetricEvent[] {
@@ -201,7 +276,9 @@ async function sleepMs(ms: number): Promise<void> {
 // ─── Spawn ──────────────────────────────────────────────────────────
 async function spawnRun(
   prompt: string,
-  contextLimit: number
+  contextLimit: number,
+  promptId: string,
+  attempt: number
 ): Promise<{
   stdout: string;
   stderr: string;
@@ -224,7 +301,7 @@ async function spawnRun(
 
   const env = {
     ...process.env,
-    BENCHMARK_SEED: process.env.BENCHMARK_SEED ?? "42",
+    BENCHMARK_SEED: computeSeed(promptId, contextLimit, attempt),
     BENCHMARK_TEMPERATURE: process.env.BENCHMARK_TEMPERATURE ?? "0",
     COMPACTION_DEBUG: "1",
     CONTEXT_LIMIT_OVERRIDE: String(contextLimit),
@@ -299,39 +376,78 @@ async function runOne(
     `\n▶ [${scenario.id}] ${contextLimit.toLocaleString()} tokens — ${scenario.label}`
   );
 
-  const result = await spawnRun(scenario.prompt, contextLimit);
-  writeFileSync(trajectoryPath, result.stdout, "utf-8");
-  writeFileSync(metricsPath, result.stderr, "utf-8");
+  let finalResult: Awaited<ReturnType<typeof spawnRun>> | null = null;
+  let finalMetrics: MetricEvent[] = [];
+  let completed = false;
+  let failureClass = "unknown_incomplete";
 
-  const metrics = parseMetrics(`${result.stdout}\n${result.stderr}`);
-  const compactionCount = metrics.filter(
-    (e) => e.event === "compaction_complete" && e.success !== false
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CELL; attempt += 1) {
+    const result = await spawnRun(
+      scenario.prompt,
+      contextLimit,
+      scenario.id,
+      attempt
+    );
+    const trajEvents = result.stdout
+      .split("\n")
+      .filter((line) => line.trim().startsWith("{"))
+      .map((line) => tryParseJson<Record<string, unknown>>(line))
+      .filter(Boolean) as Record<string, unknown>[];
+    const outcome = classifyOutcome({
+      exitCode: result.exitCode,
+      timedOut: result.timedOut,
+      trajEvents,
+    });
+
+    finalResult = result;
+    finalMetrics = parseMetrics(`${result.stdout}\n${result.stderr}`);
+    completed = outcome.completed;
+    failureClass = outcome.failureClass;
+
+    if (completed) {
+      break;
+    }
+
+    if (
+      attempt < MAX_ATTEMPTS_PER_CELL &&
+      ["no_output", "no_assistant", "terminated", "error_event"].includes(
+        failureClass
+      )
+    ) {
+      await sleepMs(RETRY_COOLDOWN_MS);
+      continue;
+    }
+
+    break;
+  }
+
+  if (!finalResult) {
+    throw new Error(`No benchmark result for ${scenario.id}-${contextLimit}`);
+  }
+
+  writeFileSync(trajectoryPath, finalResult.stdout, "utf-8");
+  writeFileSync(metricsPath, finalResult.stderr, "utf-8");
+
+  const compactionCount = finalMetrics.filter(
+    (event) => event.event === "compaction_complete" && event.success !== false
   ).length;
-  const blockingCount = metrics.filter(
-    (e) => e.event === "blocking_start"
+  const blockingCount = finalMetrics.filter(
+    (event) => event.event === "blocking_start"
   ).length;
-  const turnCompletes = metrics.filter((e) => e.event === "turn_complete");
+  const turnCompletes = finalMetrics.filter(
+    (event) => event.event === "turn_complete"
+  );
   const maxTokensUsed = turnCompletes.reduce(
-    (max, e) => Math.max(max, e.actualTokens ?? e.estimatedTokens ?? 0),
+    (max, event) =>
+      Math.max(max, event.actualTokens ?? event.estimatedTokens ?? 0),
     0
   );
-  const probeMax = metrics
-    .filter((e) => e.event === "usage_probe")
-    .reduce((max, e) => Math.max(max, e.promptTokens ?? 0), 0);
-
-  // Check completion
-  const trajEvents = result.stdout
-    .split("\n")
-    .filter((l) => l.trim().startsWith("{"))
-    .map((l) => tryParseJson<Record<string, unknown>>(l))
-    .filter(Boolean) as Record<string, unknown>[];
-  const hasError = trajEvents.some((e) => e.type === "error");
-  const hasAssistant = trajEvents.some((e) => e.type === "assistant");
-  const completed =
-    !result.timedOut && result.exitCode === 0 && !hasError && hasAssistant;
+  const probeMax = finalMetrics
+    .filter((event) => event.event === "usage_probe")
+    .reduce((max, event) => Math.max(max, event.promptTokens ?? 0), 0);
 
   console.log(
-    `  ✓ compactions=${compactionCount}, blocking=${blockingCount}, maxTokens=${maxTokensUsed}, probeMax=${probeMax}, turns=${turnCompletes.length}, completed=${completed ? "yes" : "no"}, ${formatDuration(result.durationMs)}`
+    `  ✓ compactions=${compactionCount}, blocking=${blockingCount}, maxTokens=${maxTokensUsed}, probeMax=${probeMax}, turns=${turnCompletes.length}, completed=${completed ? "yes" : "no"}, failure=${failureClass}, ${formatDuration(finalResult.durationMs)}`
   );
 
   return {
@@ -340,12 +456,13 @@ async function runOne(
     compactionCount,
     blockingCount,
     maxTokensUsed,
+    failureClass,
     probeMax,
     turnCount: turnCompletes.length,
     completed,
-    durationMs: result.durationMs,
-    exitCode: result.exitCode,
-    timedOut: result.timedOut,
+    durationMs: finalResult.durationMs,
+    exitCode: finalResult.exitCode,
+    timedOut: finalResult.timedOut,
     trajectoryPath,
     metricsPath,
   };
@@ -354,6 +471,7 @@ async function runOne(
 async function runParallelWithLimit(tasks: PendingRun[]): Promise<RunResult[]> {
   const results: RunResult[] = new Array(tasks.length);
   let nextIndex = 0;
+  const effectiveParallelLimit = resolveParallelLimit(tasks.length);
 
   async function worker(workerIndex: number): Promise<void> {
     while (nextIndex < tasks.length) {
@@ -382,6 +500,7 @@ async function runParallelWithLimit(tasks: PendingRun[]): Promise<RunResult[]> {
           compactionCount: 0,
           blockingCount: 0,
           maxTokensUsed: 0,
+          failureClass: "spawn_failure",
           probeMax: 0,
           turnCount: 0,
           completed: false,
@@ -395,7 +514,10 @@ async function runParallelWithLimit(tasks: PendingRun[]): Promise<RunResult[]> {
     }
   }
 
-  const workerCount = Math.max(1, Math.min(parallelLimit, tasks.length));
+  const workerCount = Math.max(
+    1,
+    Math.min(effectiveParallelLimit, tasks.length)
+  );
   await Promise.all(
     Array.from({ length: workerCount }, (_, index) => worker(index))
   );
@@ -511,9 +633,18 @@ function buildSummary(
 
 // ─── Main ───────────────────────────────────────────────────────────
 async function main(): Promise<void> {
-  const activeScenarios = scenarioFilter
-    ? SCENARIOS.filter((s) => scenarioFilter!.includes(s.id))
+  const selectedScenarioIds = scenarioFilter ?? [];
+  const baseScenarios = scenarioFilter
+    ? SCENARIOS.filter((s) => selectedScenarioIds.includes(s.id))
     : SCENARIOS;
+  const priorityMap = new Map(
+    SCENARIO_PRIORITY.map((id, index) => [id, index])
+  );
+  const activeScenarios = [...baseScenarios].sort((a, b) => {
+    const left = priorityMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+    const right = priorityMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+    return left - right;
+  });
 
   console.log("\n🧪 Multi-Prompt Compaction Benchmark\n");
   console.log(`Scenarios: ${activeScenarios.map((s) => s.id).join(", ")}`);
@@ -538,11 +669,12 @@ async function main(): Promise<void> {
   let results: RunResult[];
 
   if (isParallel) {
-    console.log(
-      `⚡ Parallel mode: ${activeScenarios.length} scenarios × ${CONTEXT_LIMITS.length} limits (limit=${parallelLimit}, stagger=${staggerMs}ms)\n`
-    );
     const allTasks = activeScenarios.flatMap((scenario) =>
       CONTEXT_LIMITS.map((contextLimit) => ({ scenario, contextLimit }))
+    );
+    const effectiveParallelLimit = resolveParallelLimit(allTasks.length);
+    console.log(
+      `⚡ Parallel mode: ${activeScenarios.length} scenarios × ${CONTEXT_LIMITS.length} limits (limit=${effectiveParallelLimit}, stagger=${staggerMs}ms)\n`
     );
     results = await runParallelWithLimit(allTasks);
   } else {
@@ -560,6 +692,7 @@ async function main(): Promise<void> {
             compactionCount: 0,
             blockingCount: 0,
             maxTokensUsed: 0,
+            failureClass: "spawn_failure",
             probeMax: 0,
             turnCount: 0,
             completed: false,
