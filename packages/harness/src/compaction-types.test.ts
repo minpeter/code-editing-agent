@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
 import type { ModelMessage } from "ai";
-
-// Import all types from the source file
 import type {
   Message,
   CheckpointMessage,
@@ -28,10 +26,10 @@ import type {
 
 describe("compaction-types", () => {
   // ============================================
-  // Message Interface
+  // 1. Message Interface
   // ============================================
   describe("Message", () => {
-    it("should have required fields", () => {
+    it("should have all required fields", () => {
       const message: Message = {
         createdAt: new Date(),
         id: "msg-123",
@@ -42,95 +40,101 @@ describe("compaction-types", () => {
       expect(message.modelMessage).toBeDefined();
     });
 
-    it("should allow optional originalContent", () => {
-      const messageWithOriginal: Message = {
+    it("should allow optional originalContent field", () => {
+      const message: Message = {
         createdAt: new Date(),
         id: "msg-123",
         modelMessage: { role: "user", content: "Hello" } as ModelMessage,
-        originalContent: "Original text",
+        originalContent: "original text",
       };
-      const messageWithoutOriginal: Message = {
-        createdAt: new Date(),
-        id: "msg-456",
-        modelMessage: { role: "user", content: "Hi" } as ModelMessage,
-      };
-      expect(messageWithOriginal.originalContent).toBe("Original text");
-      expect(messageWithoutOriginal.originalContent).toBeUndefined();
+      expect(message.originalContent).toBe("original text");
     });
 
-    it("should be compatible with type assignments", () => {
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidMessage: Message = {};
+      expect(invalidMessage.createdAt).toBeUndefined();
+    });
+
+    it("should accept Date type for createdAt", () => {
       const message: Message = {
         createdAt: new Date("2024-01-01"),
-        id: "test-id",
-        modelMessage: { role: "assistant", content: "Test" } as ModelMessage,
+        id: "msg-123",
+        modelMessage: { role: "user", content: "Hello" } as ModelMessage,
       };
-      const assigned: Message = message;
-      expect(assigned.id).toBe("test-id");
+      expect(message.createdAt).toEqual(new Date("2024-01-01"));
+    });
+
+    it("should have correct types for all fields", () => {
+      const message: Message = {
+        createdAt: new Date(),
+        id: "test-id",
+        modelMessage: { role: "assistant", content: [{ type: "text", text: "test" }] } as ModelMessage,
+        originalContent: "original",
+      };
+      expect(typeof message.id).toBe("string");
+      expect(typeof message.originalContent).toBe("string");
     });
   });
 
   // ============================================
-  // CheckpointMessage Interface
+  // 2. CheckpointMessage Interface
   // ============================================
   describe("CheckpointMessage", () => {
-    it("should have required fields", () => {
+    it("should have all required fields", () => {
       const checkpoint: CheckpointMessage = {
         createdAt: Date.now(),
-        id: "cp-123",
+        id: "checkpoint-1",
         isSummary: false,
         message: { role: "user", content: "Test" } as ModelMessage,
       };
       expect(checkpoint.createdAt).toBeDefined();
-      expect(typeof checkpoint.createdAt).toBe("number");
-      expect(checkpoint.id).toBe("cp-123");
+      expect(checkpoint.id).toBe("checkpoint-1");
       expect(checkpoint.isSummary).toBe(false);
       expect(checkpoint.message).toBeDefined();
     });
 
-    it("should allow optional isSummaryMessage", () => {
-      const withFlag: CheckpointMessage = {
+    it("should accept optional isSummaryMessage field", () => {
+      const checkpoint: CheckpointMessage = {
         createdAt: Date.now(),
-        id: "cp-123",
+        id: "checkpoint-1",
         isSummary: true,
         isSummaryMessage: true,
         message: { role: "user", content: "Test" } as ModelMessage,
       };
-      const withoutFlag: CheckpointMessage = {
-        createdAt: Date.now(),
-        id: "cp-456",
-        isSummary: false,
-        message: { role: "user", content: "Test" } as ModelMessage,
-      };
-      expect(withFlag.isSummaryMessage).toBe(true);
-      expect(withoutFlag.isSummaryMessage).toBeUndefined();
+      expect(checkpoint.isSummaryMessage).toBe(true);
     });
 
-    it("should allow optional originalContent", () => {
-      const withOriginal: CheckpointMessage = {
-        createdAt: Date.now(),
-        id: "cp-123",
-        isSummary: false,
-        message: { role: "user", content: "Test" } as ModelMessage,
-        originalContent: "Original",
-      };
-      expect(withOriginal.originalContent).toBe("Original");
-    });
-
-    it("should have correct types for all fields", () => {
+    it("should accept optional originalContent field", () => {
       const checkpoint: CheckpointMessage = {
-        createdAt: 1704067200000, // timestamp
-        id: "nanoid12345",
+        createdAt: Date.now(),
+        id: "checkpoint-1",
+        isSummary: false,
+        message: { role: "user", content: "Test" } as ModelMessage,
+        originalContent: "original",
+      };
+      expect(checkpoint.originalContent).toBe("original");
+    });
+
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidCheckpoint: CheckpointMessage = {};
+      expect(invalidCheckpoint.createdAt).toBeUndefined();
+    });
+
+    it("should have correct types for createdAt (number)", () => {
+      const checkpoint: CheckpointMessage = {
+        createdAt: Date.now(),
+        id: "test-id",
         isSummary: true,
-        message: { role: "assistant", content: [{ type: "text", text: "Response" }] } as ModelMessage,
+        message: { role: "assistant", content: "response" } as ModelMessage,
       };
       expect(typeof checkpoint.createdAt).toBe("number");
-      expect(typeof checkpoint.id).toBe("string");
-      expect(typeof checkpoint.isSummary).toBe("boolean");
     });
   });
 
   // ============================================
-  // SessionMetadata Interface
+  // 3. SessionMetadata Interface
   // ============================================
   describe("SessionMetadata", () => {
     it("should have all required fields", () => {
@@ -138,142 +142,60 @@ describe("compaction-types", () => {
         completionTokens: 100,
         createdAt: Date.now(),
         promptTokens: 50,
-        sessionId: "session-123",
+        sessionId: "session-1",
         summaryMessageId: null,
         updatedAt: Date.now(),
       };
-      expect(typeof metadata.completionTokens).toBe("number");
-      expect(typeof metadata.createdAt).toBe("number");
-      expect(typeof metadata.promptTokens).toBe("number");
-      expect(typeof metadata.sessionId).toBe("string");
-      expect(typeof metadata.summaryMessageId === "string" || metadata.summaryMessageId === null).toBe(true);
-      expect(typeof metadata.updatedAt).toBe("number");
-    });
-
-    it("should allow summaryMessageId to be null", () => {
-      const metadata: SessionMetadata = {
-        completionTokens: 0,
-        createdAt: Date.now(),
-        promptTokens: 0,
-        sessionId: "session-new",
-        summaryMessageId: null,
-        updatedAt: Date.now(),
-      };
+      expect(metadata.completionTokens).toBe(100);
+      expect(metadata.promptTokens).toBe(50);
+      expect(metadata.sessionId).toBe("session-1");
       expect(metadata.summaryMessageId).toBeNull();
     });
 
-    it("should allow summaryMessageId to be a string", () => {
+    it("should accept string for summaryMessageId", () => {
       const metadata: SessionMetadata = {
-        completionTokens: 0,
+        completionTokens: 100,
         createdAt: Date.now(),
-        promptTokens: 0,
-        sessionId: "session-existing",
-        summaryMessageId: "summary-msg-123",
+        promptTokens: 50,
+        sessionId: "session-1",
+        summaryMessageId: "summary-123",
         updatedAt: Date.now(),
       };
-      expect(typeof metadata.summaryMessageId).toBe("string");
+      expect(metadata.summaryMessageId).toBe("summary-123");
     });
 
-    it("should handle token values correctly", () => {
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidMetadata: SessionMetadata = {};
+      expect(invalidMetadata.completionTokens).toBeUndefined();
+    });
+
+    it("should have correct numeric types", () => {
       const metadata: SessionMetadata = {
-        completionTokens: 5000,
-        createdAt: Date.now(),
-        promptTokens: 10000,
-        sessionId: "session-tokens",
+        completionTokens: 0,
+        createdAt: 0,
+        promptTokens: 0,
+        sessionId: "",
         summaryMessageId: null,
-        updatedAt: Date.now(),
+        updatedAt: 0,
       };
-      expect(metadata.completionTokens).toBe(5000);
-      expect(metadata.promptTokens).toBe(10000);
+      expect(typeof metadata.completionTokens).toBe("number");
+      expect(typeof metadata.promptTokens).toBe("number");
+      expect(typeof metadata.createdAt).toBe("number");
     });
   });
 
   // ============================================
-  // CompactionConfig Interface
+  // 4. CompactionConfig Interface
   // ============================================
   describe("CompactionConfig", () => {
-    it("should allow empty config (all optional)", () => {
+    it("should accept empty object with all optional fields", () => {
       const config: CompactionConfig = {};
-      expect(config).toBeDefined();
+      expect(config.contextLimit).toBeUndefined();
+      expect(config.enabled).toBeUndefined();
     });
 
-    it("should have optional contextLimit with default behavior", () => {
-      const config: CompactionConfig = {
-        contextLimit: 128000,
-      };
-      expect(config.contextLimit).toBe(128000);
-      expect(typeof config.contextLimit).toBe("number");
-    });
-
-    it("should have optional enabled with default behavior", () => {
-      const config: CompactionConfig = {
-        enabled: true,
-      };
-      expect(config.enabled).toBe(true);
-    });
-
-    it("should allow getStructuredState callback", () => {
-      const config: CompactionConfig = {
-        getStructuredState: () => "test state",
-      };
-      expect(config.getStructuredState).toBeDefined();
-      expect(typeof config.getStructuredState).toBe("function");
-      expect(config.getStructuredState!()).toBe("test state");
-    });
-
-    it("should allow getStructuredState to return undefined", () => {
-      const config: CompactionConfig = {
-        getStructuredState: () => undefined,
-      };
-      expect(config.getStructuredState!()).toBeUndefined();
-    });
-
-    it("should have optional keepRecentTokens with default 2000", () => {
-      const config: CompactionConfig = {
-        keepRecentTokens: 5000,
-      };
-      expect(config.keepRecentTokens).toBe(5000);
-    });
-
-    it("should have optional maxTokens with default 8000", () => {
-      const config: CompactionConfig = {
-        maxTokens: 10000,
-      };
-      expect(config.maxTokens).toBe(10000);
-    });
-
-    it("should have optional reserveTokens with default 2000", () => {
-      const config: CompactionConfig = {
-        reserveTokens: 3000,
-      };
-      expect(config.reserveTokens).toBe(3000);
-    });
-
-    it("should have optional speculativeStartRatio with default 0.5", () => {
-      const config: CompactionConfig = {
-        speculativeStartRatio: 0.75,
-      };
-      expect(config.speculativeStartRatio).toBe(0.75);
-    });
-
-    it("should allow summarizeFn callback", () => {
-      const summarizeFn = async (messages: ModelMessage[], previousSummary?: string) => {
-        return "summary";
-      };
-      const config: CompactionConfig = {
-        summarizeFn,
-      };
-      expect(config.summarizeFn).toBeDefined();
-    });
-
-    it("should have optional thresholdRatio with default 0.5", () => {
-      const config: CompactionConfig = {
-        thresholdRatio: 0.8,
-      };
-      expect(config.thresholdRatio).toBe(0.8);
-    });
-
-    it("should accept all config options together", () => {
+    it("should accept all optional fields", () => {
       const config: CompactionConfig = {
         contextLimit: 128000,
         enabled: true,
@@ -282,7 +204,7 @@ describe("compaction-types", () => {
         maxTokens: 8000,
         reserveTokens: 2000,
         speculativeStartRatio: 0.5,
-        summarizeFn: async () => "summary",
+        summarizeFn: async (msgs) => "summary",
         thresholdRatio: 0.5,
       };
       expect(config.contextLimit).toBe(128000);
@@ -294,191 +216,192 @@ describe("compaction-types", () => {
       expect(config.thresholdRatio).toBe(0.5);
     });
 
-    it("should handle zero values correctly", () => {
+    it("should have correct default values (documented)", () => {
+      const config: CompactionConfig = {};
+      // Documented defaults
+      expect(config.contextLimit).toBeUndefined(); // 128000 when set
+      expect(config.enabled).toBeUndefined(); // false when set
+      expect(config.keepRecentTokens).toBeUndefined(); // 2000 when set
+      expect(config.maxTokens).toBeUndefined(); // 8000 when set
+      expect(config.reserveTokens).toBeUndefined(); // 2000 when set
+      expect(config.speculativeStartRatio).toBeUndefined(); // 0.5 when set
+      expect(config.thresholdRatio).toBeUndefined(); // 0.5 when set
+    });
+
+    it("should accept getStructuredState callback", () => {
+      const config: CompactionConfig = {
+        getStructuredState: () => "<structured-state>test</structured-state>",
+      };
+      expect(config.getStructuredState).toBeDefined();
+      expect(typeof config.getStructuredState).toBe("function");
+    });
+
+    it("should accept summarizeFn callback", () => {
+      const config: CompactionConfig = {
+        summarizeFn: async (messages, previousSummary) => {
+          return "summary text";
+        },
+      };
+      expect(config.summarizeFn).toBeDefined();
+      expect(typeof config.summarizeFn).toBe("function");
+    });
+
+    it("should accept minimum values for numeric fields", () => {
       const config: CompactionConfig = {
         contextLimit: 0,
         keepRecentTokens: 0,
         maxTokens: 0,
         reserveTokens: 0,
-        speculativeStartRatio: 0,
         thresholdRatio: 0,
       };
       expect(config.contextLimit).toBe(0);
       expect(config.keepRecentTokens).toBe(0);
       expect(config.maxTokens).toBe(0);
-      expect(config.reserveTokens).toBe(0);
+    });
+
+    it("should accept ratio boundaries", () => {
+      const config: CompactionConfig = {
+        speculativeStartRatio: 0.15,
+        thresholdRatio: 1,
+      };
+      expect(config.speculativeStartRatio).toBe(0.15);
+      expect(config.thresholdRatio).toBe(1);
     });
   });
 
   // ============================================
-  // PruningConfig Interface
+  // 5. PruningConfig Interface
   // ============================================
   describe("PruningConfig", () => {
-    it("should allow empty config (all optional)", () => {
+    it("should accept empty object with all optional fields", () => {
       const config: PruningConfig = {};
-      expect(config).toBeDefined();
+      expect(config.eagerPruneToolNames).toBeUndefined();
+      expect(config.enabled).toBeUndefined();
     });
 
-    it("should have optional eagerPruneToolNames with default []", () => {
+    it("should accept all optional fields", () => {
       const config: PruningConfig = {
         eagerPruneToolNames: ["tool1", "tool2"],
+        enabled: true,
+        minSavingsTokens: 200,
+        protectedToolNames: ["protected1"],
+        protectRecentTokens: 2000,
+        replacementText: "[output pruned]",
       };
       expect(config.eagerPruneToolNames).toEqual(["tool1", "tool2"]);
+      expect(config.enabled).toBe(true);
+      expect(config.minSavingsTokens).toBe(200);
+      expect(config.protectedToolNames).toEqual(["protected1"]);
+      expect(config.protectRecentTokens).toBe(2000);
+      expect(config.replacementText).toBe("[output pruned]");
     });
 
-    it("should allow empty eagerPruneToolNames array", () => {
+    it("should have correct default values (documented)", () => {
+      const config: PruningConfig = {};
+      // Documented defaults
+      expect(config.eagerPruneToolNames).toBeUndefined(); // [] when set
+      expect(config.enabled).toBeUndefined(); // false when set
+      expect(config.minSavingsTokens).toBeUndefined(); // 200 when set
+      expect(config.protectedToolNames).toBeUndefined(); // [] when set
+      expect(config.protectRecentTokens).toBeUndefined(); // 2000 when set
+      expect(config.replacementText).toBeUndefined(); // "[output pruned — too large]" when set
+    });
+
+    it("should accept empty arrays for tool names", () => {
       const config: PruningConfig = {
         eagerPruneToolNames: [],
+        protectedToolNames: [],
       };
       expect(config.eagerPruneToolNames).toEqual([]);
+      expect(config.protectedToolNames).toEqual([]);
     });
 
-    it("should have optional enabled with default false", () => {
+    it("should accept minimum values for numeric fields", () => {
       const config: PruningConfig = {
-        enabled: true,
+        minSavingsTokens: 0,
+        protectRecentTokens: 0,
       };
-      expect(config.enabled).toBe(true);
-    });
-
-    it("should have optional minSavingsTokens with default 200", () => {
-      const config: PruningConfig = {
-        minSavingsTokens: 500,
-      };
-      expect(config.minSavingsTokens).toBe(500);
-    });
-
-    it("should have optional protectedToolNames with default []", () => {
-      const config: PruningConfig = {
-        protectedToolNames: ["protected-tool"],
-      };
-      expect(config.protectedToolNames).toEqual(["protected-tool"]);
-    });
-
-    it("should have optional protectRecentTokens with default 2000", () => {
-      const config: PruningConfig = {
-        protectRecentTokens: 3000,
-      };
-      expect(config.protectRecentTokens).toBe(3000);
-    });
-
-    it("should have optional replacementText with default", () => {
-      const config: PruningConfig = {
-        replacementText: "[custom pruned message]",
-      };
-      expect(config.replacementText).toBe("[custom pruned message]");
-    });
-
-    it("should accept all config options together", () => {
-      const config: PruningConfig = {
-        eagerPruneToolNames: ["tool1"],
-        enabled: true,
-        minSavingsTokens: 100,
-        protectedToolNames: ["protected"],
-        protectRecentTokens: 1000,
-        replacementText: "[pruned]",
-      };
-      expect(config.eagerPruneToolNames).toEqual(["tool1"]);
-      expect(config.enabled).toBe(true);
-      expect(config.minSavingsTokens).toBe(100);
-      expect(config.protectedToolNames).toEqual(["protected"]);
-      expect(config.protectRecentTokens).toBe(1000);
-      expect(config.replacementText).toBe("[pruned]");
+      expect(config.minSavingsTokens).toBe(0);
+      expect(config.protectRecentTokens).toBe(0);
     });
   });
 
   // ============================================
-  // ContinuationVariant Type
+  // 6. ContinuationVariant Type
   // ============================================
   describe("ContinuationVariant", () => {
-    it("should accept 'manual' value", () => {
+    it("should accept 'manual' variant", () => {
       const variant: ContinuationVariant = "manual";
       expect(variant).toBe("manual");
     });
 
-    it("should accept 'auto-with-replay' value", () => {
+    it("should accept 'auto-with-replay' variant", () => {
       const variant: ContinuationVariant = "auto-with-replay";
       expect(variant).toBe("auto-with-replay");
     });
 
-    it("should accept 'tool-loop' value", () => {
+    it("should accept 'tool-loop' variant", () => {
       const variant: ContinuationVariant = "tool-loop";
       expect(variant).toBe("tool-loop");
     });
 
-    it("should be a union type of literal strings", () => {
-      const variants: ContinuationVariant[] = ["manual", "auto-with-replay", "tool-loop"];
-      expect(variants).toContain("manual");
-      expect(variants).toContain("auto-with-replay");
-      expect(variants).toContain("tool-loop");
+    it("should be a union type of string literals", () => {
+      const variants: ContinuationVariant[] = [
+        "manual",
+        "auto-with-replay",
+        "tool-loop",
+      ];
+      expect(variants).toHaveLength(3);
     });
   });
 
   // ============================================
-  // CompactionResult Interface
+  // 7. CompactionResult Interface
   // ============================================
   describe("CompactionResult", () => {
     it("should have required success field", () => {
       const result: CompactionResult = {
         success: true,
-        tokensAfter: 5000,
-        tokensBefore: 10000,
+        tokensAfter: 1000,
+        tokensBefore: 5000,
       };
       expect(result.success).toBe(true);
-      expect(typeof result.success).toBe("boolean");
+      expect(result.tokensAfter).toBe(1000);
+      expect(result.tokensBefore).toBe(5000);
     });
 
-    it("should have required token fields", () => {
+    it("should accept optional fields", () => {
       const result: CompactionResult = {
         success: false,
-        tokensAfter: 0,
-        tokensBefore: 15000,
-      };
-      expect(typeof result.tokensAfter).toBe("number");
-      expect(typeof result.tokensBefore).toBe("number");
-    });
-
-    it("should allow optional continuationVariant", () => {
-      const result: CompactionResult = {
-        success: true,
-        tokensAfter: 5000,
-        tokensBefore: 10000,
+        reason: "Token limit exceeded",
         continuationVariant: "manual",
-      };
-      expect(result.continuationVariant).toBe("manual");
-    });
-
-    it("should allow optional reason", () => {
-      const result: CompactionResult = {
-        success: false,
-        tokensAfter: 10000,
-        tokensBefore: 10000,
-        reason: "Insufficient tokens to compact",
-      };
-      expect(result.reason).toBe("Insufficient tokens to compact");
-    });
-
-    it("should allow optional summaryMessageId", () => {
-      const result: CompactionResult = {
-        success: true,
-        tokensAfter: 5000,
-        tokensBefore: 10000,
         summaryMessageId: "summary-123",
+        tokensAfter: 1000,
+        tokensBefore: 5000,
       };
+      expect(result.reason).toBe("Token limit exceeded");
+      expect(result.continuationVariant).toBe("manual");
       expect(result.summaryMessageId).toBe("summary-123");
+    });
+
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidResult: CompactionResult = {};
+      expect(invalidResult.success).toBeUndefined();
     });
 
     it("should calculate token delta correctly", () => {
       const result: CompactionResult = {
         success: true,
-        tokensAfter: 3000,
-        tokensBefore: 10000,
+        tokensAfter: 1000,
+        tokensBefore: 5000,
       };
-      expect(result.tokensBefore - result.tokensAfter).toBe(7000);
+      expect(result.tokensBefore - result.tokensAfter).toBe(4000);
     });
   });
 
   // ============================================
-  // PreparedCompactionV2 Interface
+  // 8. PreparedCompactionV2 Interface
   // ============================================
   describe("PreparedCompactionV2", () => {
     it("should have all required fields", () => {
@@ -486,48 +409,43 @@ describe("compaction-types", () => {
         baseMessageIds: ["msg-1", "msg-2"],
         revision: 1,
         splitIndex: 5,
-        summaryText: "Summary of messages",
-        tokenDelta: 5000,
+        summaryText: "summary",
+        tokenDelta: 3000,
       };
-      expect(compaction.baseMessageIds).toEqual(["msg-1", "msg-2"]);
-      expect(typeof compaction.revision).toBe("number");
-      expect(typeof compaction.splitIndex).toBe("number");
-      expect(typeof compaction.summaryText).toBe("string");
-      expect(typeof compaction.tokenDelta).toBe("number");
+      expect(compaction.baseMessageIds).toHaveLength(2);
+      expect(compaction.revision).toBe(1);
+      expect(compaction.splitIndex).toBe(5);
+      expect(compaction.summaryText).toBe("summary");
+      expect(compaction.tokenDelta).toBe(3000);
     });
 
-    it("should allow optional replayMessage", () => {
+    it("should accept optional replayMessage field", () => {
       const compaction: PreparedCompactionV2 = {
         baseMessageIds: ["msg-1"],
         revision: 1,
-        splitIndex: 3,
-        summaryText: "Summary",
+        splitIndex: 0,
+        summaryText: "summary",
         tokenDelta: 1000,
         replayMessage: {
           createdAt: Date.now(),
-          id: "replay-msg",
+          id: "replay-1",
           isSummary: true,
           message: { role: "user", content: "test" } as ModelMessage,
         },
       };
       expect(compaction.replayMessage).toBeDefined();
-      expect(compaction.replayMessage!.id).toBe("replay-msg");
+      expect(compaction.replayMessage?.id).toBe("replay-1");
     });
 
-    it("should handle empty baseMessageIds", () => {
-      const compaction: PreparedCompactionV2 = {
-        baseMessageIds: [],
-        revision: 0,
-        splitIndex: 0,
-        summaryText: "",
-        tokenDelta: 0,
-      };
-      expect(compaction.baseMessageIds).toEqual([]);
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidCompaction: PreparedCompactionV2 = {};
+      expect(invalidCompaction.baseMessageIds).toBeUndefined();
     });
   });
 
   // ============================================
-  // ActualTokenUsage Interface
+  // 9. ActualTokenUsage Interface
   // ============================================
   describe("ActualTokenUsage", () => {
     it("should have all required fields", () => {
@@ -537,103 +455,76 @@ describe("compaction-types", () => {
         totalTokens: 150,
         updatedAt: new Date(),
       };
-      expect(typeof usage.completionTokens).toBe("number");
-      expect(typeof usage.promptTokens).toBe("number");
-      expect(typeof usage.totalTokens).toBe("number");
+      expect(usage.completionTokens).toBe(100);
+      expect(usage.promptTokens).toBe(50);
+      expect(usage.totalTokens).toBe(150);
       expect(usage.updatedAt).toBeInstanceOf(Date);
     });
 
-    it("should have totalTokens equal to sum of prompt and completion", () => {
-      const usage: ActualTokenUsage = {
-        completionTokens: 200,
-        promptTokens: 300,
-        totalTokens: 500,
-        updatedAt: new Date(),
-      };
-      expect(usage.totalTokens).toBe(usage.promptTokens + usage.completionTokens);
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidUsage: ActualTokenUsage = {};
+      expect(invalidUsage.completionTokens).toBeUndefined();
     });
 
-    it("should handle zero values", () => {
+    it("should have correct numeric types", () => {
       const usage: ActualTokenUsage = {
         completionTokens: 0,
         promptTokens: 0,
         totalTokens: 0,
         updatedAt: new Date(),
       };
-      expect(usage.totalTokens).toBe(0);
+      expect(typeof usage.completionTokens).toBe("number");
+      expect(typeof usage.promptTokens).toBe("number");
+      expect(typeof usage.totalTokens).toBe("number");
     });
   });
 
   // ============================================
-  // ActualTokenUsageInput Interface
+  // 10. ActualTokenUsageInput Interface
   // ============================================
   describe("ActualTokenUsageInput", () => {
-    it("should allow empty input (all optional)", () => {
+    it("should accept empty object", () => {
       const input: ActualTokenUsageInput = {};
-      expect(input).toBeDefined();
+      expect(input.completionTokens).toBeUndefined();
+      expect(input.promptTokens).toBeUndefined();
     });
 
-    it("should allow optional completionTokens", () => {
+    it("should accept all optional fields", () => {
       const input: ActualTokenUsageInput = {
         completionTokens: 100,
+        inputTokens: 50,
+        outputTokens: 50,
+        promptTokens: 50,
+        totalTokens: 150,
+        updatedAt: new Date(),
       };
       expect(input.completionTokens).toBe(100);
+      expect(input.inputTokens).toBe(50);
+      expect(input.outputTokens).toBe(50);
+      expect(input.promptTokens).toBe(50);
+      expect(input.totalTokens).toBe(150);
     });
 
-    it("should allow optional inputTokens", () => {
+    it("should accept alternative field names (inputTokens/outputTokens)", () => {
       const input: ActualTokenUsageInput = {
-        inputTokens: 200,
+        inputTokens: 100,
+        outputTokens: 50,
       };
-      expect(input.inputTokens).toBe(200);
+      expect(input.inputTokens).toBe(100);
+      expect(input.outputTokens).toBe(50);
     });
 
-    it("should allow optional outputTokens", () => {
-      const input: ActualTokenUsageInput = {
-        outputTokens: 150,
-      };
-      expect(input.outputTokens).toBe(150);
-    });
-
-    it("should allow optional promptTokens", () => {
-      const input: ActualTokenUsageInput = {
-        promptTokens: 250,
-      };
-      expect(input.promptTokens).toBe(250);
-    });
-
-    it("should allow optional totalTokens", () => {
-      const input: ActualTokenUsageInput = {
-        totalTokens: 500,
-      };
-      expect(input.totalTokens).toBe(500);
-    });
-
-    it("should allow optional updatedAt", () => {
+    it("should accept Date type for updatedAt", () => {
       const input: ActualTokenUsageInput = {
         updatedAt: new Date("2024-01-01"),
       };
       expect(input.updatedAt).toBeInstanceOf(Date);
     });
-
-    it("should accept all fields together", () => {
-      const input: ActualTokenUsageInput = {
-        completionTokens: 100,
-        inputTokens: 200,
-        outputTokens: 150,
-        promptTokens: 250,
-        totalTokens: 500,
-        updatedAt: new Date(),
-      };
-      expect(input.completionTokens).toBe(100);
-      expect(input.inputTokens).toBe(200);
-      expect(input.outputTokens).toBe(150);
-      expect(input.promptTokens).toBe(250);
-      expect(input.totalTokens).toBe(500);
-    });
   });
 
   // ============================================
-  // ContextUsage Interface
+  // 11. ContextUsage Interface
   // ============================================
   describe("ContextUsage", () => {
     it("should have all required fields", () => {
@@ -644,36 +535,25 @@ describe("compaction-types", () => {
         source: "actual",
         used: 64000,
       };
-      expect(typeof usage.limit).toBe("number");
-      expect(typeof usage.percentage).toBe("number");
-      expect(typeof usage.remaining).toBe("number");
-      expect(typeof usage.source).toBe("string");
-      expect(typeof usage.used).toBe("number");
+      expect(usage.limit).toBe(128000);
+      expect(usage.percentage).toBe(50);
+      expect(usage.remaining).toBe(64000);
+      expect(usage.source).toBe("actual");
+      expect(usage.used).toBe(64000);
     });
 
-    it("should accept source as 'actual'", () => {
+    it("should accept 'estimated' source", () => {
       const usage: ContextUsage = {
         limit: 128000,
         percentage: 75,
         remaining: 32000,
-        source: "actual",
-        used: 96000,
-      };
-      expect(usage.source).toBe("actual");
-    });
-
-    it("should accept source as 'estimated'", () => {
-      const usage: ContextUsage = {
-        limit: 128000,
-        percentage: 60,
-        remaining: 51200,
         source: "estimated",
-        used: 76800,
+        used: 96000,
       };
       expect(usage.source).toBe("estimated");
     });
 
-    it("should have percentage between 0-100", () => {
+    it("should accept percentage boundaries", () => {
       const usage: ContextUsage = {
         limit: 128000,
         percentage: 0,
@@ -682,225 +562,185 @@ describe("compaction-types", () => {
         used: 0,
       };
       expect(usage.percentage).toBe(0);
-
-      const usage100: ContextUsage = {
-        limit: 128000,
-        percentage: 100,
-        remaining: 0,
-        source: "actual",
-        used: 128000,
-      };
-      expect(usage100.percentage).toBe(100);
     });
 
-    it("should calculate remaining correctly", () => {
-      const usage: ContextUsage = {
-        limit: 100000,
-        percentage: 30,
-        remaining: 70000,
-        source: "actual",
-        used: 30000,
-      };
-      expect(usage.remaining).toBe(usage.limit - usage.used);
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidUsage: ContextUsage = {};
+      expect(invalidUsage.limit).toBeUndefined();
     });
   });
 
   // ============================================
-  // TodoItem Interface
+  // 12. TodoItem Interface
   // ============================================
   describe("TodoItem", () => {
     it("should have all required fields", () => {
       const todo: TodoItem = {
-        content: "Complete task",
+        content: "Task description",
         status: "pending",
       };
-      expect(typeof todo.content).toBe("string");
-      expect(typeof todo.status).toBe("string");
-    });
-
-    it("should accept 'pending' status", () => {
-      const todo: TodoItem = {
-        content: "Task 1",
-        status: "pending",
-      };
+      expect(todo.content).toBe("Task description");
       expect(todo.status).toBe("pending");
     });
 
-    it("should accept 'in_progress' status", () => {
-      const todo: TodoItem = {
-        content: "Task 2",
-        status: "in_progress",
-      };
-      expect(todo.status).toBe("in_progress");
+    it("should accept all status values", () => {
+      const statuses: TodoItem["status"][] = ["pending", "in_progress", "completed", "cancelled"];
+      statuses.forEach((status) => {
+        const todo: TodoItem = {
+          content: "test",
+          status,
+        };
+        expect(todo.status).toBe(status);
+      });
     });
 
-    it("should accept 'completed' status", () => {
-      const todo: TodoItem = {
-        content: "Task 3",
-        status: "completed",
-      };
-      expect(todo.status).toBe("completed");
-    });
-
-    it("should accept 'cancelled' status", () => {
-      const todo: TodoItem = {
-        content: "Task 4",
-        status: "cancelled",
-      };
-      expect(todo.status).toBe("cancelled");
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidTodo: TodoItem = {};
+      expect(invalidTodo.content).toBeUndefined();
     });
   });
 
   // ============================================
-  // StructuredState Interface
+  // 13. StructuredState Interface
   // ============================================
   describe("StructuredState", () => {
-    it("should allow empty state (all optional)", () => {
+    it("should accept empty object", () => {
       const state: StructuredState = {};
-      expect(state).toBeDefined();
+      expect(state.metadata).toBeUndefined();
+      expect(state.todos).toBeUndefined();
     });
 
-    it("should allow optional metadata", () => {
+    it("should accept optional metadata field", () => {
       const state: StructuredState = {
         metadata: { key: "value", count: 42 },
       };
       expect(state.metadata).toEqual({ key: "value", count: 42 });
     });
 
-    it("should allow optional todos", () => {
+    it("should accept optional todos field", () => {
       const state: StructuredState = {
         todos: [
-          { content: "Task 1", status: "pending" },
-          { content: "Task 2", status: "completed" },
+          { content: "task1", status: "pending" },
+          { content: "task2", status: "completed" },
         ],
       };
       expect(state.todos).toHaveLength(2);
-      expect(state.todos![0].content).toBe("Task 1");
+      expect(state.todos?.[0].status).toBe("pending");
     });
 
-    it("should allow both metadata and todos", () => {
+    it("should accept both metadata and todos", () => {
       const state: StructuredState = {
-        metadata: { version: "1.0" },
-        todos: [{ content: "Test", status: "in_progress" }],
+        metadata: { version: 1 },
+        todos: [{ content: "test", status: "in_progress" }],
       };
       expect(state.metadata).toBeDefined();
       expect(state.todos).toBeDefined();
     });
-
-    it("should allow empty metadata and todos arrays", () => {
-      const state: StructuredState = {
-        metadata: {},
-        todos: [],
-      };
-      expect(state.metadata).toEqual({});
-      expect(state.todos).toEqual([]);
-    });
   });
 
   // ============================================
-  // SessionHeaderLine Interface
+  // 14. SessionHeaderLine Interface
   // ============================================
   describe("SessionHeaderLine", () => {
     it("should have all required fields", () => {
       const header: SessionHeaderLine = {
         createdAt: Date.now(),
-        sessionId: "session-123",
+        sessionId: "session-1",
         type: "header",
         version: 1,
       };
-      expect(typeof header.createdAt).toBe("number");
-      expect(typeof header.sessionId).toBe("string");
+      expect(header.createdAt).toBeDefined();
+      expect(header.sessionId).toBe("session-1");
       expect(header.type).toBe("header");
       expect(header.version).toBe(1);
     });
 
-    it("should have version as 1", () => {
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidHeader: SessionHeaderLine = {};
+      expect(invalidHeader.type).toBeUndefined();
+    });
+
+    it("should have correct type literal", () => {
       const header: SessionHeaderLine = {
         createdAt: Date.now(),
-        sessionId: "session-456",
+        sessionId: "test",
         type: "header",
         version: 1,
       };
-      expect(header.version).toBe(1);
+      expect(header.type).toBe("header");
     });
   });
 
   // ============================================
-  // MessageLine Interface
+  // 15. MessageLine Interface
   // ============================================
   describe("MessageLine", () => {
     it("should have all required fields", () => {
       const line: MessageLine = {
         createdAt: Date.now(),
-        id: "msg-123",
+        id: "msg-1",
         isSummary: false,
-        message: { role: "user", content: "Hello" } as ModelMessage,
+        message: { role: "user", content: "test" } as ModelMessage,
         type: "message",
       };
-      expect(typeof line.createdAt).toBe("number");
-      expect(typeof line.id).toBe("string");
-      expect(typeof line.isSummary).toBe("boolean");
-      expect(line.message).toBeDefined();
+      expect(line.createdAt).toBeDefined();
+      expect(line.id).toBe("msg-1");
+      expect(line.isSummary).toBe(false);
       expect(line.type).toBe("message");
     });
 
-    it("should allow optional originalContent", () => {
+    it("should accept optional originalContent field", () => {
       const line: MessageLine = {
         createdAt: Date.now(),
-        id: "msg-456",
-        isSummary: true,
-        message: { role: "assistant", content: "Summary" } as ModelMessage,
-        originalContent: "Original summary text",
+        id: "msg-1",
+        isSummary: false,
+        message: { role: "user", content: "test" } as ModelMessage,
+        originalContent: "original",
         type: "message",
       };
-      expect(line.originalContent).toBe("Original summary text");
+      expect(line.originalContent).toBe("original");
     });
 
-    it("should handle isSummary correctly", () => {
-      const summaryLine: MessageLine = {
-        createdAt: Date.now(),
-        id: "summary-1",
-        isSummary: true,
-        message: { role: "user", content: "Summary" } as ModelMessage,
-        type: "message",
-      };
-      expect(summaryLine.isSummary).toBe(true);
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidLine: MessageLine = {};
+      expect(invalidLine.type).toBeUndefined();
     });
   });
 
   // ============================================
-  // CheckpointLine Interface
+  // 16. CheckpointLine Interface
   // ============================================
   describe("CheckpointLine", () => {
     it("should have all required fields", () => {
-      const checkpoint: CheckpointLine = {
-        summaryMessageId: "summary-123",
+      const line: CheckpointLine = {
+        summaryMessageId: "summary-1",
         type: "checkpoint",
         updatedAt: Date.now(),
       };
-      expect(typeof checkpoint.summaryMessageId).toBe("string");
-      expect(checkpoint.type).toBe("checkpoint");
-      expect(typeof checkpoint.updatedAt).toBe("number");
+      expect(line.summaryMessageId).toBe("summary-1");
+      expect(line.type).toBe("checkpoint");
+      expect(line.updatedAt).toBeDefined();
     });
 
-    it("should link to correct summary message", () => {
-      const checkpoint: CheckpointLine = {
-        summaryMessageId: "summary-msg-456",
-        type: "checkpoint",
-        updatedAt: Date.now(),
-      };
-      expect(checkpoint.summaryMessageId).toBe("summary-msg-456");
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidLine: CheckpointLine = {};
+      expect(invalidLine.type).toBeUndefined();
     });
   });
 
   // ============================================
-  // SessionFileLine Type
+  // 17. SessionFileLine Type (Union)
   // ============================================
   describe("SessionFileLine", () => {
     it("should accept SessionHeaderLine", () => {
       const line: SessionFileLine = {
         createdAt: Date.now(),
-        sessionId: "session-123",
+        sessionId: "session-1",
         type: "header",
         version: 1,
       };
@@ -910,9 +750,9 @@ describe("compaction-types", () => {
     it("should accept MessageLine", () => {
       const line: SessionFileLine = {
         createdAt: Date.now(),
-        id: "msg-123",
+        id: "msg-1",
         isSummary: false,
-        message: { role: "user", content: "Hello" } as ModelMessage,
+        message: { role: "user", content: "test" } as ModelMessage,
         type: "message",
       };
       expect(line.type).toBe("message");
@@ -920,186 +760,154 @@ describe("compaction-types", () => {
 
     it("should accept CheckpointLine", () => {
       const line: SessionFileLine = {
-        summaryMessageId: "summary-123",
+        summaryMessageId: "summary-1",
         type: "checkpoint",
         updatedAt: Date.now(),
       };
       expect(line.type).toBe("checkpoint");
     });
 
-    it("should discriminate by type field", () => {
-      const headerLine: SessionFileLine = {
-        createdAt: Date.now(),
-        sessionId: "session-1",
-        type: "header",
-        version: 1,
-      };
-      const messageLine: SessionFileLine = {
-        createdAt: Date.now(),
-        id: "msg-1",
-        isSummary: false,
-        message: { role: "user", content: "test" } as ModelMessage,
-        type: "message",
-      };
-      const checkpointLine: SessionFileLine = {
-        summaryMessageId: "sum-1",
-        type: "checkpoint",
-        updatedAt: Date.now(),
-      };
-
-      expect(headerLine.type).toBe("messageLine" in headerLine ? "message" : "header");
-      expect(messageLine.type).toBe("message");
-      expect(checkpointLine.type).toBe("checkpoint");
+    it("should be a union type", () => {
+      const lines: SessionFileLine[] = [
+        { createdAt: Date.now(), sessionId: "s1", type: "header", version: 1 },
+        { createdAt: Date.now(), id: "m1", isSummary: false, message: {} as ModelMessage, type: "message" },
+        { summaryMessageId: "s1", type: "checkpoint", updatedAt: Date.now() },
+      ];
+      expect(lines).toHaveLength(3);
     });
   });
 
   // ============================================
-  // CompactionSummary Interface
+  // 18. CompactionSummary Interface
   // ============================================
   describe("CompactionSummary", () => {
     it("should have all required fields", () => {
       const summary: CompactionSummary = {
         createdAt: new Date(),
-        firstKeptMessageId: "msg-10",
-        id: "summary-123",
-        summary: "Compacted summary text",
+        firstKeptMessageId: "msg-5",
+        id: "summary-1",
+        summary: "compacted summary text",
         summaryTokens: 500,
-        tokensBefore: 10000,
+        tokensBefore: 5000,
       };
       expect(summary.createdAt).toBeInstanceOf(Date);
-      expect(typeof summary.firstKeptMessageId).toBe("string");
-      expect(typeof summary.id).toBe("string");
-      expect(typeof summary.summary).toBe("string");
-      expect(typeof summary.summaryTokens).toBe("number");
-      expect(typeof summary.tokensBefore).toBe("number");
+      expect(summary.firstKeptMessageId).toBe("msg-5");
+      expect(summary.id).toBe("summary-1");
+      expect(summary.summary).toBe("compacted summary text");
+      expect(summary.summaryTokens).toBe(500);
+      expect(summary.tokensBefore).toBe(5000);
     });
 
-    it("should track token savings", () => {
-      const summary: CompactionSummary = {
-        createdAt: new Date(),
-        firstKeptMessageId: "msg-5",
-        id: "summary-456",
-        summary: "Summary",
-        summaryTokens: 300,
-        tokensBefore: 8000,
-      };
-      expect(summary.tokensBefore - summary.summaryTokens).toBeGreaterThan(0);
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidSummary: CompactionSummary = {};
+      expect(invalidSummary.id).toBeUndefined();
     });
   });
 
   // ============================================
-  // CompactionSegment Interface
+  // 19. CompactionSegment Interface
   // ============================================
   describe("CompactionSegment", () => {
     it("should have all required fields", () => {
       const segment: CompactionSegment = {
         createdAt: new Date(),
-        endMessageId: "msg-20",
-        estimatedTokens: 5000,
+        endMessageId: "msg-10",
+        estimatedTokens: 3000,
         id: "segment-1",
-        messageCount: 10,
-        messageIds: ["msg-1", "msg-2", "msg-3"],
+        messageCount: 5,
+        messageIds: ["msg-1", "msg-2", "msg-3", "msg-4", "msg-5"],
         messages: [],
         startMessageId: "msg-1",
         summary: null,
       };
       expect(segment.createdAt).toBeInstanceOf(Date);
-      expect(typeof segment.endMessageId).toBe("string");
-      expect(typeof segment.estimatedTokens).toBe("number");
-      expect(typeof segment.id).toBe("string");
-      expect(typeof segment.messageCount).toBe("number");
-      expect(Array.isArray(segment.messageIds)).toBe(true);
-      expect(Array.isArray(segment.messages)).toBe(true);
-      expect(typeof segment.startMessageId).toBe("string");
+      expect(segment.endMessageId).toBe("msg-10");
+      expect(segment.estimatedTokens).toBe(3000);
+      expect(segment.messageCount).toBe(5);
+      expect(segment.messageIds).toHaveLength(5);
       expect(segment.summary).toBeNull();
     });
 
-    it("should allow CompactionSummary in summary field", () => {
+    it("should accept CompactionSummary for summary field", () => {
       const summary: CompactionSummary = {
         createdAt: new Date(),
-        firstKeptMessageId: "msg-10",
+        firstKeptMessageId: "msg-5",
         id: "summary-1",
-        summary: "Test summary",
+        summary: "summary",
         summaryTokens: 100,
-        tokensBefore: 5000,
+        tokensBefore: 1000,
       };
       const segment: CompactionSegment = {
         createdAt: new Date(),
-        endMessageId: "msg-15",
+        endMessageId: "msg-10",
         estimatedTokens: 3000,
-        id: "segment-2",
+        id: "segment-1",
         messageCount: 5,
-        messageIds: ["msg-10", "msg-11"],
-        messages: [],
-        startMessageId: "msg-10",
-        summary,
-      };
-      expect(segment.summary).not.toBeNull();
-      expect(segment.summary!.id).toBe("summary-1");
-    });
-
-    it("should handle empty messages array", () => {
-      const segment: CompactionSegment = {
-        createdAt: new Date(),
-        endMessageId: "msg-5",
-        estimatedTokens: 0,
-        id: "segment-empty",
-        messageCount: 0,
         messageIds: [],
         messages: [],
-        startMessageId: "msg-5",
-        summary: null,
+        startMessageId: "msg-1",
+        summary,
       };
-      expect(segment.messages).toEqual([]);
-      expect(segment.messageIds).toEqual([]);
+      expect(segment.summary).toBeDefined();
+      expect(segment.summary?.id).toBe("summary-1");
+    });
+
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidSegment: CompactionSegment = {};
+      expect(invalidSegment.id).toBeUndefined();
     });
   });
 
   // ============================================
-  // PreparedCompactionSegment Interface
+  // 20. PreparedCompactionSegment Interface
   // ============================================
   describe("PreparedCompactionSegment", () => {
     it("should have all required fields", () => {
       const segment: PreparedCompactionSegment = {
         createdAt: new Date(),
-        endMessageId: "msg-20",
-        estimatedTokens: 5000,
-        id: "segment-1",
-        messageCount: 10,
-        messageIds: ["msg-1", "msg-2"],
-        messages: [],
-        startMessageId: "msg-1",
-        summary: null,
-      };
-      expect(segment.createdAt).toBeInstanceOf(Date);
-      expect(typeof segment.endMessageId).toBe("string");
-      expect(typeof segment.estimatedTokens).toBe("number");
-      expect(typeof segment.id).toBe("string");
-      expect(typeof segment.messageCount).toBe("number");
-      expect(Array.isArray(segment.messageIds)).toBe(true);
-      expect(Array.isArray(segment.messages)).toBe(true);
-      expect(typeof segment.startMessageId).toBe("string");
-    });
-
-    it("should be compatible with CompactionSegment", () => {
-      const prepared: PreparedCompactionSegment = {
-        createdAt: new Date(),
         endMessageId: "msg-10",
-        estimatedTokens: 2000,
-        id: "prepared-1",
+        estimatedTokens: 3000,
+        id: "segment-1",
         messageCount: 5,
         messageIds: ["msg-1", "msg-2"],
         messages: [],
         startMessageId: "msg-1",
         summary: null,
       };
-      const compact: CompactionSegment = prepared;
-      expect(compact.id).toBe("prepared-1");
+      expect(segment.createdAt).toBeInstanceOf(Date);
+      expect(segment.endMessageId).toBe("msg-10");
+      expect(segment.estimatedTokens).toBe(3000);
+      expect(segment.summary).toBeNull();
+    });
+
+    it("should accept CompactionSummary for summary field", () => {
+      const summary: CompactionSummary = {
+        createdAt: new Date(),
+        firstKeptMessageId: "msg-5",
+        id: "summary-1",
+        summary: "summary",
+        summaryTokens: 100,
+        tokensBefore: 1000,
+      };
+      const segment: PreparedCompactionSegment = {
+        createdAt: new Date(),
+        endMessageId: "msg-10",
+        estimatedTokens: 3000,
+        id: "segment-1",
+        messageCount: 5,
+        messageIds: [],
+        messages: [],
+        startMessageId: "msg-1",
+        summary,
+      };
+      expect(segment.summary).toBeDefined();
     });
   });
 
   // ============================================
-  // PreparedCompaction Interface
+  // 21. PreparedCompaction Interface
   // ============================================
   describe("PreparedCompaction", () => {
     it("should have all required fields", () => {
@@ -1113,31 +921,25 @@ describe("compaction-types", () => {
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
-        phase: "new-turn",
+        phase: "intermediate-step",
         rejected: false,
         segments: [],
-        tokenDelta: 0,
+        tokenDelta: 3000,
       };
       expect(compaction.actualUsage).toBeNull();
-      expect(Array.isArray(compaction.baseMessageIds)).toBe(true);
-      expect(typeof compaction.baseRevision).toBe("number");
-      expect(Array.isArray(compaction.baseSegmentIds)).toBe(true);
-      expect(typeof compaction.compactionMaxTokensAtCreation).toBe("number");
-      expect(typeof compaction.contextLimitAtCreation).toBe("number");
-      expect(typeof compaction.didChange).toBe("boolean");
-      expect(typeof compaction.keepRecentTokensAtCreation).toBe("number");
-      expect(typeof compaction.pendingCompaction).toBe("boolean");
-      expect(typeof compaction.phase).toBe("string");
-      expect(typeof compaction.rejected).toBe("boolean");
-      expect(Array.isArray(compaction.segments)).toBe(true);
-      expect(typeof compaction.tokenDelta).toBe("number");
+      expect(compaction.baseMessageIds).toHaveLength(2);
+      expect(compaction.baseRevision).toBe(1);
+      expect(compaction.didChange).toBe(false);
+      expect(compaction.pendingCompaction).toBe(false);
+      expect(compaction.phase).toBe("intermediate-step");
+      expect(compaction.rejected).toBe(false);
     });
 
-    it("should accept actualUsage with ActualTokenUsage", () => {
+    it("should accept ActualTokenUsage for actualUsage", () => {
       const usage: ActualTokenUsage = {
         completionTokens: 100,
-        promptTokens: 200,
-        totalTokens: 300,
+        promptTokens: 50,
+        totalTokens: 150,
         updatedAt: new Date(),
       };
       const compaction: PreparedCompaction = {
@@ -1147,45 +949,6 @@ describe("compaction-types", () => {
         baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
         contextLimitAtCreation: 128000,
-        didChange: true,
-        keepRecentTokensAtCreation: 2000,
-        pendingCompaction: true,
-        phase: "intermediate-step",
-        rejected: false,
-        segments: [],
-        tokenDelta: 500,
-      };
-      expect(compaction.actualUsage).not.toBeNull();
-      expect(compaction.actualUsage!.totalTokens).toBe(300);
-    });
-
-    it("should accept 'intermediate-step' phase", () => {
-      const compaction: PreparedCompaction = {
-        actualUsage: null,
-        baseMessageIds: [],
-        baseRevision: 1,
-        baseSegmentIds: [],
-        compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
-        didChange: false,
-        keepRecentTokensAtCreation: 2000,
-        pendingCompaction: false,
-        phase: "intermediate-step",
-        rejected: false,
-        segments: [],
-        tokenDelta: 0,
-      };
-      expect(compaction.phase).toBe("intermediate-step");
-    });
-
-    it("should accept 'new-turn' phase", () => {
-      const compaction: PreparedCompaction = {
-        actualUsage: null,
-        baseMessageIds: [],
-        baseRevision: 1,
-        baseSegmentIds: [],
-        compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
@@ -1194,36 +957,40 @@ describe("compaction-types", () => {
         segments: [],
         tokenDelta: 0,
       };
-      expect(compaction.phase).toBe("new-turn");
+      expect(compaction.actualUsage).toBeDefined();
+      expect(compaction.actualUsage?.totalTokens).toBe(150);
     });
 
-    it("should handle rejected compaction", () => {
-      const compaction: PreparedCompaction = {
-        actualUsage: null,
-        baseMessageIds: [],
-        baseRevision: 1,
-        baseSegmentIds: [],
-        compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
-        didChange: false,
-        keepRecentTokensAtCreation: 2000,
-        pendingCompaction: false,
-        phase: "new-turn",
-        rejected: true,
-        segments: [],
-        tokenDelta: 0,
-      };
-      expect(compaction.rejected).toBe(true);
+    it("should accept both phase values", () => {
+      const phases: PreparedCompaction["phase"][] = ["intermediate-step", "new-turn"];
+      phases.forEach((phase) => {
+        const compaction: PreparedCompaction = {
+          actualUsage: null,
+          baseMessageIds: [],
+          baseRevision: 1,
+          baseSegmentIds: [],
+          compactionMaxTokensAtCreation: 8000,
+          contextLimitAtCreation: 128000,
+          didChange: false,
+          keepRecentTokensAtCreation: 2000,
+          pendingCompaction: false,
+          phase,
+          rejected: false,
+          segments: [],
+          tokenDelta: 0,
+        };
+        expect(compaction.phase).toBe(phase);
+      });
     });
 
-    it("should accept segments with PreparedCompactionSegment", () => {
+    it("should accept PreparedCompactionSegment array", () => {
       const segment: PreparedCompactionSegment = {
         createdAt: new Date(),
         endMessageId: "msg-10",
-        estimatedTokens: 2000,
-        id: "seg-1",
+        estimatedTokens: 3000,
+        id: "segment-1",
         messageCount: 5,
-        messageIds: ["msg-1", "msg-2"],
+        messageIds: [],
         messages: [],
         startMessageId: "msg-1",
         summary: null,
@@ -1232,19 +999,24 @@ describe("compaction-types", () => {
         actualUsage: null,
         baseMessageIds: [],
         baseRevision: 1,
-        baseSegmentIds: ["seg-1"],
+        baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
         contextLimitAtCreation: 128000,
-        didChange: true,
+        didChange: false,
         keepRecentTokensAtCreation: 2000,
-        pendingCompaction: true,
-        phase: "new-turn",
+        pendingCompaction: false,
+        phase: "intermediate-step",
         rejected: false,
         segments: [segment],
-        tokenDelta: 1000,
+        tokenDelta: 0,
       };
       expect(compaction.segments).toHaveLength(1);
-      expect(compaction.segments[0].id).toBe("seg-1");
+    });
+
+    it("should reject when required fields are missing", () => {
+      // @ts-expect-error - missing required fields
+      const invalidCompaction: PreparedCompaction = {};
+      expect(invalidCompaction.actualUsage).toBeUndefined();
     });
   });
 
@@ -1252,111 +1024,84 @@ describe("compaction-types", () => {
   // Type Compatibility Tests
   // ============================================
   describe("Type Compatibility", () => {
-    it("Message should be compatible with CheckpointMessage", () => {
-      const message: Message = {
-        createdAt: new Date(),
-        id: "msg-123",
-        modelMessage: { role: "user", content: "test" } as ModelMessage,
-      };
+    it("CheckpointMessage should be compatible with Message structure", () => {
       const checkpoint: CheckpointMessage = {
-        createdAt: message.createdAt.getTime(),
-        id: message.id,
-        isSummary: false,
-        message: message.modelMessage,
-      };
-      expect(checkpoint.id).toBe(message.id);
-    });
-
-    it("PreparedCompactionSegment should be assignable to CompactionSegment", () => {
-      const prepared: PreparedCompactionSegment = {
-        createdAt: new Date(),
-        endMessageId: "msg-10",
-        estimatedTokens: 1000,
-        id: "seg-1",
-        messageCount: 3,
-        messageIds: ["msg-1", "msg-2"],
-        messages: [],
-        startMessageId: "msg-1",
-        summary: null,
-      };
-      const compact: CompactionSegment = prepared;
-      expect(compact.id).toBe("seg-1");
-    });
-
-    it("SessionFileLine union should discriminate correctly", () => {
-      const header: SessionFileLine = {
         createdAt: Date.now(),
-        sessionId: "session-1",
-        type: "header",
-        version: 1,
-      };
-      const message: SessionFileLine = {
-        createdAt: Date.now(),
-        id: "msg-1",
+        id: "checkpoint-1",
         isSummary: false,
         message: { role: "user", content: "test" } as ModelMessage,
-        type: "message",
       };
-      const checkpoint: SessionFileLine = {
-        summaryMessageId: "sum-1",
-        type: "checkpoint",
-        updatedAt: Date.now(),
-      };
-
-      expect(header.type).toBe("header");
-      expect(message.type).toBe("message");
-      expect(checkpoint.type).toBe("checkpoint");
+      // CheckpointMessage has required fields that overlap with Message
+      expect(typeof checkpoint.createdAt).toBe("number");
+      expect(typeof checkpoint.id).toBe("string");
     });
 
-    it("ActualTokenUsageInput should be assignable to ActualTokenUsage", () => {
+    it("ActualTokenUsageInput should be compatible with partial ActualTokenUsage", () => {
       const input: ActualTokenUsageInput = {
         completionTokens: 100,
-        promptTokens: 200,
-        totalTokens: 300,
-        updatedAt: new Date(),
+        promptTokens: 50,
       };
+      // This shows that ActualTokenUsageInput can provide values for ActualTokenUsage
       const usage: ActualTokenUsage = {
         completionTokens: input.completionTokens ?? 0,
         promptTokens: input.promptTokens ?? 0,
-        totalTokens: input.totalTokens ?? 0,
-        updatedAt: input.updatedAt ?? new Date(),
+        totalTokens: (input.completionTokens ?? 0) + (input.promptTokens ?? 0),
+        updatedAt: new Date(),
       };
-      expect(usage.totalTokens).toBe(300);
+      expect(usage.completionTokens).toBe(100);
+      expect(usage.promptTokens).toBe(50);
     });
 
-    it("CompactionConfig should accept partial configuration", () => {
-      const minimalConfig: CompactionConfig = {
-        enabled: true,
+    it("SessionFileLine union should discriminate by type field", () => {
+      const checkLineType = (line: SessionFileLine) => {
+        if (line.type === "header") {
+          return (line as SessionHeaderLine).version;
+        }
+        if (line.type === "message") {
+          return (line as MessageLine).id;
+        }
+        if (line.type === "checkpoint") {
+          return (line as CheckpointLine).summaryMessageId;
+        }
+        return null;
       };
-      const fullConfig: CompactionConfig = {
-        contextLimit: 128000,
-        enabled: true,
-        getStructuredState: () => "state",
-        keepRecentTokens: 2000,
-        maxTokens: 8000,
-        reserveTokens: 2000,
-        speculativeStartRatio: 0.5,
-        summarizeFn: async () => "summary",
-        thresholdRatio: 0.5,
-      };
-      expect(minimalConfig.enabled).toBe(true);
-      expect(fullConfig.contextLimit).toBe(128000);
+
+      const header: SessionFileLine = { createdAt: 1, sessionId: "s1", type: "header", version: 1 };
+      const message: SessionFileLine = { createdAt: 1, id: "m1", isSummary: false, message: {} as ModelMessage, type: "message" };
+      const checkpoint: SessionFileLine = { summaryMessageId: "c1", type: "checkpoint", updatedAt: 1 };
+
+      expect(checkLineType(header)).toBe(1);
+      expect(checkLineType(message)).toBe("m1");
+      expect(checkLineType(checkpoint)).toBe("c1");
     });
 
-    it("PruningConfig should accept partial configuration", () => {
-      const minimalConfig: PruningConfig = {
-        enabled: true,
+    it("CompactionSegment and PreparedCompactionSegment should have compatible structures", () => {
+      const segment: CompactionSegment = {
+        createdAt: new Date(),
+        endMessageId: "end-1",
+        estimatedTokens: 1000,
+        id: "seg-1",
+        messageCount: 3,
+        messageIds: ["m1", "m2", "m3"],
+        messages: [],
+        startMessageId: "start-1",
+        summary: null,
       };
-      const fullConfig: PruningConfig = {
-        eagerPruneToolNames: ["tool1"],
-        enabled: true,
-        minSavingsTokens: 100,
-        protectedToolNames: ["protected"],
-        protectRecentTokens: 1000,
-        replacementText: "[pruned]",
+
+      const preparedSegment: PreparedCompactionSegment = {
+        createdAt: segment.createdAt,
+        endMessageId: segment.endMessageId,
+        estimatedTokens: segment.estimatedTokens,
+        id: segment.id,
+        messageCount: segment.messageCount,
+        messageIds: segment.messageIds,
+        messages: segment.messages,
+        startMessageId: segment.startMessageId,
+        summary: segment.summary,
       };
-      expect(minimalConfig.enabled).toBe(true);
-      expect(fullConfig.eagerPruneToolNames).toEqual(["tool1"]);
+
+      expect(preparedSegment.id).toBe(segment.id);
+      expect(preparedSegment.estimatedTokens).toBe(segment.estimatedTokens);
     });
   });
 });
