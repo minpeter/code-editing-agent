@@ -245,6 +245,8 @@ export class CheckpointHistory {
   private contextLimit = 0;
   private systemPromptTokens = 0;
   private revision = 0;
+  // message-only revision: bumped by add/compact/prune/truncate/clear, NOT metadata ops
+  private messageRevision = 0;
   private readonly sessionId: string;
   private readonly sessionStore: SessionStore | null;
   private compactionConfig: NormalizedCompactionConfig;
@@ -276,6 +278,7 @@ export class CheckpointHistory {
     this.messages.push(message);
     this.persistMessage(message);
     this.revision += 1;
+    this.messageRevision += 1;
 
     return message;
   }
@@ -299,7 +302,10 @@ export class CheckpointHistory {
       this.persistMessage(message);
     }
 
-    this.revision += 1;
+    if (accepted.length > 0) {
+      this.revision += 1;
+      this.messageRevision += 1;
+    }
     return accepted;
   }
 
@@ -336,11 +342,16 @@ export class CheckpointHistory {
     return this.revision;
   }
 
+  getMessageRevision(): number {
+    return this.messageRevision;
+  }
+
   clear(): void {
     this.messages = [];
     this.summaryMessageId = null;
     this.actualUsage = null;
     this.revision += 1;
+    this.messageRevision += 1;
   }
 
   updateActualUsage(usage: ActualTokenUsageInput): void {
@@ -643,6 +654,8 @@ export class CheckpointHistory {
       };
     }
 
+    const messageRevisionBeforeSummarize = this.messageRevision;
+
     const summaryText = await this.buildCompactionSummaryText({
       activeMessages,
       previousSummary,
@@ -660,6 +673,13 @@ export class CheckpointHistory {
       };
     }
 
+    const messagesChangedDuringSummarize =
+      this.messageRevision !== messageRevisionBeforeSummarize;
+
+    const effectiveReplayMessage = messagesChangedDuringSummarize
+      ? null
+      : replayMessage;
+
     const summaryMessage: CheckpointMessage = {
       id: randomUUID(),
       createdAt: Date.now(),
@@ -672,7 +692,7 @@ export class CheckpointHistory {
     };
     const continuationVariant = this.resolveContinuationVariant(
       autoCompact,
-      replayMessage
+      effectiveReplayMessage
     );
     const continuationMessage: CheckpointMessage = {
       id: randomUUID(),
@@ -684,7 +704,9 @@ export class CheckpointHistory {
         content: COMPACTION_CONTINUATION_TEXTS[continuationVariant],
       },
     };
-    const replayMessageCopy = this.createReplayMessageCopy(replayMessage);
+    const replayMessageCopy = this.createReplayMessageCopy(
+      effectiveReplayMessage
+    );
 
     const insertIndex = activeStartIndex + splitIndex;
     this.messages.splice(insertIndex, 0, summaryMessage);
@@ -695,6 +717,7 @@ export class CheckpointHistory {
 
     this.summaryMessageId = summaryMessage.id;
     this.revision += 1;
+    this.messageRevision += 1;
     this.rebaselineActualUsageToCurrentEstimate();
 
     await this.persistCompactionMessages({
@@ -1251,6 +1274,7 @@ export class CheckpointHistory {
       this.messages = pruneResult.messages;
     }
     this.revision += 1;
+    this.messageRevision += 1;
 
     const tokensAfter = this.getEstimatedTokens();
     if (
@@ -1286,6 +1310,7 @@ export class CheckpointHistory {
     }
 
     this.revision += 1;
+    this.messageRevision += 1;
   }
 
   private async compactForOverflowRecovery(
@@ -1306,6 +1331,7 @@ export class CheckpointHistory {
       messages: [...this.messages],
       summaryMessageId: this.summaryMessageId,
       revision: this.revision,
+      messageRevision: this.messageRevision,
     };
 
     let messagesToSummarize: CheckpointMessage[];
@@ -1340,6 +1366,7 @@ export class CheckpointHistory {
       this.messages = snapshot.messages;
       this.summaryMessageId = snapshot.summaryMessageId;
       this.revision = snapshot.revision;
+      this.messageRevision = snapshot.messageRevision;
       return null;
     }
 
@@ -1383,6 +1410,7 @@ export class CheckpointHistory {
     }
     this.summaryMessageId = summaryMessage.id;
     this.revision += 1;
+    this.messageRevision += 1;
 
     const tokensAfter = this.getEstimatedTokens();
     if (
@@ -1395,6 +1423,7 @@ export class CheckpointHistory {
       this.messages = snapshot.messages;
       this.summaryMessageId = snapshot.summaryMessageId;
       this.revision = snapshot.revision;
+      this.messageRevision = snapshot.messageRevision;
       return null;
     }
 
@@ -1437,6 +1466,7 @@ export class CheckpointHistory {
       }
       this.messages.splice(oldestNonSummaryIdx, 1);
       this.revision += 1;
+      this.messageRevision += 1;
     }
 
     while (
@@ -1445,6 +1475,7 @@ export class CheckpointHistory {
     ) {
       this.messages.splice(0, 1);
       this.revision += 1;
+      this.messageRevision += 1;
       const newSummary = this.messages.find((m) => m.isSummary);
       this.summaryMessageId = newSummary?.id ?? null;
     }
@@ -1460,6 +1491,7 @@ export class CheckpointHistory {
       this.messages = [fallbackMessage];
       this.summaryMessageId = null;
       this.revision += 1;
+      this.messageRevision += 1;
     }
 
     const tokensAfter = this.getEstimatedTokens();

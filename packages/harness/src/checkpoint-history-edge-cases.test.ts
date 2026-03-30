@@ -1,5 +1,5 @@
 import type { ModelMessage, ToolCallPart } from "ai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CheckpointHistory } from "./checkpoint-history";
 import { CompactionOrchestrator } from "./compaction-orchestrator";
 
@@ -865,7 +865,7 @@ describe("CheckpointHistory edge cases", () => {
     resolveSummary?.("Summary");
     await orchestrator.getLatestRunningSpeculativeCompaction()?.promise;
 
-    expect(orchestrator.applyReady()).toEqual({ applied: false, stale: true });
+    expect(orchestrator.applyReady()).toEqual({ applied: true, stale: true });
   });
 
   it("ADAPTED: speculative compaction is accepted when the history is unchanged", async () => {
@@ -889,6 +889,190 @@ describe("CheckpointHistory edge cases", () => {
     await orchestrator.getLatestRunningSpeculativeCompaction()?.promise;
 
     expect(orchestrator.applyReady()).toEqual({ applied: true, stale: false });
+  });
+
+  it("metadata-only revision bump does not make speculative compaction stale", async () => {
+    const history = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 80,
+        keepRecentTokens: 10,
+        maxTokens: 10,
+        reserveTokens: 0,
+        summarizeFn: async () => "Summary",
+      },
+    });
+
+    for (let index = 0; index < 8; index += 1) {
+      history.addUserMessage(`long message ${index} that should compact soon`);
+    }
+
+    const orchestrator = new CompactionOrchestrator(history);
+    orchestrator.startSpeculative();
+    await orchestrator.getLatestRunningSpeculativeCompaction()?.promise;
+
+    history.updateActualUsage({ promptTokens: 100, completionTokens: 50 });
+    history.setContextLimit(200);
+    history.setSystemPromptTokens(500);
+
+    expect(orchestrator.applyReady()).toEqual({ applied: true, stale: false });
+  });
+
+  it("stale speculative compaction still emits onCompactionComplete callback", async () => {
+    let resolveSummary: ((summary: string) => void) | undefined;
+    const onComplete = vi.fn();
+    const history = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 80,
+        keepRecentTokens: 10,
+        maxTokens: 10,
+        reserveTokens: 0,
+        summarizeFn: () =>
+          new Promise<string>((resolve) => {
+            resolveSummary = resolve;
+          }),
+      },
+    });
+
+    for (let index = 0; index < 8; index += 1) {
+      history.addUserMessage(`long message ${index} that should compact soon`);
+    }
+
+    const orchestrator = new CompactionOrchestrator(history, {
+      onCompactionComplete: onComplete,
+    });
+    orchestrator.startSpeculative();
+    history.addUserMessage("mutation while speculative runs");
+    resolveSummary?.("Summary");
+    await orchestrator.getLatestRunningSpeculativeCompaction()?.promise;
+
+    const result = orchestrator.applyReady();
+    expect(result).toEqual({ applied: true, stale: true });
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("concurrent message append during summarize downgrades replay to tool-loop", async () => {
+    let resolveSummary: ((summary: string) => void) | undefined;
+    const history = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 80,
+        keepRecentTokens: 10,
+        maxTokens: 10,
+        reserveTokens: 0,
+        summarizeFn: () =>
+          new Promise<string>((resolve) => {
+            resolveSummary = resolve;
+          }),
+      },
+    });
+
+    history.addUserMessage("original request");
+    for (let index = 0; index < 7; index += 1) {
+      history.addUserMessage(`filler message ${index}`);
+    }
+
+    const compactPromise = history.compact({ auto: true });
+
+    history.addUserMessage("new message during summarize");
+    resolveSummary?.("Summary");
+
+    const result = await compactPromise;
+
+    expect(result.success).toBe(true);
+    expect(result.continuationVariant).toBe("tool-loop");
+
+    const allMessages = history.getAll();
+    const replayedOriginals = allMessages.filter(
+      (m) =>
+        m.message.role === "user" && m.message.content === "original request"
+    );
+    expect(replayedOriginals.length).toBe(1);
+  });
+
+  it("compact with no concurrent changes uses auto-with-replay", async () => {
+    const history = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 80,
+        keepRecentTokens: 10,
+        maxTokens: 10,
+        reserveTokens: 0,
+        summarizeFn: async () => "Summary",
+      },
+    });
+
+    for (let index = 0; index < 8; index += 1) {
+      history.addUserMessage(`message ${index}`);
+    }
+
+    const result = await history.compact({ auto: true });
+    expect(result.success).toBe(true);
+    expect(result.continuationVariant).toBe("auto-with-replay");
+  });
+
+  it("messageRevision only increments on message mutations, not metadata", () => {
+    const history = new CheckpointHistory({
+      compaction: { enabled: true, contextLimit: 100 },
+    });
+
+    const rev0 = history.getMessageRevision();
+    history.addUserMessage("hello");
+    const rev1 = history.getMessageRevision();
+    expect(rev1).toBe(rev0 + 1);
+
+    history.updateActualUsage({ promptTokens: 100 });
+    expect(history.getMessageRevision()).toBe(rev1);
+
+    history.setContextLimit(200);
+    expect(history.getMessageRevision()).toBe(rev1);
+
+    history.setSystemPromptTokens(50);
+    expect(history.getMessageRevision()).toBe(rev1);
+
+    history.updateCompaction({ maxTokens: 5000 });
+    expect(history.getMessageRevision()).toBe(rev1);
+
+    history.updatePruning({ enabled: true });
+    expect(history.getMessageRevision()).toBe(rev1);
+
+    history.addModelMessages([{ role: "assistant", content: "world" }]);
+    expect(history.getMessageRevision()).toBe(rev1 + 1);
+
+    history.clear();
+    expect(history.getMessageRevision()).toBe(rev1 + 2);
+  });
+
+  it("addModelMessages with empty array does not bump messageRevision", () => {
+    const history = new CheckpointHistory({
+      compaction: { enabled: true, contextLimit: 100 },
+    });
+
+    history.addUserMessage("hello");
+    const revBefore = history.getMessageRevision();
+
+    history.addModelMessages([]);
+    expect(history.getMessageRevision()).toBe(revBefore);
+  });
+
+  it("compactForOverflowRecovery rollback restores messageRevision", async () => {
+    const history = new CheckpointHistory({
+      compaction: {
+        enabled: true,
+        contextLimit: 10,
+        reserveTokens: 0,
+        summarizeFn: async () => "a".repeat(5000),
+      },
+    });
+
+    history.addUserMessage("short");
+    history.addUserMessage("msg2");
+    const revBefore = history.getMessageRevision();
+
+    await history.handleContextOverflow();
+    const revAfter = history.getMessageRevision();
+    expect(revAfter).toBeGreaterThanOrEqual(revBefore);
   });
 
   it("ADAPTED: overflow recovery does not expose orphaned tool messages after truncation", async () => {

@@ -168,8 +168,8 @@ describe("CompactionOrchestrator", () => {
       await orchestrator.getLatestRunningSpeculativeCompaction()?.promise;
 
       const applied = orchestrator.applyReady();
-      expect(applied).toEqual({ applied: false, stale: true });
-      expect(onComplete).not.toHaveBeenCalled();
+      expect(applied).toEqual({ applied: true, stale: true });
+      expect(onComplete).toHaveBeenCalledOnce();
     });
   });
 

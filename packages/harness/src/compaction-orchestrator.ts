@@ -259,6 +259,7 @@ interface CompactionHistoryLike {
     thresholdRatio?: number;
   };
   getEstimatedTokens: () => number;
+  getMessageRevision?: () => number;
   getRevision?: () => number;
   handleContextOverflow?: (error?: unknown) => Promise<OverflowRecoveryResult>;
   isAtHardContextLimit?: (
@@ -275,9 +276,11 @@ interface CompactionHistoryLike {
 }
 
 interface SpeculativeMeta {
+  completedMessageRevision: number;
   completedRevision: number;
   error?: unknown;
   result?: CompactionResult;
+  startedMessageRevision: number;
   startedRevision: number;
 }
 
@@ -514,6 +517,7 @@ export class CompactionOrchestrator {
 
     const jobId = `background-compaction-${++this.jobCounter}`;
     const startedRevision = this.getRevision(resolvedHistory);
+    const startedMessageRevision = this.getMessageRevision(resolvedHistory);
     this.compactionInProgress = true;
 
     const job: SpeculativeCompactionJob = {
@@ -532,14 +536,18 @@ export class CompactionOrchestrator {
         const result = await resolvedHistory.compact({ auto: true });
         this.speculativeMeta.set(job.id, {
           startedRevision,
+          startedMessageRevision,
           completedRevision: this.getRevision(resolvedHistory),
+          completedMessageRevision: this.getMessageRevision(resolvedHistory),
           result: toCompactionResult(result),
         });
         job.state = "completed";
       } catch (error) {
         this.speculativeMeta.set(job.id, {
           startedRevision,
+          startedMessageRevision,
           completedRevision: this.getRevision(resolvedHistory),
+          completedMessageRevision: this.getMessageRevision(resolvedHistory),
           error,
         });
         job.state = "failed";
@@ -586,15 +594,12 @@ export class CompactionOrchestrator {
       }
 
       const stale = this.isStaleSpeculativeResult(resolvedHistory, meta);
-      if (stale) {
-        return { applied: false, stale: true };
-      }
 
       this.emitCompactionResult(meta.result, {
         jobId: job.id,
         phase: "new-turn",
       });
-      return { applied: meta.result.success, stale: false };
+      return { applied: meta.result.success, stale };
     }
 
     return { applied: false, stale: false };
@@ -730,6 +735,13 @@ export class CompactionOrchestrator {
     return history.getRevision?.() ?? 0;
   }
 
+  private getMessageRevision(history: CompactionHistoryLike): number {
+    if (typeof history.getMessageRevision === "function") {
+      return history.getMessageRevision();
+    }
+    return this.getRevision(history);
+  }
+
   private resolvePolicyContextLimit(
     config: ReturnType<CompactionHistoryLike["getCompactionConfig"]>
   ): number {
@@ -803,16 +815,19 @@ export class CompactionOrchestrator {
     history: CompactionHistoryLike,
     meta: SpeculativeMeta
   ): boolean {
-    const currentRevision = this.getRevision(history);
-    if (currentRevision !== meta.completedRevision) {
-      return true;
-    }
-
     if (!meta.result?.success) {
       return false;
     }
 
-    return meta.completedRevision !== meta.startedRevision + 1;
+    const currentMessageRevision = this.getMessageRevision(history);
+
+    if (currentMessageRevision > meta.completedMessageRevision) {
+      return true;
+    }
+
+    const midFlightMessageChange =
+      meta.completedMessageRevision !== meta.startedMessageRevision + 1;
+    return midFlightMessageChange;
   }
 
   private resolvePruneTargetTokens(
