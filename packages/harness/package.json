@@ -24,7 +24,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ../../scripts/fix-esm-imports.mjs dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run src"
   },

@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ../../scripts/fix-esm-imports.mjs dist",
     "dev": "node --watch --conditions=@ai-sdk-tool/source --import tsx index.ts",
     "typecheck": "tsc --noEmit"
   },
