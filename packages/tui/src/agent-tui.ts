@@ -762,12 +762,12 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       onSpeculativeReady: () => {
         const result = compactionOrchestrator.applyReady();
         if (result.applied) {
-          void measureUsageAfterCompaction()
+          measureUsageAfterCompaction()
             .then(() => {
               updateHeader();
               tui.requestRender();
             })
-            .catch(() => {});
+            .catch(Boolean);
         }
       },
       onStillExceeded: () => {

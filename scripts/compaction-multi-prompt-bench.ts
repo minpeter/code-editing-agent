@@ -525,7 +525,7 @@ async function runParallelWithLimit(tasks: PendingRun[]): Promise<RunResult[]> {
   return results;
 }
 
-// ─── Summary ────────────────────────────────────────────────────────
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: benchmark reporting function
 function buildSummary(
   results: RunResult[],
   totalMs: number,
@@ -622,16 +622,20 @@ function buildSummary(
       const r = results.find(
         (r) => r.promptId === sc.id && r.contextLimit === limit
       );
-      row.push(r ? (r.completed ? "     yes" : "      no") : "    -   ");
+      if (r) {
+        row.push(r.completed ? "     yes" : "      no");
+      } else {
+        row.push("    -   ");
+      }
     }
     lines.push(row.join(" │ "));
   }
 
   lines.push("");
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
-// ─── Main ───────────────────────────────────────────────────────────
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: CLI entry point
 async function main(): Promise<void> {
   const selectedScenarioIds = scenarioFilter ?? [];
   const baseScenarios = scenarioFilter

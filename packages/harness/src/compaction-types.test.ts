@@ -1,26 +1,26 @@
-import { describe, it, expect, expectType } from "vitest";
+import { describe, expect, it } from "vitest";
 import type {
-  Message,
-  CheckpointMessage,
-  SessionMetadata,
-  CompactionConfig,
-  PruningConfig,
-  ContinuationVariant,
-  CompactionResult,
-  PreparedCompactionV2,
   ActualTokenUsage,
   ActualTokenUsageInput,
-  ContextUsage,
-  TodoItem,
-  StructuredState,
-  SessionHeaderLine,
-  MessageLine,
   CheckpointLine,
-  SessionFileLine,
-  CompactionSummary,
+  CheckpointMessage,
+  CompactionConfig,
+  CompactionResult,
   CompactionSegment,
-  PreparedCompactionSegment,
+  CompactionSummary,
+  ContextUsage,
+  ContinuationVariant,
+  Message,
+  MessageLine,
   PreparedCompaction,
+  PreparedCompactionSegment,
+  PreparedCompactionV2,
+  PruningConfig,
+  SessionFileLine,
+  SessionHeaderLine,
+  SessionMetadata,
+  StructuredState,
+  TodoItem,
 } from "./compaction-types";
 
 describe("compaction-types", () => {
@@ -176,9 +176,9 @@ describe("compaction-types", () => {
 
     it("should accept contextLimit", () => {
       const config: CompactionConfig = {
-        contextLimit: 128000,
+        contextLimit: 128_000,
       };
-      expect(config.contextLimit).toBe(128000);
+      expect(config.contextLimit).toBe(128_000);
     });
 
     it("should accept enabled", () => {
@@ -193,14 +193,14 @@ describe("compaction-types", () => {
         getStructuredState: () => "state string",
       };
       expect(config.getStructuredState).toBeDefined();
-      expect(config.getStructuredState!()).toBe("state string");
+      expect(config.getStructuredState?.()).toBe("state string");
     });
 
     it("should accept getStructuredState returning undefined", () => {
       const config: CompactionConfig = {
         getStructuredState: () => undefined,
       };
-      expect(config.getStructuredState!()).toBeUndefined();
+      expect(config.getStructuredState?.()).toBeUndefined();
     });
 
     it("should accept keepRecentTokens", () => {
@@ -232,9 +232,8 @@ describe("compaction-types", () => {
     });
 
     it("should accept summarizeFn", () => {
-      const summarizeFn = async (messages: any[], previousSummary?: string) => {
-        return "summary";
-      };
+      const summarizeFn = (_messages: any[], _previousSummary?: string) =>
+        Promise.resolve("summary");
       const config: CompactionConfig = {
         summarizeFn,
       };
@@ -250,7 +249,7 @@ describe("compaction-types", () => {
 
     it("should accept all fields together", () => {
       const config: CompactionConfig = {
-        contextLimit: 128000,
+        contextLimit: 128_000,
         enabled: true,
         getStructuredState: () => "state",
         keepRecentTokens: 2000,
@@ -260,7 +259,7 @@ describe("compaction-types", () => {
         summarizeFn: async () => "summary",
         thresholdRatio: 0.5,
       };
-      expect(config.contextLimit).toBe(128000);
+      expect(config.contextLimit).toBe(128_000);
       expect(config.enabled).toBe(true);
       expect(config.keepRecentTokens).toBe(2000);
       expect(config.maxTokens).toBe(8000);
@@ -473,7 +472,7 @@ describe("compaction-types", () => {
         },
       };
       expect(prep.replayMessage).toBeDefined();
-      expect(prep.replayMessage!.id).toBe("replay-1");
+      expect(prep.replayMessage?.id).toBe("replay-1");
     });
 
     it("should allow empty baseMessageIds", () => {
@@ -510,7 +509,9 @@ describe("compaction-types", () => {
         totalTokens: 500,
         updatedAt: new Date(),
       };
-      expect(usage.totalTokens).toBe(usage.promptTokens + usage.completionTokens);
+      expect(usage.totalTokens).toBe(
+        usage.promptTokens + usage.completionTokens
+      );
     });
 
     it("should allow zero values", () => {
@@ -594,26 +595,26 @@ describe("compaction-types", () => {
   describe("ContextUsage", () => {
     it("should have all required fields", () => {
       const usage: ContextUsage = {
-        limit: 128000,
+        limit: 128_000,
         percentage: 50,
-        remaining: 64000,
+        remaining: 64_000,
         source: "actual",
-        used: 64000,
+        used: 64_000,
       };
-      expect(usage.limit).toBe(128000);
+      expect(usage.limit).toBe(128_000);
       expect(usage.percentage).toBe(50);
-      expect(usage.remaining).toBe(64000);
+      expect(usage.remaining).toBe(64_000);
       expect(usage.source).toBe("actual");
-      expect(usage.used).toBe(64000);
+      expect(usage.used).toBe(64_000);
     });
 
     it("should accept source as 'estimated'", () => {
       const usage: ContextUsage = {
-        limit: 128000,
+        limit: 128_000,
         percentage: 30,
-        remaining: 89600,
+        remaining: 89_600,
         source: "estimated",
-        used: 38400,
+        used: 38_400,
       };
       expect(usage.source).toBe("estimated");
     });
@@ -707,7 +708,7 @@ describe("compaction-types", () => {
         ],
       };
       expect(state.todos).toHaveLength(2);
-      expect(state.todos![0].content).toBe("task 1");
+      expect(state.todos?.[0].content).toBe("task 1");
     });
 
     it("should accept both metadata and todos", () => {
@@ -965,7 +966,7 @@ describe("compaction-types", () => {
         summary,
       };
       expect(segment.summary).toBeDefined();
-      expect(segment.summary!.id).toBe("summary-1");
+      expect(segment.summary?.id).toBe("summary-1");
     });
 
     it("should have messageCount match messageIds length", () => {
@@ -1040,7 +1041,7 @@ describe("compaction-types", () => {
         baseRevision: 1,
         baseSegmentIds: ["segment-1"],
         compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
+        contextLimitAtCreation: 128_000,
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
@@ -1054,7 +1055,7 @@ describe("compaction-types", () => {
       expect(prep.baseRevision).toBe(1);
       expect(prep.baseSegmentIds).toEqual(["segment-1"]);
       expect(prep.compactionMaxTokensAtCreation).toBe(8000);
-      expect(prep.contextLimitAtCreation).toBe(128000);
+      expect(prep.contextLimitAtCreation).toBe(128_000);
       expect(prep.didChange).toBe(false);
       expect(prep.keepRecentTokensAtCreation).toBe(2000);
       expect(prep.pendingCompaction).toBe(false);
@@ -1077,7 +1078,7 @@ describe("compaction-types", () => {
         baseRevision: 0,
         baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
+        contextLimitAtCreation: 128_000,
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
@@ -1087,7 +1088,7 @@ describe("compaction-types", () => {
         tokenDelta: 0,
       };
       expect(prep.actualUsage).toBeDefined();
-      expect(prep.actualUsage!.totalTokens).toBe(150);
+      expect(prep.actualUsage?.totalTokens).toBe(150);
     });
 
     it("should accept phase 'intermediate-step'", () => {
@@ -1097,7 +1098,7 @@ describe("compaction-types", () => {
         baseRevision: 0,
         baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
+        contextLimitAtCreation: 128_000,
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
@@ -1116,7 +1117,7 @@ describe("compaction-types", () => {
         baseRevision: 0,
         baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
+        contextLimitAtCreation: 128_000,
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
@@ -1146,7 +1147,7 @@ describe("compaction-types", () => {
         baseRevision: 0,
         baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
+        contextLimitAtCreation: 128_000,
         didChange: true,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
@@ -1166,7 +1167,7 @@ describe("compaction-types", () => {
         baseRevision: 0,
         baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
+        contextLimitAtCreation: 128_000,
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: false,
@@ -1185,7 +1186,7 @@ describe("compaction-types", () => {
         baseRevision: 0,
         baseSegmentIds: [],
         compactionMaxTokensAtCreation: 8000,
-        contextLimitAtCreation: 128000,
+        contextLimitAtCreation: 128_000,
         didChange: false,
         keepRecentTokensAtCreation: 2000,
         pendingCompaction: true,
@@ -1285,7 +1286,11 @@ describe("compaction-types", () => {
         updatedAt: Date.now(),
       };
 
-      const lines: SessionFileLine[] = [headerLine, messageLine, checkpointLine];
+      const lines: SessionFileLine[] = [
+        headerLine,
+        messageLine,
+        checkpointLine,
+      ];
       expect(lines).toHaveLength(3);
       expect(lines[0].type).toBe("header");
       expect(lines[1].type).toBe("message");
@@ -1295,7 +1300,10 @@ describe("compaction-types", () => {
     it("ActualTokenUsageInput should have optional fields", () => {
       const input1: ActualTokenUsageInput = {};
       const input2: ActualTokenUsageInput = { completionTokens: 100 };
-      const input3: ActualTokenUsageInput = { promptTokens: 50, totalTokens: 150 };
+      const input3: ActualTokenUsageInput = {
+        promptTokens: 50,
+        totalTokens: 150,
+      };
 
       expect(input1.completionTokens).toBeUndefined();
       expect(input2.completionTokens).toBe(100);
@@ -1306,7 +1314,7 @@ describe("compaction-types", () => {
     it("CompactionConfig should have all optional fields", () => {
       const emptyConfig: CompactionConfig = {};
       const fullConfig: CompactionConfig = {
-        contextLimit: 128000,
+        contextLimit: 128_000,
         enabled: true,
         getStructuredState: () => "state",
         keepRecentTokens: 2000,
@@ -1318,7 +1326,7 @@ describe("compaction-types", () => {
       };
 
       expect(emptyConfig.contextLimit).toBeUndefined();
-      expect(fullConfig.contextLimit).toBe(128000);
+      expect(fullConfig.contextLimit).toBe(128_000);
       expect(fullConfig.enabled).toBe(true);
     });
 

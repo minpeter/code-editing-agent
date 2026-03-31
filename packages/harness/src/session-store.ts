@@ -74,16 +74,20 @@ export class SessionStore {
         continue;
       }
 
-      try { const line = JSON.parse(rawLine) as SessionFileLine;
-      
-      if (line.type === "message") {
-        messages.push(line);
-        continue;
+      try {
+        const line = JSON.parse(rawLine) as SessionFileLine;
+
+        if (line.type === "message") {
+          messages.push(line);
+          continue;
+        }
+
+        if (line.type === "checkpoint") {
+          summaryMessageId = line.summaryMessageId;
+        }
+      } catch {
+        // skip malformed JSONL lines
       }
-      
-      if (line.type === "checkpoint") {
-        summaryMessageId = line.summaryMessageId;
-      } } catch { continue; }
     }
 
     return Promise.resolve({
