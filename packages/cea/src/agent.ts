@@ -615,7 +615,11 @@ export class AgentManager {
     // CONTEXT_LIMIT_OVERRIDE for testing — only active when COMPACTION_DEBUG is set
     let effectiveContextLength = contextLength;
     let effectiveReserveTokens = compactionReserveTokens;
-    if (process.env.COMPACTION_DEBUG && process.env.CONTEXT_LIMIT_OVERRIDE) {
+    if (
+      (process.env.COMPACTION_DEBUG === "1" ||
+        process.env.COMPACTION_DEBUG === "true") &&
+      process.env.CONTEXT_LIMIT_OVERRIDE
+    ) {
       effectiveContextLength = Number.parseInt(
         process.env.CONTEXT_LIMIT_OVERRIDE,
         10

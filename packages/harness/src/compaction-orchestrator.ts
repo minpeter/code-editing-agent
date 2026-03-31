@@ -349,6 +349,15 @@ export class CompactionOrchestrator {
       (historyOrCallbacks as CompactionOrchestratorCallbacks) ?? {};
   }
 
+  private debugLog(message: string): void {
+    if (
+      process.env.COMPACTION_DEBUG === "1" ||
+      process.env.COMPACTION_DEBUG === "true"
+    ) {
+      console.error(`[compaction-debug] ${message}`);
+    }
+  }
+
   getJobs(): readonly SpeculativeCompactionJob[] {
     return this.jobs;
   }
@@ -394,9 +403,13 @@ export class CompactionOrchestrator {
     const history = this.requireHistory();
 
     if (this.compactionInProgress || !this.needsCompaction(history)) {
+      this.debugLog(
+        `checkAndCompact skip: inProgress=${this.compactionInProgress}, needs=${this.needsCompaction(history)}`
+      );
       return;
     }
 
+    this.debugLog("checkAndCompact → blocking compaction");
     await this.runCompaction(history, { auto: true });
   }
 
@@ -470,10 +483,14 @@ export class CompactionOrchestrator {
   shouldStartSpeculative(history?: CompactionHistoryLike): boolean {
     const resolvedHistory = this.resolveHistory(history);
     if (!resolvedHistory || this.compactionInProgress) {
+      this.debugLog(
+        `shouldStartSpeculative=false: noHistory=${!resolvedHistory}, inProgress=${this.compactionInProgress}`
+      );
       return false;
     }
 
     if (this.jobs.some((job) => !job.discarded && job.state !== "failed")) {
+      this.debugLog("shouldStartSpeculative=false: existingJob");
       return false;
     }
 
@@ -481,7 +498,10 @@ export class CompactionOrchestrator {
       typeof resolvedHistory.shouldStartSpeculativeCompactionForNextTurn ===
       "function"
     ) {
-      return resolvedHistory.shouldStartSpeculativeCompactionForNextTurn();
+      const result =
+        resolvedHistory.shouldStartSpeculativeCompactionForNextTurn();
+      this.debugLog(`shouldStartSpeculative=${result} (via history)`);
+      return result;
     }
 
     if (this.needsCompaction(resolvedHistory)) {

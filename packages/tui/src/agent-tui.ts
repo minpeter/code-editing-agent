@@ -1022,7 +1022,10 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const prepareMessages = async (
     phase: "new-turn" | "intermediate-step"
   ): Promise<ModelMessage[]> => {
-    applyReadySpeculativeCompaction();
+    const readyResult = applyReadySpeculativeCompaction();
+    if (readyResult.stale) {
+      startSpeculativeCompaction();
+    }
 
     await blockAtHardContextLimit(0, phase);
 
@@ -1161,6 +1164,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       config.messageHistory.updateActualUsage(normalizedUsage);
     }
     updateHeader();
+    startSpeculativeCompaction();
     await compactBeforeNextTurnIfNeeded();
 
     if (shouldContinueManualToolLoop(params.finishReason)) {
@@ -1477,7 +1481,10 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       editor.disableSubmit = true;
       editor.setText("");
       tui.requestRender();
-      applyReadySpeculativeCompaction();
+      const inputReadyResult = applyReadySpeculativeCompaction();
+      if (inputReadyResult.stale) {
+        startSpeculativeCompaction();
+      }
 
       if (isCommand(trimmed)) {
         return await processCommandInput(trimmed);

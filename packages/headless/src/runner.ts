@@ -173,7 +173,9 @@ export interface HeadlessRunnerConfig {
 
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const emitEvent = config.emitEvent ?? defaultEmitEvent;
-  const isMetricsEnabled = process.env.COMPACTION_DEBUG === "1";
+  const isMetricsEnabled =
+    process.env.COMPACTION_DEBUG === "1" ||
+    process.env.COMPACTION_DEBUG === "true";
   let turnNumber = 0;
   let blockingStartTime: number | null = null;
   const emitMetric = isMetricsEnabled
@@ -560,14 +562,13 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           await runSingleTurn(phase);
         applyPendingMessages(pendingMessages);
         updateUsage(usage);
+        startSpeculativeCompaction();
         await compactBeforeNextTurnIfNeeded();
 
         if (!shouldContinue) {
-          startSpeculativeCompaction();
           return "completed";
         }
 
-        startSpeculativeCompaction();
         phase = "intermediate-step";
       }
     };

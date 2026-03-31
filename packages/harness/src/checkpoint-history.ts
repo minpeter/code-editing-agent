@@ -5,7 +5,6 @@ import {
   getRecommendedMaxOutputTokens as getRecommendedMaxOutputTokensFromPolicy,
   isAtHardContextLimitFromUsage,
   needsCompactionFromUsage,
-  shouldStartSpeculativeCompaction,
 } from "./compaction-policy";
 import type {
   ActualTokenUsage,
@@ -492,25 +491,54 @@ export class CheckpointHistory {
   }
 
   shouldStartSpeculativeCompactionForNextTurn(): boolean {
-    const speculativeLimit = Math.min(
-      this.getActiveContextLimit(),
-      this.compactionConfig.maxTokens ?? Number.POSITIVE_INFINITY
+    const enabled = Boolean(
+      this.compactionConfig.enabled || this.pruningConfig.enabled
     );
+    if (!enabled || this.messages.length === 0) {
+      return false;
+    }
 
-    return shouldStartSpeculativeCompaction({
-      contextLimit: speculativeLimit,
-      input: {
-        currentUsageTokens: this.getCurrentUsageTokens(),
-        enabled: Boolean(
-          this.compactionConfig.enabled || this.pruningConfig.enabled
-        ),
-        hasMessages: this.messages.length > 0,
-        phaseReserveTokens: this.getEffectiveReserveTokens({
-          phase: "new-turn",
-        }),
-        speculativeStartRatio: this.compactionConfig.speculativeStartRatio,
-      },
-    });
+    const contextLimit = this.getActiveContextLimit();
+    const currentUsage = this.getCurrentUsageTokens();
+
+    const configuredThresholdRatio =
+      this.compactionConfig.thresholdRatio ?? 0.5;
+    const maxTokens = this.compactionConfig.maxTokens;
+    const maxTokensRatio =
+      typeof maxTokens === "number" &&
+      Number.isFinite(maxTokens) &&
+      maxTokens > 0 &&
+      contextLimit > 0
+        ? maxTokens / contextLimit
+        : undefined;
+    const blockingRatio =
+      typeof maxTokensRatio === "number"
+        ? Math.min(configuredThresholdRatio, maxTokensRatio)
+        : configuredThresholdRatio;
+    const blockingThreshold = contextLimit * blockingRatio;
+
+    const speculativeStartRatio = this.compactionConfig.speculativeStartRatio;
+    const speculativeFraction =
+      typeof speculativeStartRatio === "number" &&
+      Number.isFinite(speculativeStartRatio) &&
+      speculativeStartRatio > 0 &&
+      speculativeStartRatio < 1
+        ? speculativeStartRatio
+        : 0.75;
+    const speculativeThreshold = blockingThreshold * speculativeFraction;
+
+    const result = currentUsage >= speculativeThreshold;
+
+    if (
+      process.env.COMPACTION_DEBUG === "1" ||
+      process.env.COMPACTION_DEBUG === "true"
+    ) {
+      console.error(
+        `[compaction-debug] speculative? usage=${currentUsage} specThreshold=${Math.floor(speculativeThreshold)} blockThreshold=${Math.floor(blockingThreshold)} → ${result}`
+      );
+    }
+
+    return result;
   }
 
   isAtHardContextLimit(
