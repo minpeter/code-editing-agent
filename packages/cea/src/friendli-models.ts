@@ -89,8 +89,8 @@ export const FRIENDLI_MODELS: readonly FriendliModelInfo[] = [
   },
   {
     id: "compact-test",
-    apiModelId: "MiniMaxAI/MiniMax-M2.5",
-    name: "minimax 2.5 (32k compact test)",
+    apiModelId: "zai-org/GLM-5",
+    name: "GLM 5 (32k compact test)",
     provider: "friendli",
     type: "serverless",
     contextLength: 32_768,
