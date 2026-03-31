@@ -69,6 +69,7 @@ export interface CompactionOrchestratorCallbacks extends CompactionCallbacks {
   onPruneSkipped?: (detail: { reason: string }) => void;
   onPruneStart?: () => void;
   onRejected?: () => void;
+  onSpeculativeReady?: () => void;
   onStillExceeded?: () => void;
 }
 
@@ -401,11 +402,25 @@ export class CompactionOrchestrator {
 
   async checkAndCompact(): Promise<boolean> {
     const history = this.requireHistory();
+    const needs = this.needsCompaction(history);
 
-    if (this.compactionInProgress || !this.needsCompaction(history)) {
+    if (this.compactionInProgress) {
+      if (needs) {
+        const runningJob = this.getLatestRunningSpeculativeCompaction();
+        if (runningJob) {
+          this.debugLog("checkAndCompact → awaiting in-flight speculative");
+          await runningJob.promise;
+          return false;
+        }
+      }
       this.debugLog(
-        `checkAndCompact skip: inProgress=${this.compactionInProgress}, needs=${this.needsCompaction(history)}`
+        `checkAndCompact skip: inProgress=${this.compactionInProgress}, needs=${needs}`
       );
+      return false;
+    }
+
+    if (!needs) {
+      this.debugLog("checkAndCompact skip: needs=false");
       return false;
     }
 
@@ -576,6 +591,9 @@ export class CompactionOrchestrator {
         this.compactionInProgress = false;
         if (!job.discarded) {
           this.callbacks.onJobStatus?.(jobId, "", "clear");
+          if (job.state === "completed") {
+            this.callbacks.onSpeculativeReady?.();
+          }
         }
       }
     })();

@@ -759,6 +759,15 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         updateHeader();
         tui.requestRender();
       },
+      onSpeculativeReady: () => {
+        const result = compactionOrchestrator.applyReady();
+        if (result.applied) {
+          void measureUsageAfterCompaction().then(() => {
+            updateHeader();
+            tui.requestRender();
+          });
+        }
+      },
       onStillExceeded: () => {
         addCompactionNotice(
           "↻ Compaction: context limit still tight after retries — older messages were condensed, some detail may be lost"

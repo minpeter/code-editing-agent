@@ -274,6 +274,12 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     config.messageHistory,
     {
       ...baseCompactionCallbacks,
+      onSpeculativeReady: () => {
+        const result = compactionOrchestrator.applyReady(config.messageHistory);
+        if (result.applied) {
+          void measureUsageAfterCompaction();
+        }
+      },
       ...(isMetricsEnabled
         ? {
             onCompactionStart: () => {
