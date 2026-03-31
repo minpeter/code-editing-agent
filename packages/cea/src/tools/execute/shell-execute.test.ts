@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { executeCommand } from "./shell-execute";
 
@@ -78,8 +79,12 @@ describe("executeCommand", () => {
     });
 
     it("rejects npm in a pnpm workspace", async () => {
+      const workspaceRoot = join(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../../.."
+      );
       const result = await executeCommand("npm test", {
-        workdir: "/Users/minpeter/github.com/minpeter/plugsuits",
+        workdir: workspaceRoot,
       });
 
       expect(result.exitCode).toBe(2);

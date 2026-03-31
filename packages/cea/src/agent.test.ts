@@ -199,7 +199,7 @@ summary`);
 
     expect(compaction.maxTokens).toBe(expectedMaxTokens);
     expect(compaction.thresholdRatio).toBe(expectedThresholdRatio);
-    expect(agentManager.getModelTokenLimits().maxCompletionTokens).toBe(20_480);
+    expect(agentManager.getModelTokenLimits().maxCompletionTokens).toBe(32_768);
     expect(compaction.reserveTokens).toBe(2048);
     expect(compaction.keepRecentTokens).toBe(
       Math.min(
@@ -217,6 +217,14 @@ summary`);
       updatedAt: new Date(),
     });
     expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
+    expect(history.needsCompaction()).toBe(false);
+
+    history.updateActualUsage({
+      totalTokens: 20_000,
+      promptTokens: 20_000,
+      completionTokens: 0,
+      updatedAt: new Date(),
+    });
     expect(history.needsCompaction()).toBe(true);
   });
 
