@@ -276,6 +276,7 @@ export class CheckpointHistory {
 
     this.messages.push(message);
     this.persistMessage(message);
+    this.actualUsage = null;
     this.revision += 1;
     this.messageRevision += 1;
 
@@ -302,6 +303,7 @@ export class CheckpointHistory {
     }
 
     if (accepted.length > 0) {
+      this.actualUsage = null;
       this.revision += 1;
       this.messageRevision += 1;
     }
@@ -354,8 +356,12 @@ export class CheckpointHistory {
   }
 
   updateActualUsage(usage: ActualTokenUsageInput): void {
-    const promptTokens =
-      usage.promptTokens ?? usage.inputTokens ?? usage.totalTokens ?? 0;
+    const promptTokens = usage.promptTokens ?? usage.inputTokens;
+
+    if (promptTokens === undefined || promptTokens === null) {
+      return;
+    }
+
     const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
     const totalTokens =
       usage.totalTokens ?? Math.max(0, promptTokens + completionTokens);
@@ -741,6 +747,7 @@ export class CheckpointHistory {
     }
 
     this.summaryMessageId = summaryMessage.id;
+    this.actualUsage = null;
     this.revision += 1;
     this.messageRevision += 1;
 
@@ -994,7 +1001,7 @@ export class CheckpointHistory {
 
   private getCurrentUsageTokens(): number {
     if (this.actualUsage) {
-      return this.actualUsage.promptTokens ?? this.actualUsage.totalTokens ?? 0;
+      return this.actualUsage.promptTokens;
     }
     return this.getEstimatedTokens() + this.systemPromptTokens;
   }
