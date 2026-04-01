@@ -1440,8 +1440,8 @@ describe("systemPromptTokens in estimated usage", () => {
   });
 });
 
-describe("post-recovery actualUsage preservation", () => {
-  it("preserves stale actualUsage after overflow recovery for runtime re-measurement", async () => {
+describe("post-recovery actualUsage invalidation", () => {
+  it("invalidates actualUsage after overflow recovery because addUserMessage resets stale measurements", async () => {
     const h = new CheckpointHistory({
       compaction: {
         enabled: true,

@@ -601,7 +601,10 @@ export class AgentManager {
         process.env.COMPACTION_DEBUG === "true") &&
       process.env.CONTEXT_LIMIT_OVERRIDE
     ) {
-      contextLength = Number.parseInt(process.env.CONTEXT_LIMIT_OVERRIDE, 10);
+      const override = Number.parseInt(process.env.CONTEXT_LIMIT_OVERRIDE, 10);
+      if (Number.isFinite(override) && override > 0) {
+        contextLength = override;
+      }
     }
 
     return {
@@ -630,10 +633,10 @@ export class AgentManager {
         process.env.COMPACTION_DEBUG === "true") &&
       process.env.CONTEXT_LIMIT_OVERRIDE
     ) {
-      effectiveContextLength = Number.parseInt(
-        process.env.CONTEXT_LIMIT_OVERRIDE,
-        10
-      );
+      const override = Number.parseInt(process.env.CONTEXT_LIMIT_OVERRIDE, 10);
+      if (Number.isFinite(override) && override > 0) {
+        effectiveContextLength = override;
+      }
       const ratio = effectiveContextLength / contextLength;
       const scaledReserve = Math.max(
         256,
