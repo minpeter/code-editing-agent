@@ -1,5 +1,11 @@
 # plugsuits
 
+## 2.2.1
+
+### Patch Changes
+
+- 828b5dd: Fix `pss --version` returning stale hardcoded version. Now reads version dynamically from package.json at runtime.
+
 ## 2.2.0
 
 ### Minor Changes
