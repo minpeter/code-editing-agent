@@ -217,8 +217,8 @@ summary`);
 
     history.updateActualUsage({
       totalTokens: speculativeThreshold + 1,
-      promptTokens: speculativeThreshold + 1,
-      completionTokens: 0,
+      inputTokens: speculativeThreshold + 1,
+      outputTokens: 0,
       updatedAt: new Date(),
     });
     expect(history.shouldStartSpeculativeCompactionForNextTurn()).toBe(true);
@@ -226,8 +226,8 @@ summary`);
 
     history.updateActualUsage({
       totalTokens: blockingThreshold + 1,
-      promptTokens: blockingThreshold + 1,
-      completionTokens: 0,
+      inputTokens: blockingThreshold + 1,
+      outputTokens: 0,
       updatedAt: new Date(),
     });
     expect(history.needsCompaction()).toBe(true);

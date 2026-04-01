@@ -356,19 +356,19 @@ export class CheckpointHistory {
   }
 
   updateActualUsage(usage: ActualTokenUsageInput): void {
-    const promptTokens = usage.promptTokens ?? usage.inputTokens;
+    const inputTokens = usage.inputTokens ?? usage.promptTokens;
 
-    if (promptTokens === undefined || promptTokens === null) {
+    if (inputTokens === undefined || inputTokens === null) {
       return;
     }
 
-    const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
+    const outputTokens = usage.outputTokens ?? usage.completionTokens ?? 0;
     const totalTokens =
-      usage.totalTokens ?? Math.max(0, promptTokens + completionTokens);
+      usage.totalTokens ?? Math.max(0, inputTokens + outputTokens);
 
     this.actualUsage = {
-      promptTokens,
-      completionTokens,
+      inputTokens,
+      outputTokens,
       totalTokens,
       updatedAt: usage.updatedAt ?? new Date(),
     };
@@ -1001,7 +1001,7 @@ export class CheckpointHistory {
 
   private getCurrentUsageTokens(): number {
     if (this.actualUsage) {
-      return this.actualUsage.promptTokens;
+      return this.actualUsage.inputTokens;
     }
     return this.getEstimatedTokens() + this.systemPromptTokens;
   }

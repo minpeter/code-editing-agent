@@ -8,10 +8,8 @@ function createMockStream(
   responseMessages: ModelMessage[],
   finishReason: "stop" | "tool-calls" = "stop",
   usage?: {
-    completionTokens?: number;
     inputTokens?: number;
     outputTokens?: number;
-    promptTokens?: number;
     totalTokens?: number;
   }
 ): AgentStreamResult {
@@ -176,8 +174,8 @@ describe("runHeadless", () => {
             "stop",
             streamCallCount === 1
               ? {
-                  promptTokens: 900,
-                  completionTokens: 0,
+                  inputTokens: 900,
+                  outputTokens: 0,
                   totalTokens: 900,
                 }
               : undefined
