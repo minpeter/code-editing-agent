@@ -1,5 +1,14 @@
 # @plugsuits/minimal-agent
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [18bfebb]
+  - @ai-sdk-tool/harness@1.2.0
+  - @ai-sdk-tool/headless@3.0.0
+  - @ai-sdk-tool/tui@3.0.0
+
 ## 0.2.2
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @ai-sdk-tool/headless
 
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [18bfebb]
+  - @ai-sdk-tool/harness@1.2.0
+
 ## 2.0.1
 
 ### Patch Changes
