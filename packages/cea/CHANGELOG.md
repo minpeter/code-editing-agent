@@ -1,5 +1,22 @@
 # plugsuits
 
+## 2.2.0
+
+### Minor Changes
+
+- 18bfebb: Migrate token usage naming from `promptTokens`/`completionTokens` to `inputTokens`/`outputTokens` to align with Vercel AI SDK v6.
+
+  Fix model-agnostic compaction bug: prevent `totalTokens` from being misattributed as `promptTokens` when the provider omits prompt token counts. Invalidate stale `actualUsage` after message changes and compaction.
+
+  Remove compact-test model entry — use `COMPACTION_DEBUG=1 CONTEXT_LIMIT_OVERRIDE=<N>` to simulate small context windows on any model.
+
+### Patch Changes
+
+- Updated dependencies [18bfebb]
+  - @ai-sdk-tool/harness@1.2.0
+  - @ai-sdk-tool/headless@3.0.0
+  - @ai-sdk-tool/tui@3.0.0
+
 ## 2.1.3
 
 ### Patch Changes
