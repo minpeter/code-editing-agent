@@ -208,6 +208,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       event: "usage_probe",
       turn: turnNumber,
       inputTokens: measured.inputTokens ?? null,
+      promptTokens: measured.inputTokens ?? null,
       totalTokens: measured.totalTokens ?? null,
     });
 

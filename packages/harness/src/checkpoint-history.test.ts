@@ -938,11 +938,11 @@ describe("CheckpointHistory", () => {
       expect(h.getContextUsage().used).toBe(1000);
     });
 
-    it("preserves legacy prompt/completion usage aliases", () => {
+    it("accepts legacy promptTokens/completionTokens aliases as input", () => {
       const h = new CheckpointHistory({ compaction: { contextLimit: 5000 } });
       h.updateActualUsage({
-        inputTokens: 1000,
-        outputTokens: 500,
+        promptTokens: 1000,
+        completionTokens: 500,
         totalTokens: 1500,
       });
 

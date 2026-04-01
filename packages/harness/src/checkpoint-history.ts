@@ -1267,6 +1267,7 @@ export class CheckpointHistory {
     } else {
       this.messages = pruneResult.messages;
     }
+    this.actualUsage = null;
     this.revision += 1;
     this.messageRevision += 1;
 
@@ -1326,6 +1327,7 @@ export class CheckpointHistory {
       summaryMessageId: this.summaryMessageId,
       revision: this.revision,
       messageRevision: this.messageRevision,
+      actualUsage: this.actualUsage,
     };
 
     let messagesToSummarize: CheckpointMessage[];
@@ -1359,6 +1361,7 @@ export class CheckpointHistory {
     } catch {
       this.messages = snapshot.messages;
       this.summaryMessageId = snapshot.summaryMessageId;
+      this.actualUsage = snapshot.actualUsage;
       this.revision = snapshot.revision;
       this.messageRevision = snapshot.messageRevision;
       return null;
@@ -1417,6 +1420,7 @@ export class CheckpointHistory {
     ) {
       this.messages = snapshot.messages;
       this.summaryMessageId = snapshot.summaryMessageId;
+      this.actualUsage = snapshot.actualUsage;
       this.revision = snapshot.revision;
       this.messageRevision = snapshot.messageRevision;
       return null;
@@ -1489,6 +1493,7 @@ export class CheckpointHistory {
       this.messageRevision += 1;
     }
 
+    this.actualUsage = null;
     const tokensAfter = this.getEstimatedTokens();
 
     if (tokensAfter >= contextLimit) {
