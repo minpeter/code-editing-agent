@@ -78,6 +78,24 @@ plugsuits/
 - Legacy code should always be fully deprecated; aggressive updates without backward-compatibility guarantees are acceptable.
 - Package build order: `harness` then `tui` and `headless` (both depend on harness), then `cea` (depends on all three).
 
+## CHANGESET VERSIONING RULES
+
+When creating changeset files (`.changeset/*.md`), follow these version bump rules strictly:
+
+| Bump type | When to use |
+|-----------|-------------|
+| `patch`   | **Default.** Always use patch unless explicitly told otherwise. Bug fixes, refactors, internal changes, dependency updates, naming changes — all patch. |
+| `minor`   | **Only** when the user explicitly says "minor". New features, new exports, new CLI flags — still patch unless the user says otherwise. |
+| `major`   | **NEVER do this autonomously.** Must receive explicit user confirmation **at least twice** before writing a major bump. Ask once, get confirmation, ask again to double-check. |
+
+**Examples of patch (not minor):**
+- Renaming internal fields (`promptTokens` → `inputTokens`)
+- Fixing bugs (compaction, token counting, etc.)
+- Removing deprecated code paths
+- Adding internal utilities not exposed in public API
+
+**If unsure, it's patch.**
+
 ## ANTI-PATTERNS (THIS PROJECT)
 
 - Editing generated outputs (`dist/`, `packages/*/dist/`) as if they were source code.
