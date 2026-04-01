@@ -1,5 +1,6 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   CheckpointHistory,
   type Command,
@@ -428,10 +429,15 @@ process.once("unhandledRejection", (reason: unknown) => {
   exitWithCleanup(1);
 });
 
+const __cliDirname = dirname(fileURLToPath(import.meta.url));
+const __cliVersion: string = JSON.parse(
+  readFileSync(join(__cliDirname, "../../package.json"), "utf-8")
+).version;
+
 const mainCommand = defineCommand({
   meta: {
     name: "plugsuits",
-    version: "2.0.0",
+    version: __cliVersion,
     description: "Code Editing Agent",
   },
   args: {
