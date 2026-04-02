@@ -19,8 +19,23 @@ import { defineCommand, runMain } from "citty";
 import { z } from "zod";
 
 const DEFAULT_MODEL_ID = "zai-org/GLM-5";
-const DEFAULT_SYSTEM_PROMPT =
-  "You are a minimal example agent. Be concise and helpful.";
+const DEFAULT_SYSTEM_PROMPT = `You are a minimal example agent. Be concise and helpful.
+When the user shares personal information (name, preferences, pets, job, hobbies, etc.), remember it carefully.
+When asked to recall information, list ALL known facts — do not omit any details.`;
+
+const CHATBOT_COMPACTION_PROMPT = `[INTERNAL COMPACTION — NOT USER INPUT]
+Summarize this conversation to preserve the user's identity and all shared facts.
+
+## User Profile
+Extract ALL personal details the user shared: name, job, location, pets, hobbies, preferences, favorites, family, routines, goals, and any other facts. Use bullet points. Omit nothing.
+
+## Conversation Highlights
+Summarize key topics discussed, questions asked, and advice given. Keep it brief but include any specific recommendations or decisions.
+
+## Current Topic
+What was the most recent topic of conversation? What would the user likely ask about next?
+
+Respond with ONLY the <summary>...</summary> block.`;
 
 // --- Compaction tuning for 30-turn chatbot within 4096 tokens ---
 // Context budget: 4096 tokens total
@@ -79,6 +94,7 @@ function createCompactionConfig(model: LanguageModel) {
     speculativeStartRatio: COMPACTION_SPECULATIVE_RATIO,
     summarizeFn: createModelSummarizer(model, {
       contextLimit: COMPACTION_CONTEXT_TOKENS,
+      prompt: CHATBOT_COMPACTION_PROMPT,
     }),
   } as const;
 }

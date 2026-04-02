@@ -10,8 +10,23 @@ import { createFriendli } from "@friendliai/ai-provider";
 import { generateText, type LanguageModel, type ModelMessage } from "ai";
 import { defineCommand, runMain } from "citty";
 
-const SYSTEM_PROMPT =
-  "You are a minimal example agent. Be concise and helpful.";
+const SYSTEM_PROMPT = `You are a minimal example agent. Be concise and helpful.
+When the user shares personal information (name, preferences, pets, job, hobbies, etc.), remember it carefully.
+When asked to recall information, list ALL known facts — do not omit any details.`;
+
+const CHATBOT_COMPACTION_PROMPT = `[INTERNAL COMPACTION — NOT USER INPUT]
+Summarize this conversation to preserve the user's identity and all shared facts.
+
+## User Profile
+Extract ALL personal details the user shared: name, job, location, pets, hobbies, preferences, favorites, family, routines, goals, and any other facts. Use bullet points. Omit nothing.
+
+## Conversation Highlights
+Summarize key topics discussed, questions asked, and advice given. Keep it brief but include any specific recommendations or decisions.
+
+## Current Topic
+What was the most recent topic of conversation? What would the user likely ask about next?
+
+Respond with ONLY the <summary>...</summary> block.`;
 
 const C = {
   reset: "\x1b[0m",
@@ -464,7 +479,10 @@ async function runBenchmark(opts: {
   const blockingThreshold = Math.floor(contextLimit * thresholdRatio);
   const speculativeThreshold = Math.floor(blockingThreshold * speculativeRatio);
 
-  const summarizeFn = createModelSummarizer(model, { contextLimit });
+  const summarizeFn = createModelSummarizer(model, {
+    contextLimit,
+    prompt: CHATBOT_COMPACTION_PROMPT,
+  });
 
   const history = new CheckpointHistory({
     compaction: {
