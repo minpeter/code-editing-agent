@@ -7,25 +7,65 @@ const DEFAULT_MAX_RESPONSE_TOKENS = 500;
 const DEFAULT_REPLACEMENT_TEMPLATE =
   "[response shrunk — {original_tokens} → {shrunk_tokens} tokens]";
 const DEFAULT_MIN_SAVINGS_TOKENS = 100;
+const DEFAULT_TOOL_RESULT_REPLACEMENT_TEXT = "[tool result cleared]";
+const DEFAULT_KEEP_RECENT_TOOL_RESULTS = 3;
 const SHRUNK_RESPONSE_RATIO = 0.3;
 
 export interface MicroCompactOptions {
+  clearableToolNames?: string[];
+  clearToolResults?: boolean;
+  keepRecentToolResults?: number;
   maxResponseTokens?: number;
   minSavingsTokens?: number;
   protectRecentTokens?: number;
   replacementTemplate?: string;
+  toolResultReplacementText?: string;
 }
 
 export interface MicroCompactResult {
   messages: CheckpointMessage[];
   messagesModified: number;
   tokensSaved: number;
+  toolResultsCleared: number;
 }
 
 interface RewriteResult {
   originalTokens: number;
   rewritten: ModelMessage;
   shrunkTokens: number;
+}
+
+interface ToolResultPart {
+  content: unknown;
+  name?: string;
+  tool_name?: string;
+  tool_use_id: string;
+  toolName?: string;
+  type: "tool_result";
+}
+
+interface ToolResultRef {
+  messageIndex: number;
+  partIndex: number;
+}
+
+interface AssistantCompactionResult {
+  messages: CheckpointMessage[];
+  modifiedMessageIndexes: Set<number>;
+  tokensSaved: number;
+}
+
+interface ToolResultClearConfig {
+  clearableToolNames: Set<string> | null;
+  keepRecentToolResults: number;
+  replacementText: string;
+}
+
+interface ToolResultClearResult {
+  messages: CheckpointMessage[];
+  modifiedMessageIndexes: Set<number>;
+  tokensSaved: number;
+  toolResultsCleared: number;
 }
 
 function isTextPart(part: unknown): part is TextPart {
@@ -37,6 +77,267 @@ function isTextPart(part: unknown): part is TextPart {
     "text" in part &&
     typeof part.text === "string"
   );
+}
+
+function isToolResultPart(part: unknown): part is ToolResultPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    part.type === "tool_result" &&
+    "tool_use_id" in part &&
+    typeof part.tool_use_id === "string" &&
+    "content" in part
+  );
+}
+
+function extractToolName(part: ToolResultPart): string | null {
+  if (typeof part.tool_name === "string") {
+    return part.tool_name;
+  }
+
+  if (typeof part.toolName === "string") {
+    return part.toolName;
+  }
+
+  if (typeof part.name === "string") {
+    return part.name;
+  }
+
+  return null;
+}
+
+function stringifyUnknownContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (content === undefined) {
+    return "";
+  }
+
+  try {
+    const stringified = JSON.stringify(content);
+    if (typeof stringified === "string") {
+      return stringified;
+    }
+  } catch {
+    return String(content);
+  }
+
+  return String(content);
+}
+
+function estimateUnknownContentTokens(content: unknown): number {
+  return estimateTokens(stringifyUnknownContent(content));
+}
+
+function collectToolResultRefs(
+  messages: CheckpointMessage[],
+  protectedFromIndex: number,
+  clearableToolNames: Set<string> | null
+): ToolResultRef[] {
+  const refs: ToolResultRef[] = [];
+
+  for (
+    let messageIndex = 0;
+    messageIndex < protectedFromIndex;
+    messageIndex++
+  ) {
+    const checkpointMessage = messages[messageIndex];
+    if (checkpointMessage.isSummary === true) {
+      continue;
+    }
+
+    const modelMessage = checkpointMessage.message;
+    if (modelMessage.role !== "user" || !Array.isArray(modelMessage.content)) {
+      continue;
+    }
+
+    for (
+      let partIndex = 0;
+      partIndex < modelMessage.content.length;
+      partIndex++
+    ) {
+      const part = modelMessage.content[partIndex];
+      if (!isToolResultPart(part)) {
+        continue;
+      }
+
+      if (clearableToolNames) {
+        const toolName = extractToolName(part);
+        if (toolName === null || !clearableToolNames.has(toolName)) {
+          continue;
+        }
+      }
+
+      refs.push({ messageIndex, partIndex });
+    }
+  }
+
+  return refs;
+}
+
+function applyAssistantTextCompaction(
+  messages: CheckpointMessage[],
+  protectedFromIndex: number,
+  maxResponseTokens: number,
+  replacementTemplate: string,
+  minSavingsTokens: number
+): AssistantCompactionResult {
+  const resultMessages = [...messages];
+  const modifiedMessageIndexes = new Set<number>();
+  let tokensSaved = 0;
+
+  for (let i = 0; i < messages.length; i++) {
+    const checkpointMessage = messages[i];
+
+    if (i >= protectedFromIndex) {
+      continue;
+    }
+
+    if (checkpointMessage.isSummary === true) {
+      continue;
+    }
+
+    if (checkpointMessage.message.role !== "assistant") {
+      continue;
+    }
+
+    const rewrite = rewriteAssistantMessage(
+      checkpointMessage.message,
+      maxResponseTokens,
+      replacementTemplate
+    );
+
+    if (!rewrite) {
+      continue;
+    }
+
+    const savedTokens = rewrite.originalTokens - rewrite.shrunkTokens;
+    if (savedTokens < minSavingsTokens) {
+      continue;
+    }
+
+    resultMessages[i] = {
+      ...checkpointMessage,
+      message: rewrite.rewritten,
+    };
+    modifiedMessageIndexes.add(i);
+    tokensSaved += savedTokens;
+  }
+
+  return {
+    messages: resultMessages,
+    modifiedMessageIndexes,
+    tokensSaved,
+  };
+}
+
+function applyToolResultClearing(
+  messages: CheckpointMessage[],
+  config: ToolResultClearConfig
+): ToolResultClearResult {
+  const toolResultRefs = collectToolResultRefs(
+    messages,
+    messages.length,
+    config.clearableToolNames
+  );
+  const clearUntil = Math.max(
+    0,
+    toolResultRefs.length - config.keepRecentToolResults
+  );
+
+  if (clearUntil === 0) {
+    return {
+      messages,
+      modifiedMessageIndexes: new Set<number>(),
+      tokensSaved: 0,
+      toolResultsCleared: 0,
+    };
+  }
+
+  const replacementTokens = estimateTokens(config.replacementText);
+  const rewrittenContentByMessage = new Map<number, unknown[]>();
+  let tokensSaved = 0;
+  let toolResultsCleared = 0;
+
+  for (let refIndex = 0; refIndex < clearUntil; refIndex++) {
+    const ref = toolResultRefs[refIndex];
+    const checkpointMessage = messages[ref.messageIndex];
+    const existingContent = rewrittenContentByMessage.get(ref.messageIndex);
+    const checkpointContent = checkpointMessage.message.content as unknown;
+    const baseContent =
+      existingContent ??
+      (Array.isArray(checkpointContent) ? checkpointContent : null);
+
+    if (baseContent === null) {
+      continue;
+    }
+
+    const nextContent = [...baseContent];
+    const part = nextContent[ref.partIndex];
+    if (!isToolResultPart(part)) {
+      continue;
+    }
+
+    const originalTokens = estimateUnknownContentTokens(part.content);
+    if (originalTokens > replacementTokens) {
+      tokensSaved += originalTokens - replacementTokens;
+    }
+
+    nextContent[ref.partIndex] = {
+      ...part,
+      content: config.replacementText,
+    };
+
+    rewrittenContentByMessage.set(ref.messageIndex, nextContent);
+    toolResultsCleared += 1;
+  }
+
+  if (rewrittenContentByMessage.size === 0) {
+    return {
+      messages,
+      modifiedMessageIndexes: new Set<number>(),
+      tokensSaved: 0,
+      toolResultsCleared: 0,
+    };
+  }
+
+  const resultMessages = [...messages];
+  const modifiedMessageIndexes = new Set<number>();
+
+  for (const [messageIndex, rewrittenContent] of rewrittenContentByMessage) {
+    const checkpointMessage = resultMessages[messageIndex];
+    if (!checkpointMessage) {
+      continue;
+    }
+
+    resultMessages[messageIndex] = {
+      ...checkpointMessage,
+      message: {
+        ...checkpointMessage.message,
+        content: rewrittenContent,
+      } as unknown as ModelMessage,
+    };
+    modifiedMessageIndexes.add(messageIndex);
+  }
+
+  return {
+    messages: resultMessages,
+    modifiedMessageIndexes,
+    tokensSaved,
+    toolResultsCleared,
+  };
+}
+
+function mergeModifiedMessageIndexes(
+  target: Set<number>,
+  source: Set<number>
+): void {
+  for (const index of source) {
+    target.add(index);
+  }
 }
 
 function resolveProtectedFromIndex(
@@ -212,7 +513,12 @@ export function microCompactMessages(
   options: MicroCompactOptions = {}
 ): MicroCompactResult {
   if (messages.length === 0) {
-    return { messages: [], tokensSaved: 0, messagesModified: 0 };
+    return {
+      messages: [],
+      tokensSaved: 0,
+      messagesModified: 0,
+      toolResultsCleared: 0,
+    };
   }
 
   const protectRecentTokens = Math.max(
@@ -235,52 +541,50 @@ export function microCompactMessages(
     protectRecentTokens
   );
 
-  const resultMessages = [...messages];
-  let tokensSaved = 0;
-  let messagesModified = 0;
+  const assistantCompaction = applyAssistantTextCompaction(
+    messages,
+    protectedFromIndex,
+    maxResponseTokens,
+    replacementTemplate,
+    minSavingsTokens
+  );
 
-  for (let i = 0; i < messages.length; i++) {
-    const checkpointMessage = messages[i];
+  let resultMessages = assistantCompaction.messages;
+  let tokensSaved = assistantCompaction.tokensSaved;
+  let toolResultsCleared = 0;
+  const modifiedMessageIndexes = new Set<number>(
+    assistantCompaction.modifiedMessageIndexes
+  );
 
-    if (i >= protectedFromIndex) {
-      continue;
-    }
+  if (options.clearToolResults === true) {
+    const clearableToolNames = Array.isArray(options.clearableToolNames)
+      ? new Set(options.clearableToolNames)
+      : null;
 
-    if (checkpointMessage.isSummary === true) {
-      continue;
-    }
+    const toolResultClearResult = applyToolResultClearing(resultMessages, {
+      clearableToolNames,
+      keepRecentToolResults: Math.max(
+        0,
+        options.keepRecentToolResults ?? DEFAULT_KEEP_RECENT_TOOL_RESULTS
+      ),
+      replacementText:
+        options.toolResultReplacementText ??
+        DEFAULT_TOOL_RESULT_REPLACEMENT_TEXT,
+    });
 
-    if (checkpointMessage.message.role !== "assistant") {
-      continue;
-    }
-
-    const rewrite = rewriteAssistantMessage(
-      checkpointMessage.message,
-      maxResponseTokens,
-      replacementTemplate
+    resultMessages = toolResultClearResult.messages;
+    tokensSaved += toolResultClearResult.tokensSaved;
+    toolResultsCleared = toolResultClearResult.toolResultsCleared;
+    mergeModifiedMessageIndexes(
+      modifiedMessageIndexes,
+      toolResultClearResult.modifiedMessageIndexes
     );
-
-    if (!rewrite) {
-      continue;
-    }
-
-    const savedTokens = rewrite.originalTokens - rewrite.shrunkTokens;
-    if (savedTokens < minSavingsTokens) {
-      continue;
-    }
-
-    resultMessages[i] = {
-      ...checkpointMessage,
-      message: rewrite.rewritten,
-    };
-
-    tokensSaved += savedTokens;
-    messagesModified += 1;
   }
 
   return {
     messages: resultMessages,
     tokensSaved,
-    messagesModified,
+    messagesModified: modifiedMessageIndexes.size,
+    toolResultsCleared,
   };
 }

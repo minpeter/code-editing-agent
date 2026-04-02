@@ -1,5 +1,7 @@
 export type { LanguageModelUsage } from "ai";
 export { createAgent } from "./agent";
+export type { BackgroundMemoryExtractorConfig } from "./background-memory-extractor";
+export { BackgroundMemoryExtractor } from "./background-memory-extractor";
 export type {
   CheckpointHistoryOptions,
   OverflowRecoveryResult,
@@ -73,6 +75,9 @@ export type * from "./compaction-types";
 export type { ContinuationMessageData } from "./continuation";
 export { createContinuationMessage, getContinuationText } from "./continuation";
 export { runAgentLoop } from "./loop";
+export { CHAT_MEMORY_PRESET, CODE_MEMORY_PRESET } from "./memory-presets";
+export type { MemoryStore } from "./memory-store";
+export { FileMemoryStore, InMemoryStore } from "./memory-store";
 export type { MessageTextOptions } from "./message-text";
 export {
   getLastMessageText,
