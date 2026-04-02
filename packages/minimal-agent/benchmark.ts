@@ -213,6 +213,7 @@ async function callModel(
         system: SYSTEM_PROMPT,
         messages,
         maxOutputTokens: 300,
+        temperature: 0,
       });
       return {
         text: result.text,
