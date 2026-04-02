@@ -453,10 +453,10 @@ async function runBenchmark(opts: {
 }): Promise<void> {
   const { contextLimit, modelId } = opts;
 
-  const thresholdRatio = 0.5;
-  const speculativeRatio = 0.75;
-  const reserveTokens = 400;
-  const keepRecentTokens = 350;
+  const thresholdRatio = 0.65;
+  const speculativeRatio = 0.8;
+  const reserveTokens = 512;
+  const keepRecentTokens = 800;
   const blockingThreshold = Math.floor(contextLimit * thresholdRatio);
   const speculativeThreshold = Math.floor(blockingThreshold * speculativeRatio);
 
@@ -591,7 +591,7 @@ const main = defineCommand({
     contextLimit: {
       alias: ["c"],
       type: "string",
-      description: "Context token limit (default: 2000)",
+      description: "Context token limit (default: 4096)",
     },
     model: {
       alias: ["m"],
@@ -600,7 +600,7 @@ const main = defineCommand({
     },
   },
   async run({ args }) {
-    const contextLimit = Number.parseInt(args.contextLimit || "2000", 10);
+    const contextLimit = Number.parseInt(args.contextLimit || "4096", 10);
     const modelId = args.model || process.env.FRIENDLI_MODEL || "zai-org/GLM-5";
 
     if (!process.env.FRIENDLI_TOKEN) {
