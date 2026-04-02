@@ -21,8 +21,18 @@ import { z } from "zod";
 const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 const DEFAULT_SYSTEM_PROMPT =
   "You are a minimal example agent. Be concise and helpful.";
+
+// --- Compaction tuning for 15-turn chatbot within 2000 tokens ---
+// Context budget: 2000 tokens total
+// Reserve 400 tokens for model output (chatbot responses are short)
+// Keep 350 tokens of recent messages (~3-4 turns) during compaction
+// Trigger blocking compaction at 50% of context (1000 tokens, ~turn 11)
+// Start speculative compaction at 75% of blocking threshold (750 tokens, ~turn 8)
 const COMPACTION_CONTEXT_TOKENS = 2000;
-const COMPACTION_MAX_OUTPUT_TOKENS = 500;
+const COMPACTION_RESERVE_TOKENS = 400;
+const COMPACTION_KEEP_RECENT_TOKENS = 350;
+const COMPACTION_THRESHOLD_RATIO = 0.5;
+const COMPACTION_SPECULATIVE_RATIO = 0.75;
 const LOCAL_COMMANDS: Command[] = [
   {
     name: "new",
@@ -61,9 +71,11 @@ function resolveModelId(cliModel?: string): string {
 function createCompactionConfig(model: LanguageModel) {
   return {
     enabled: true,
-    keepRecentTokens: COMPACTION_MAX_OUTPUT_TOKENS,
-    maxTokens: COMPACTION_CONTEXT_TOKENS,
-    reserveTokens: COMPACTION_MAX_OUTPUT_TOKENS,
+    contextLimit: COMPACTION_CONTEXT_TOKENS,
+    keepRecentTokens: COMPACTION_KEEP_RECENT_TOKENS,
+    reserveTokens: COMPACTION_RESERVE_TOKENS,
+    thresholdRatio: COMPACTION_THRESHOLD_RATIO,
+    speculativeStartRatio: COMPACTION_SPECULATIVE_RATIO,
     summarizeFn: createModelSummarizer(model, {
       contextLimit: COMPACTION_CONTEXT_TOKENS,
     }),
@@ -114,7 +126,7 @@ const main = defineCommand({
     const messageHistory = new CheckpointHistory({
       compaction,
     });
-    messageHistory.setContextLimit(compaction.maxTokens);
+    messageHistory.setContextLimit(COMPACTION_CONTEXT_TOKENS);
     messageHistory.setSystemPromptTokens(estimateTokens(DEFAULT_SYSTEM_PROMPT));
 
     const agent = createAgent({
