@@ -1,15 +1,16 @@
 import {
-  BackgroundMemoryExtractor,
   CheckpointHistory,
   type Command,
   CompactionCircuitBreaker,
+  type CompactionResult,
   type ContextUsage,
   createAgent,
   createModelSummarizer,
   estimateTokens,
-  InMemoryStore,
   SessionManager,
+  SessionMemoryTracker,
 } from "@ai-sdk-tool/harness";
+
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
 import { createAgentTUI } from "@ai-sdk-tool/tui";
 import {
@@ -103,7 +104,7 @@ function resolveModelId(cliModel?: string): string {
 
 function createCompactionConfig(
   model: LanguageModel,
-  memoryExtractor: BackgroundMemoryExtractor
+  tracker: SessionMemoryTracker
 ) {
   return {
     enabled: true,
@@ -113,8 +114,7 @@ function createCompactionConfig(
     reserveTokens: COMPACTION_RESERVE_TOKENS,
     thresholdRatio: COMPACTION_THRESHOLD_RATIO,
     speculativeStartRatio: COMPACTION_SPECULATIVE_RATIO,
-    getStructuredState:
-      memoryExtractor.getStructuredState.bind(memoryExtractor),
+    getStructuredState: tracker.getStructuredState.bind(tracker),
     summarizeFn: createModelSummarizer(model, {
       contextLimit: COMPACTION_CONTEXT_TOKENS,
       prompt: CHATBOT_COMPACTION_PROMPT,
@@ -160,21 +160,11 @@ const main = defineCommand({
     const sessionManager = new SessionManager("minimal-agent");
     sessionManager.initialize();
     const circuitBreaker = new CompactionCircuitBreaker();
+    const sessionMemoryTracker = new SessionMemoryTracker();
     const selectedModelId = resolveModelId(args.model);
     const friendli = createFriendliProvider();
     const model = friendli(selectedModelId);
-    const memoryStore = new InMemoryStore();
-    const memoryExtractor = new BackgroundMemoryExtractor({
-      model,
-      store: memoryStore,
-      preset: "chat",
-      thresholds: {
-        minTokenGrowth: 500,
-        minTurns: 5,
-      },
-      maxExtractionTokens: 500,
-    });
-    const compaction = createCompactionConfig(model, memoryExtractor);
+    const compaction = createCompactionConfig(model, sessionMemoryTracker);
     const messageHistory = new CheckpointHistory({
       compaction,
     });
@@ -185,6 +175,21 @@ const main = defineCommand({
       model,
       instructions: DEFAULT_SYSTEM_PROMPT,
     });
+
+    const handleCompactionComplete = (result: CompactionResult): void => {
+      if (!(result.success && result.summaryMessageId)) {
+        return;
+      }
+      const msg = messageHistory
+        .getAll()
+        .find((m) => m.id === result.summaryMessageId);
+      if (
+        msg?.message.role === "assistant" &&
+        typeof msg.message.content === "string"
+      ) {
+        sessionMemoryTracker.extractFactsFromSummary(msg.message.content);
+      }
+    };
 
     const prompt = args.prompt?.trim();
     if (prompt) {
@@ -199,10 +204,8 @@ const main = defineCommand({
         messageHistory,
         maxIterations: 1,
         modelId: selectedModelId,
-        onTurnComplete: (messages, usage) => {
-          memoryExtractor
-            .onTurnComplete(messages, usage)
-            .catch(() => undefined);
+        compactionCallbacks: {
+          onCompactionComplete: handleCompactionComplete,
         },
       });
       return;
@@ -223,8 +226,8 @@ const main = defineCommand({
         },
       },
       messageHistory,
-      onTurnComplete: (messages, usage) => {
-        memoryExtractor.onTurnComplete(messages, usage).catch(() => undefined);
+      compactionCallbacks: {
+        onCompactionComplete: handleCompactionComplete,
       },
       header: {
         title: "Minimal Agent",
