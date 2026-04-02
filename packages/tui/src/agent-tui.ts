@@ -1,4 +1,5 @@
 import {
+  type CheckpointMessage,
   type Command,
   type CommandAction,
   type CommandResult,
@@ -362,6 +363,7 @@ export interface AgentTUIMessageHistory {
     auto?: boolean;
   }): Promise<boolean | CompactionResult>;
   getActualUsage(): { inputTokens?: number; totalTokens?: number } | null;
+  getAll(): CheckpointMessage[];
   getCompactionConfig(): {
     contextLimit?: number;
     enabled?: boolean;
@@ -473,6 +475,13 @@ export interface AgentTUIConfig {
   messageHistory: AgentTUIMessageHistory;
   onCommandAction?: (action: CommandAction) => void | Promise<void>;
   onSetup?: () => void | Promise<void>;
+  onTurnComplete?: (
+    messages: CheckpointMessage[],
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+    }
+  ) => Promise<void> | void;
   preprocessCommand?: (
     commandInput: string,
     hooks: CommandPreprocessHooks
@@ -1206,6 +1215,20 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     if (normalizedUsage) {
       config.messageHistory.updateActualUsage(normalizedUsage);
     }
+    const onTurnCompleteUsage = normalizedUsage
+      ? {
+          inputTokens: normalizedUsage.inputTokens,
+          outputTokens: normalizedUsage.outputTokens,
+        }
+      : undefined;
+    Promise.resolve(
+      config.onTurnComplete?.(
+        config.messageHistory.getAll(),
+        onTurnCompleteUsage
+      )
+    ).catch((error) => {
+      console.error("onTurnComplete callback failed in TUI:", error);
+    });
     updateHeader();
     startSpeculativeCompaction();
     await compactBeforeNextTurnIfNeeded();

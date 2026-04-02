@@ -684,6 +684,10 @@ export class AgentManager {
       thresholdRatio,
       reserveTokens: effectiveReserveTokens,
       keepRecentTokens,
+      microCompact: {
+        clearToolResults: true,
+        keepRecentToolResults: 5,
+      },
       speculativeStartRatio: computeSpeculativeStartRatio(
         effectiveContextLength,
         effectiveReserveTokens

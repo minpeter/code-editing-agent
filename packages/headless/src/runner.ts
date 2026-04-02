@@ -1,5 +1,6 @@
 import type {
   CheckpointHistory,
+  CheckpointMessage,
   CompactionAppliedDetail,
   CompactionCircuitBreaker,
   CompactionOrchestratorCallbacks,
@@ -167,6 +168,13 @@ export interface HeadlessRunnerConfig {
     hasReminder: boolean;
     message: string | null;
   }>;
+  onTurnComplete?: (
+    messages: CheckpointMessage[],
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+    }
+  ) => Promise<void> | void;
   sessionId: string;
 }
 
@@ -609,6 +617,15 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           await runSingleTurn(phase);
         applyPendingMessages(pendingMessages);
         updateUsage(usage);
+        const normalizedUsage = normalizeUsageMeasurement(usage) ?? undefined;
+        Promise.resolve(
+          config.onTurnComplete?.(
+            config.messageHistory.getAll(),
+            normalizedUsage
+          )
+        ).catch((error) => {
+          console.error("onTurnComplete callback failed in headless:", error);
+        });
         startSpeculativeCompaction();
         await compactBeforeNextTurnIfNeeded();
 

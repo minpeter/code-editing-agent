@@ -1,10 +1,13 @@
 import { writeFileSync } from "node:fs";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import {
+  BackgroundMemoryExtractor,
+  CHAT_MEMORY_PRESET,
   CheckpointHistory,
   CompactionOrchestrator,
   createModelSummarizer,
   estimateTokens,
+  InMemoryStore,
 } from "@ai-sdk-tool/harness";
 import { createFriendli } from "@friendliai/ai-provider";
 import { generateText, type LanguageModel, type ModelMessage } from "ai";
@@ -619,6 +622,15 @@ async function runBenchmark(opts: {
     contextLimit,
     ...(opts.baseline ? {} : { prompt: CHATBOT_COMPACTION_PROMPT }),
   });
+  const memoryExtractor = new BackgroundMemoryExtractor({
+    model,
+    store: new InMemoryStore(),
+    preset: CHAT_MEMORY_PRESET,
+    thresholds: {
+      minTokenGrowth: 300,
+      minTurns: 2,
+    },
+  });
 
   const history = new CheckpointHistory({
     compaction: {
@@ -629,6 +641,8 @@ async function runBenchmark(opts: {
       thresholdRatio,
       speculativeStartRatio: speculativeRatio,
       summarizeFn,
+      getStructuredState:
+        memoryExtractor.getStructuredState.bind(memoryExtractor),
     },
   });
   history.setContextLimit(contextLimit);
@@ -695,6 +709,9 @@ async function runBenchmark(opts: {
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
     });
+    memoryExtractor
+      .onTurnComplete(history.getAll(), result.usage)
+      .catch(() => undefined);
 
     orchestrator.startSpeculative();
     if (speculativeStarted && !compactionEvent) {
