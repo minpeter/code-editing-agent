@@ -2,6 +2,7 @@ import {
   type Command,
   type CommandAction,
   type CommandResult,
+  type CompactionCircuitBreaker,
   CompactionOrchestrator,
   type CompactionOrchestratorCallbacks,
   type CompactionResult,
@@ -463,6 +464,7 @@ export async function retryStreamTurnOnNoOutput<T>(params: {
 
 export interface AgentTUIConfig {
   agent: RunnableAgent;
+  circuitBreaker?: CompactionCircuitBreaker;
   commands?: Command[];
   compactionCallbacks?: CompactionOrchestratorCallbacks;
   footer?: { text?: string };
@@ -699,6 +701,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const compactionOrchestrator = new CompactionOrchestrator(
     config.messageHistory,
     {
+      circuitBreaker: config.circuitBreaker,
       ...userCompactionCallbacks,
       onApplied: (appliedDetail) => {
         const { baseMessageCount, jobId, newMessageCount, tokenDelta } =

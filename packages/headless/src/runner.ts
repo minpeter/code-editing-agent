@@ -1,6 +1,7 @@
 import type {
   CheckpointHistory,
   CompactionAppliedDetail,
+  CompactionCircuitBreaker,
   CompactionOrchestratorCallbacks,
   ModelMessage,
   RunnableAgent,
@@ -154,6 +155,7 @@ function getRecommendedMaxOutputTokens(
 
 export interface HeadlessRunnerConfig {
   agent: RunnableAgent;
+  circuitBreaker?: CompactionCircuitBreaker;
   compactionCallbacks?: CompactionOrchestratorCallbacks;
   emitEvent?: (event: TrajectoryEvent) => void;
   initialUserMessage?: InitialUserMessage;
@@ -340,6 +342,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const compactionOrchestrator = new CompactionOrchestrator(
     config.messageHistory,
     {
+      circuitBreaker: config.circuitBreaker,
       ...baseCompactionCallbacks,
       ...metricsCompactionCallbacks,
       onBlockingChange: (event) => {

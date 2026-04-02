@@ -1,6 +1,7 @@
 import {
   CheckpointHistory,
   type Command,
+  CompactionCircuitBreaker,
   type CompactionResult,
   type ContextUsage,
   createAgent,
@@ -108,6 +109,7 @@ function createCompactionConfig(
     enabled: true,
     contextLimit: COMPACTION_CONTEXT_TOKENS,
     keepRecentTokens: COMPACTION_KEEP_RECENT_TOKENS,
+    microCompact: true,
     reserveTokens: COMPACTION_RESERVE_TOKENS,
     thresholdRatio: COMPACTION_THRESHOLD_RATIO,
     speculativeStartRatio: COMPACTION_SPECULATIVE_RATIO,
@@ -158,6 +160,7 @@ const main = defineCommand({
     const sessionManager = new SessionManager("minimal-agent");
     sessionManager.initialize();
     const sessionMemoryTracker = new SessionMemoryTracker();
+    const circuitBreaker = new CompactionCircuitBreaker();
     const selectedModelId = resolveModelId(args.model);
     const friendli = createFriendliProvider();
     const model = friendli(selectedModelId);
@@ -195,6 +198,7 @@ const main = defineCommand({
     if (prompt) {
       await runHeadless({
         agent,
+        circuitBreaker,
         sessionId: sessionManager.getId(),
         emitEvent,
         initialUserMessage: {
@@ -212,6 +216,7 @@ const main = defineCommand({
 
     await createAgentTUI({
       agent,
+      circuitBreaker,
       commands: LOCAL_COMMANDS,
       footer: {
         get text() {
