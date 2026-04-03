@@ -9,7 +9,6 @@ import {
   createModelSummarizer,
   estimateTokens,
   getContextPressureLevel,
-  PostCompactRestorer,
   SessionManager,
   SessionMemoryTracker,
 } from "@ai-sdk-tool/harness";
@@ -81,6 +80,15 @@ const LOCAL_COMMANDS: Command[] = [
       message: "Started a new session.",
     }),
   },
+  {
+    name: "compact",
+    description: "Manually compact conversation history",
+    execute: () => ({
+      success: true,
+      action: { type: "compact" as const },
+      message: "Compaction triggered.",
+    }),
+  },
 ];
 
 const env = createEnv({
@@ -110,6 +118,7 @@ function createCompactionConfig(
   tracker: SessionMemoryTracker
 ) {
   return {
+    compactionDirection: "keep-recent" as const,
     enabled: true,
     contextLimit: COMPACTION_CONTEXT_TOKENS,
     keepRecentTokens: COMPACTION_KEEP_RECENT_TOKENS,
@@ -170,7 +179,6 @@ const main = defineCommand({
     const sessionManager = new SessionManager("minimal-agent");
     sessionManager.initialize();
     const circuitBreaker = new CompactionCircuitBreaker();
-    const postCompactRestorer = new PostCompactRestorer();
     const sessionMemoryTracker = new SessionMemoryTracker();
     const selectedModelId = resolveModelId(args.model);
     const friendli = createFriendliProvider();
@@ -200,12 +208,6 @@ const main = defineCommand({
     const handleCompactionComplete = (result: CompactionResult): void => {
       if (!(result.success && result.summaryMessageId)) {
         return;
-      }
-
-      const restorationMessage = postCompactRestorer.buildRestorationMessage();
-      if (restorationMessage) {
-        messageHistory.addUserMessage(restorationMessage);
-        postCompactRestorer.clear();
       }
 
       const msg = messageHistory
@@ -269,7 +271,6 @@ const main = defineCommand({
         if (action.type === "new-session") {
           sessionManager.initialize();
           circuitBreaker.resetForNewSession();
-          postCompactRestorer.clear();
         }
       },
     });

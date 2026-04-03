@@ -1,4 +1,8 @@
-import type { ContextUsage } from "@ai-sdk-tool/harness";
+import {
+  type ContextUsage,
+  computeContextBudget,
+  getContextPressureLevel,
+} from "@ai-sdk-tool/harness";
 
 export const formatTokens = (n: number): string => {
   if (n >= 1000) {
@@ -7,10 +11,21 @@ export const formatTokens = (n: number): string => {
   return String(n);
 };
 
+const PRESSURE_LABELS: Record<string, string> = {
+  normal: "",
+  elevated: " [elevated]",
+  warning: " [WARNING]",
+  critical: " [CRITICAL]",
+};
+
 export const formatContextUsage = (contextUsage: ContextUsage): string => {
   if (contextUsage.limit <= 0) {
     return `?/${formatTokens(contextUsage.limit)} (?)`;
   }
 
-  return `${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)`;
+  const budget = computeContextBudget({ contextLimit: contextUsage.limit });
+  const pressure = getContextPressureLevel(contextUsage.used, budget);
+  const label = PRESSURE_LABELS[pressure] ?? "";
+
+  return `${formatTokens(contextUsage.used)}/${formatTokens(contextUsage.limit)} (${contextUsage.percentage}%)${label}`;
 };

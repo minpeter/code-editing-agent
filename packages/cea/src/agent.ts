@@ -719,6 +719,7 @@ export class AgentManager {
     );
 
     return {
+      compactionDirection: "keep-recent" as const,
       contextLimit: effectiveContextLength,
       enabled: true,
       maxTokens,
@@ -728,6 +729,7 @@ export class AgentManager {
       microCompact: {
         clearToolResults: true,
         keepRecentToolResults: 5,
+        clearOlderThanMs: 3_600_000,
       },
       speculativeStartRatio: computeSpeculativeStartRatio(
         effectiveContextLength,
