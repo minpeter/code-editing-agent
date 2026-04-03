@@ -560,6 +560,14 @@ const requestSignalShutdown = (code: number): void => {
   exitWithCleanup(code);
 };
 
+const getAtifOutputPath = (args: { atif?: boolean }): string | undefined => {
+  if (!args.atif) {
+    return undefined;
+  }
+
+  return process.env.ATIF_OUTPUT_PATH ?? "/logs/agent/trajectory.json";
+};
+
 process.once("exit", () => {
   unregisterSkillLoadListener();
   cleanup();
@@ -609,6 +617,12 @@ const mainCommand = defineCommand({
     "max-iterations": {
       type: "string",
       description: "Maximum number of iterations (headless mode only)",
+    },
+    atif: {
+      type: "boolean",
+      description:
+        "Generate trajectory.json in ATIF-v1.6 format (Harbor compatible)",
+      default: false,
     },
   },
   async run({ args }) {
@@ -660,6 +674,7 @@ const mainCommand = defineCommand({
             return n > 0 ? n : undefined;
           })()
         : undefined;
+      const atifOutputPath = getAtifOutputPath(args as { atif?: boolean });
 
       try {
         await runHeadless({
@@ -679,6 +694,7 @@ const mainCommand = defineCommand({
             originalContent: preparedPrompt.originalText,
           },
           maxIterations,
+          atifOutputPath,
           messageHistory,
           modelId: agentManager.getModelId(),
           compactionCallbacks: {

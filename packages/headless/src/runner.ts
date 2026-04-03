@@ -15,6 +15,7 @@ import {
 } from "@ai-sdk-tool/harness";
 import { emitEvent as defaultEmitEvent } from "./emit";
 import { processStream } from "./stream-processor";
+import { TrajectoryCollector } from "./trajectory-collector";
 import type { TrajectoryEvent } from "./types";
 
 export interface InitialUserMessage {
@@ -38,6 +39,8 @@ interface UsageMeasurement {
   outputTokens?: number;
   totalTokens?: number;
 }
+
+type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
 
 const MAX_NO_OUTPUT_RETRIES = 3;
 
@@ -155,8 +158,87 @@ function getRecommendedMaxOutputTokens(
   return history.getRecommendedMaxOutputTokens(messages);
 }
 
+function collectTrajectoryEvent(
+  collector: TrajectoryCollector | null,
+  event: TrajectoryEvent
+): void {
+  if (!collector) {
+    return;
+  }
+
+  switch (event.type) {
+    case "step": {
+      collector.addStep(event);
+      return;
+    }
+    case "compaction": {
+      collector.addCompaction(event);
+      return;
+    }
+    case "metadata": {
+      collector.addMetadata(event);
+      return;
+    }
+    default: {
+      return;
+    }
+  }
+}
+
+function createEmitAndCollect(
+  emitEventSink: (event: TrajectoryEvent) => void,
+  collector: TrajectoryCollector | null
+): (event: TrajectoryEvent) => void {
+  return (event: TrajectoryEvent): void => {
+    emitEventSink(event);
+    collectTrajectoryEvent(collector, event);
+  };
+}
+
+async function runTodoReminderLoop(params: {
+  emitAndCollect: (event: TrajectoryEvent) => void;
+  enqueueUserMessage: (message: { content: string }) => Promise<void>;
+  onTodoReminder: () => Promise<{
+    hasReminder: boolean;
+    message: string | null;
+  }>;
+  processAgentResponse: () => Promise<ProcessAgentResponseResult>;
+}): Promise<void> {
+  const MAX_TODO_REMINDER_ITERATIONS = 20;
+  let todoReminderCount = 0;
+
+  while (true) {
+    todoReminderCount += 1;
+    if (todoReminderCount > MAX_TODO_REMINDER_ITERATIONS) {
+      params.emitAndCollect({
+        timestamp: new Date().toISOString(),
+        type: "error",
+        error: `Todo continuation safety cap reached (${MAX_TODO_REMINDER_ITERATIONS} reminders).`,
+      });
+      break;
+    }
+
+    const reminder = await params.onTodoReminder();
+    if (!reminder.hasReminder) {
+      break;
+    }
+
+    const reminderMessage = reminder.message;
+    if (!reminderMessage) {
+      continue;
+    }
+
+    await params.enqueueUserMessage({ content: reminderMessage });
+    const reminderRunResult = await params.processAgentResponse();
+    if (reminderRunResult === "max-iterations-reached") {
+      break;
+    }
+  }
+}
+
 export interface HeadlessRunnerConfig {
   agent: RunnableAgent;
+  atifOutputPath?: string;
   circuitBreaker?: CompactionCircuitBreaker;
   compactionCallbacks?: CompactionOrchestratorCallbacks;
   emitEvent?: (event: TrajectoryEvent) => void;
@@ -180,7 +262,14 @@ export interface HeadlessRunnerConfig {
 }
 
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
-  const emitEvent = config.emitEvent ?? defaultEmitEvent;
+  const emitEventSink = config.emitEvent ?? defaultEmitEvent;
+  const trajectoryCollector = config.atifOutputPath
+    ? new TrajectoryCollector()
+    : null;
+  const emitAndCollect = createEmitAndCollect(
+    emitEventSink,
+    trajectoryCollector
+  );
   const isMetricsEnabled = harnessEnv.COMPACTION_DEBUG;
   let turnNumber = 0;
   let blockingStartTime: number | null = null;
@@ -192,7 +281,6 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       }
     : undefined;
   let totalIterationCount = 0;
-  type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
   type StreamTurnResult = Awaited<ReturnType<typeof processStream>>;
   type StreamUsage = StreamTurnResult["usage"];
   const measureUsageIfAvailable = async (
@@ -287,7 +375,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const metricsCompactionCallbacks: Partial<CompactionOrchestratorCallbacks> = {
     onCompactionStart: () => {
       emitMetric?.({ event: "compaction_start", turn: turnNumber });
-      emitEvent({
+      emitAndCollect({
         type: "compaction",
         timestamp: new Date().toISOString(),
         event: "start",
@@ -303,7 +391,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         tokensAfter: result.tokensAfter,
         strategy: (result as unknown as Record<string, unknown>).strategy,
       });
-      emitEvent({
+      emitAndCollect({
         type: "compaction",
         timestamp: new Date().toISOString(),
         event: "complete",
@@ -347,7 +435,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         blockingStartTime = null;
       }
 
-      emitEvent({
+      emitAndCollect({
         type: "compaction",
         timestamp: new Date().toISOString(),
         event: "blocking_change",
@@ -416,7 +504,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       return false;
     }
 
-    emitEvent({
+    emitAndCollect({
       timestamp: new Date().toISOString(),
       type: "error",
       error: `Max iterations (${config.maxIterations}) reached`,
@@ -519,7 +607,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         });
         stepId += 1;
         const processStreamResult = await processStream({
-          emitEvent,
+          emitEvent: emitAndCollect,
           modelId: config.modelId,
           onMessages: (msgs) => {
             pendingMessages = msgs;
@@ -611,7 +699,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   ): Promise<void> => {
     turnNumber += 1;
     stepId += 1;
-    emitEvent({
+    emitAndCollect({
       type: "step",
       step_id: stepId,
       timestamp: new Date().toISOString(),
@@ -662,44 +750,33 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       }
     };
 
+  emitAndCollect({
+    type: "metadata",
+    timestamp: new Date().toISOString(),
+    session_id: config.sessionId,
+    agent: {
+      name: "plugsuits",
+      version: "1.0.0",
+      model_name: config.modelId,
+    },
+  });
+
   if (config.initialUserMessage) {
     await enqueueUserMessage(config.initialUserMessage);
   }
 
   const initialRunResult = await processAgentResponse();
 
-  if (initialRunResult === "max-iterations-reached" || !config.onTodoReminder) {
-    return;
+  if (initialRunResult !== "max-iterations-reached" && config.onTodoReminder) {
+    await runTodoReminderLoop({
+      emitAndCollect,
+      enqueueUserMessage,
+      onTodoReminder: config.onTodoReminder,
+      processAgentResponse,
+    });
   }
 
-  const MAX_TODO_REMINDER_ITERATIONS = 20;
-  let todoReminderCount = 0;
-
-  while (true) {
-    todoReminderCount += 1;
-    if (todoReminderCount > MAX_TODO_REMINDER_ITERATIONS) {
-      emitEvent({
-        timestamp: new Date().toISOString(),
-        type: "error",
-        error: `Todo continuation safety cap reached (${MAX_TODO_REMINDER_ITERATIONS} reminders).`,
-      });
-      break;
-    }
-
-    const reminder = await config.onTodoReminder();
-    if (!reminder.hasReminder) {
-      break;
-    }
-
-    const reminderMessage = reminder.message;
-    if (!reminderMessage) {
-      continue;
-    }
-
-    await enqueueUserMessage({ content: reminderMessage });
-    const reminderRunResult = await processAgentResponse();
-    if (reminderRunResult === "max-iterations-reached") {
-      break;
-    }
+  if (config.atifOutputPath && trajectoryCollector) {
+    trajectoryCollector.writeTo(config.atifOutputPath);
   }
 }

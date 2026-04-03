@@ -109,6 +109,15 @@ describe("runHeadless", () => {
     });
 
     expect(events[0]).toMatchObject({
+      type: "metadata",
+      session_id: "session-1",
+      agent: {
+        name: "plugsuits",
+        version: "1.0.0",
+        model_name: "mock-model",
+      },
+    });
+    expect(events[1]).toMatchObject({
       type: "step",
       source: "user",
       message: "안녕",
@@ -384,11 +393,16 @@ describe("runHeadless", () => {
       sessionId: "session-jsonl-types",
     });
 
-    expect(collectedEvents[0]).toMatchObject({
+    const stepEvents = collectedEvents.filter(
+      (event): event is Extract<TrajectoryEvent, { type: "step" }> =>
+        event.type === "step"
+    );
+
+    expect(stepEvents[0]).toMatchObject({
       type: "step",
       source: "user",
     });
-    expect(collectedEvents[1]).toMatchObject({
+    expect(stepEvents[1]).toMatchObject({
       type: "step",
       source: "agent",
       tool_calls: expect.any(Array),
