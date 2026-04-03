@@ -647,7 +647,6 @@ const mainCommand = defineCommand({
         emitEvent({
           timestamp: new Date().toISOString(),
           type: "error",
-          sessionId: sessionManager.getId(),
           error: `[translation] Failed to translate input: ${preparedPrompt.error}. Using original text.`,
         });
       }
@@ -706,7 +705,6 @@ const mainCommand = defineCommand({
         emitEvent({
           timestamp: new Date().toISOString(),
           type: "error",
-          sessionId: sessionManager.getId(),
           error: error instanceof Error ? error.message : String(error),
         });
         exitWithCleanup(1);

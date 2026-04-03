@@ -495,6 +495,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
             ? { maxOutputTokens: streamMaxOutputTokens }
             : {}),
         });
+        stepId += 1;
         const processStreamResult = await processStream({
           emitEvent,
           modelId: config.modelId,
