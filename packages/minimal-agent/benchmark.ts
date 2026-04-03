@@ -320,7 +320,7 @@ const TURNS: TurnDef[] = [
     message:
       "What are the must-visit spots on the Amalfi Coast for food lovers?",
   },
-  // Probe 10 (turn 50): comprehensive final recall
+  // Probe 10 (turn 50): mid-point comprehensive
   {
     type: "probe",
     message:
@@ -335,6 +335,182 @@ const TURNS: TurnDef[] = [
       "Emma",
       "Italian",
       "hiking",
+    ],
+  },
+
+  // Block 11: Career updates (turns 51-54)
+  {
+    type: "fact",
+    message: "I just got a raise at work! My salary is now $180,000 per year.",
+  },
+  {
+    type: "fact",
+    message:
+      "I started mentoring a junior developer named Sarah at my startup.",
+  },
+  {
+    type: "fact",
+    message: "We are building a new microservices platform in Rust at work.",
+  },
+  {
+    type: "chat",
+    message: "What are best practices for mentoring junior Rust developers?",
+  },
+  // Probe 11 (turn 55): test career facts survival
+  {
+    type: "probe",
+    message:
+      "What do you know about my career? Where do I work, what language do I use, and who am I mentoring?",
+    expected: ["Rust", "software engineer", "Sarah"],
+  },
+
+  // Block 12: Travel planning (turns 56-59)
+  {
+    type: "fact",
+    message:
+      "David and I booked flights to Rome for next month. We leave on the 15th.",
+  },
+  {
+    type: "fact",
+    message:
+      "We are staying at Hotel Artemide near Termini station for 10 days.",
+  },
+  {
+    type: "fact",
+    message: "I want to take a cooking class in Trastevere while in Rome.",
+  },
+  {
+    type: "chat",
+    message: "What are the best restaurants near Termini station in Rome?",
+  },
+  // Probe 12 (turn 60): test travel + relationship facts
+  {
+    type: "probe",
+    message:
+      "Who am I traveling with, where are we going, and what cooking experience do I want?",
+    expected: ["David", "Rome", "cooking class"],
+  },
+
+  // Block 13: Health and fitness (turns 61-64)
+  {
+    type: "fact",
+    message:
+      "I completed my first half marathon last weekend in 1 hour 52 minutes.",
+  },
+  {
+    type: "fact",
+    message:
+      "My doctor recommended I eat more protein. I am trying to add fish to my Italian recipes.",
+  },
+  {
+    type: "fact",
+    message: "Max needs to go to the vet next Tuesday for his annual checkup.",
+  },
+  {
+    type: "chat",
+    message: "Can you suggest high-protein Italian fish dishes?",
+  },
+  // Probe 13 (turn 65): test health + pet facts
+  {
+    type: "probe",
+    message:
+      "What is my recent athletic achievement, and what is coming up for my dog?",
+    expected: ["half marathon", "Max", "vet"],
+  },
+
+  // Block 14: Home life (turns 66-69)
+  {
+    type: "fact",
+    message:
+      "We just moved to a bigger apartment in the Mission District of San Francisco.",
+  },
+  {
+    type: "fact",
+    message:
+      "I set up a dedicated home office with a standing desk and dual monitors.",
+  },
+  {
+    type: "fact",
+    message:
+      "Luna destroyed my basil plant on the balcony. I need to replant it.",
+  },
+  {
+    type: "chat",
+    message: "How do I cat-proof a balcony herb garden?",
+  },
+  // Probe 14 (turn 70): test home + pet interaction
+  {
+    type: "probe",
+    message:
+      "Where in San Francisco do I live now, and what happened to my balcony garden?",
+    expected: ["Mission District", "Luna", "basil"],
+  },
+
+  // Block 15: Social life (turns 71-74)
+  {
+    type: "fact",
+    message:
+      "My friend Bob is visiting from Portland next weekend. We met in college.",
+  },
+  {
+    type: "fact",
+    message:
+      "I started a weekly Italian dinner club with my neighbors every Thursday.",
+  },
+  {
+    type: "fact",
+    message:
+      "Emma is pregnant! I am going to be an aunt. The baby is due in September.",
+  },
+  {
+    type: "chat",
+    message:
+      "What would be a good Italian feast menu for a dinner club of 8 people?",
+  },
+  // Probe 15 (turn 75): test social + family updates
+  {
+    type: "probe",
+    message:
+      "What exciting news do I have about my sister, and who is visiting me soon?",
+    expected: ["Emma", "pregnant", "Bob"],
+  },
+
+  // Block 16: Final stretch (turns 76-79)
+  {
+    type: "fact",
+    message:
+      "I just published my first blog post about making fresh pasta from scratch.",
+  },
+  {
+    type: "fact",
+    message: "My Rust recipe app is almost done. I am calling it Cucina.",
+  },
+  {
+    type: "fact",
+    message:
+      "David proposed to me last night at our favorite restaurant Trattoria Milano! I said yes!",
+  },
+  {
+    type: "chat",
+    message:
+      "We want an Italian-themed wedding. What are traditional Italian wedding food customs?",
+  },
+  // Probe 16 (turn 80): ultimate comprehensive recall
+  {
+    type: "probe",
+    message:
+      "Final test: Tell me my name, my job, my city, both my pets, my partner, my sister, my favorite food, my programming language, and the most recent big news in my life.",
+    expected: [
+      "Alice",
+      "engineer",
+      "San Francisco",
+      "Max",
+      "Luna",
+      "David",
+      "Emma",
+      "Italian",
+      "Rust",
+      "engaged",
     ],
   },
 ];
