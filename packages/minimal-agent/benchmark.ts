@@ -1,12 +1,11 @@
 import { writeFileSync } from "node:fs";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import {
-  BackgroundMemoryExtractor,
   CheckpointHistory,
   CompactionOrchestrator,
   createModelSummarizer,
   estimateTokens,
-  InMemoryStore,
+  SessionMemoryTracker,
 } from "@ai-sdk-tool/harness";
 import { createFriendli } from "@friendliai/ai-provider";
 import { generateText, type LanguageModel, type ModelMessage } from "ai";
@@ -621,28 +620,19 @@ async function runBenchmark(opts: {
     contextLimit,
     ...(opts.baseline ? {} : { prompt: CHATBOT_COMPACTION_PROMPT }),
   });
-  const memoryExtractor = new BackgroundMemoryExtractor({
-    model,
-    store: new InMemoryStore(),
-    preset: "chat",
-    thresholds: {
-      minTokenGrowth: 500,
-      minTurns: 5,
-    },
-    maxExtractionTokens: 500,
-  });
+  const memoryTracker = new SessionMemoryTracker();
 
   const history = new CheckpointHistory({
     compaction: {
       enabled: true,
       contextLimit,
       keepRecentTokens,
+      microCompact: true,
       reserveTokens,
       thresholdRatio,
       speculativeStartRatio: speculativeRatio,
       summarizeFn,
-      getStructuredState:
-        memoryExtractor.getStructuredState.bind(memoryExtractor),
+      getStructuredState: memoryTracker.getStructuredState.bind(memoryTracker),
     },
   });
   history.setContextLimit(contextLimit);
@@ -656,6 +646,17 @@ async function runBenchmark(opts: {
       if (result.success) {
         const saved = result.tokensBefore - result.tokensAfter;
         compactionEvent = `compacted (−${saved})`;
+        if (result.summaryMessageId) {
+          const msg = history
+            .getAll()
+            .find((m) => m.id === result.summaryMessageId);
+          if (
+            msg?.message.role === "assistant" &&
+            typeof msg.message.content === "string"
+          ) {
+            memoryTracker.extractFactsFromSummary(msg.message.content);
+          }
+        }
       }
     },
     onJobStatus: (_id, _msg, state) => {
@@ -709,9 +710,6 @@ async function runBenchmark(opts: {
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
     });
-    memoryExtractor
-      .onTurnComplete(history.getAll(), result.usage)
-      .catch(() => undefined);
 
     orchestrator.startSpeculative();
     if (speculativeStarted && !compactionEvent) {

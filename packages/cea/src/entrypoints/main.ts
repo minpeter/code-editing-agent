@@ -5,6 +5,7 @@ import {
   CheckpointHistory,
   type Command,
   type CommandContext,
+  CompactionCircuitBreaker,
   CompactionOrchestrator,
   estimateTokens,
   parseCommand,
@@ -215,7 +216,10 @@ const messageHistory = createSessionScopedCheckpointHistory(
   sessionStoreBaseDir,
   "session-bootstrap"
 );
-const compactionOrchestrator = new CompactionOrchestrator(messageHistory);
+const compactionCircuitBreaker = new CompactionCircuitBreaker();
+const compactionOrchestrator = new CompactionOrchestrator(messageHistory, {
+  circuitBreaker: compactionCircuitBreaker,
+});
 
 let requestedProcessExitCode: number | null = null;
 let signalShutdownRequested = false;
