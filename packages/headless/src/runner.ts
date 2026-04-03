@@ -382,6 +382,8 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     }
   );
 
+  let stepId = 0;
+
   const hasReachedMaxIterations = (): boolean => {
     totalIterationCount += 1;
 
@@ -395,7 +397,6 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     emitEvent({
       timestamp: new Date().toISOString(),
       type: "error",
-      sessionId: config.sessionId,
       error: `Max iterations (${config.maxIterations}) reached`,
     });
     return true;
@@ -500,7 +501,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           onMessages: (msgs) => {
             pendingMessages = msgs;
           },
-          sessionId: config.sessionId,
+          stepId,
           shouldContinue: shouldContinueManualToolLoop,
           stream,
         });
@@ -586,11 +587,13 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     message: InitialUserMessage | { content: string }
   ): Promise<void> => {
     turnNumber += 1;
+    stepId += 1;
     emitEvent({
+      type: "step",
+      step_id: stepId,
       timestamp: new Date().toISOString(),
-      type: "user",
-      sessionId: config.sessionId,
-      content:
+      source: "user",
+      message:
         "eventContent" in message
           ? (message.eventContent ?? message.content)
           : message.content,
@@ -655,7 +658,6 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       emitEvent({
         timestamp: new Date().toISOString(),
         type: "error",
-        sessionId: config.sessionId,
         error: `Todo continuation safety cap reached (${MAX_TODO_REMINDER_ITERATIONS} reminders).`,
       });
       break;
