@@ -664,8 +664,11 @@ const mainCommand = defineCommand({
           compactionCallbacks: {
             onCompactionComplete: handleCompactionComplete,
           },
-          onTurnComplete: (messages) => {
+          onTurnComplete: (messages, usage) => {
             trackReadFileRestorationItems(messages);
+            agentManager._memoryExtractor
+              ?.onTurnComplete(messages, usage)
+              .catch(() => undefined);
           },
           onTodoReminder: async () => {
             const incompleteTodos = await getIncompleteTodos();
@@ -1228,8 +1231,11 @@ const mainCommand = defineCommand({
         showRawToolIo: env.DEBUG_SHOW_RAW_TOOL_IO,
         preprocessCommand: createCommandPreprocessor(),
         preprocessUserInput: createTranslationPreprocessor(),
-        onTurnComplete: (messages) => {
+        onTurnComplete: (messages, usage) => {
           trackReadFileRestorationItems(messages);
+          agentManager._memoryExtractor
+            ?.onTurnComplete(messages, usage)
+            .catch(() => undefined);
         },
         onCommandAction: async (action) => {
           if (action.type === "new-session") {

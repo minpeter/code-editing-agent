@@ -1,6 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ProviderOptions as AiProviderOptions } from "@ai-sdk/provider-utils";
 import {
+  BackgroundMemoryExtractor,
   type CompactionConfig,
   computeAdaptiveThresholdRatio as computeAdaptiveThresholdRatioFromPolicy,
   computeCompactionMaxTokens as computeCompactionMaxTokensFromPolicy,
@@ -10,6 +11,7 @@ import {
   estimateTokens,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
+  InMemoryStore,
   type PruningConfig,
 } from "@ai-sdk-tool/harness";
 import { createFriendli } from "@friendliai/ai-provider";
@@ -509,6 +511,7 @@ export function buildFileTrackingSummarizeFn(
 }
 
 export class AgentManager {
+  _memoryExtractor?: BackgroundMemoryExtractor;
   private modelId: string = DEFAULT_MODEL_ID;
   private modelType: ModelType = "serverless";
   private provider: ProviderType = "friendli";
@@ -658,8 +661,31 @@ export class AgentManager {
         contextLimit: effectiveContextLength,
       }
     );
-    const { summarizeFn, getStructuredState } =
+    const { summarizeFn, getStructuredState: fileTrackingState } =
       buildFileTrackingSummarizeFn(baseModelSummarizer);
+
+    const memoryExtractor = new BackgroundMemoryExtractor({
+      model: this.getProviderModel(this.modelId, this.provider),
+      store: new InMemoryStore(),
+      preset: "code",
+    });
+    this._memoryExtractor = memoryExtractor;
+
+    const getStructuredState = (): string | undefined => {
+      const fileState = fileTrackingState();
+      const memoryState = memoryExtractor.getStructuredState();
+      if (!(fileState || memoryState)) {
+        return undefined;
+      }
+      const parts: string[] = [];
+      if (memoryState) {
+        parts.push(memoryState);
+      }
+      if (fileState) {
+        parts.push(fileState);
+      }
+      return parts.join("\n\n");
+    };
 
     // Compute context-adaptive threshold ratio
     const thresholdRatio = computeAdaptiveThresholdRatio(

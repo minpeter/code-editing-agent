@@ -1,14 +1,5 @@
 export type { LanguageModelUsage } from "ai";
 export { createAgent } from "./agent";
-export type {
-  ApiContextManagementOptions,
-  ContextManagementConfig,
-  ContextManagementEdit,
-} from "./api-context-management";
-export {
-  buildContextManagementConfig,
-  isContextManagementSupported,
-} from "./api-context-management";
 export type { BackgroundMemoryExtractorConfig } from "./background-memory-extractor";
 export { BackgroundMemoryExtractor } from "./background-memory-extractor";
 export type {
