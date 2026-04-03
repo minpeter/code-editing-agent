@@ -670,6 +670,7 @@ const mainCommand = defineCommand({
                 maxOutputTokens: opts.maxOutputTokens,
               }),
           },
+          circuitBreaker: compactionCircuitBreaker,
           measureUsage: (messages) => agentManager.measureUsage(messages),
           sessionId: sessionManager.getId(),
           emitEvent,
@@ -1220,6 +1221,7 @@ const mainCommand = defineCommand({
     try {
       await createAgentTUI({
         agent: buildAgentStreamWithTodoContinuation(),
+        circuitBreaker: compactionCircuitBreaker,
         measureUsage: (messages) => agentManager.measureUsage(messages),
         messageHistory,
         skills,

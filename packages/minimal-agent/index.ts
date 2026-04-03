@@ -271,6 +271,7 @@ const main = defineCommand({
         if (action.type === "new-session") {
           sessionManager.initialize();
           circuitBreaker.resetForNewSession();
+          sessionMemoryTracker.clear();
         }
       },
     });

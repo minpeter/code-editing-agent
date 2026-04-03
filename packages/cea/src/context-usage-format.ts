@@ -18,12 +18,19 @@ const PRESSURE_LABELS: Record<string, string> = {
   critical: " [CRITICAL]",
 };
 
-export const formatContextUsage = (contextUsage: ContextUsage): string => {
+export const formatContextUsage = (
+  contextUsage: ContextUsage,
+  opts?: { reserveTokens?: number; thresholdRatio?: number }
+): string => {
   if (contextUsage.limit <= 0) {
     return `?/${formatTokens(contextUsage.limit)} (?)`;
   }
 
-  const budget = computeContextBudget({ contextLimit: contextUsage.limit });
+  const budget = computeContextBudget({
+    contextLimit: contextUsage.limit,
+    reserveTokens: opts?.reserveTokens,
+    thresholdRatio: opts?.thresholdRatio,
+  });
   const pressure = getContextPressureLevel(contextUsage.used, budget);
   const label = PRESSURE_LABELS[pressure] ?? "";
 
