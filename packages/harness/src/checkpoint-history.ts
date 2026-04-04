@@ -428,6 +428,7 @@ export class CheckpointHistory {
       updatedAt: usage.updatedAt ?? new Date(),
     };
     this.revision += 1;
+    this.truncateToolResultsIfOverBudget();
   }
 
   getActualUsage(): ActualTokenUsage | null {
