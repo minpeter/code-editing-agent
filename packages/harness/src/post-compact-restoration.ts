@@ -42,6 +42,10 @@ export class PostCompactRestorer {
     this.enforceMaxItems();
   }
 
+  setMaxTotalTokens(tokens: number): void {
+    this.config.maxTotalTokens = Math.max(0, tokens);
+  }
+
   removeItem(label: string): void {
     this.items.delete(label);
   }

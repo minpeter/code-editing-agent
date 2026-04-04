@@ -605,17 +605,18 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
             ? { maxOutputTokens: streamMaxOutputTokens }
             : {}),
         });
-        stepId += 1;
+        const nextStepId = stepId + 1;
         const processStreamResult = await processStream({
           emitEvent: emitAndCollect,
           modelId: config.modelId,
           onMessages: (msgs) => {
             pendingMessages = msgs;
           },
-          stepId,
+          stepId: nextStepId,
           shouldContinue: shouldContinueManualToolLoop,
           stream,
         });
+        stepId = nextStepId;
         return {
           pendingMessages,
           shouldContinue: processStreamResult.shouldContinue,
