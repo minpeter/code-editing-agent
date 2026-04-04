@@ -1371,9 +1371,10 @@ export class CheckpointHistory {
       return;
     }
 
-    const thresholdRatio = this.compactionConfig.thresholdRatio ?? 0.5;
-    const hardCeiling = Math.floor(
-      contextLimit * Math.max(thresholdRatio, 0.5)
+    const reserveTokens = this.compactionConfig.reserveTokens ?? 0;
+    const hardCeiling = Math.max(
+      Math.floor(contextLimit * 0.9),
+      contextLimit - reserveTokens
     );
     const currentTokens = this.getCurrentUsageTokens();
 

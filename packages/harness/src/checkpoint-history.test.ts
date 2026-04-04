@@ -1728,8 +1728,8 @@ describe("20K spike prevention — integration", () => {
     const h = new CheckpointHistory({
       compaction: {
         enabled: true,
-        contextLimit: 20_000,
-        reserveTokens: 2000,
+        contextLimit: 40_000,
+        reserveTokens: 4000,
         keepRecentTokens: 0,
         summarizeFn: async () => "compact summary",
       },
@@ -1768,7 +1768,7 @@ describe("20K spike prevention — integration", () => {
 
     const estimatedTokens = h.getEstimatedTokens();
     expect(estimatedTokens).toBeGreaterThan(6500);
-    expect(estimatedTokens).toBeLessThan(9000);
+    expect(estimatedTokens).toBeLessThan(16_000);
 
     const contextUsage = h.getContextUsage();
     expect(contextUsage.source).toBe("actual");
