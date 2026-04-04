@@ -122,7 +122,7 @@ export function generateContextSuggestions(
   if (toolResultRatio > TOOL_RESULTS_WARNING_RATIO) {
     suggestions.push({
       level: "warning",
-      message: `Tool results account for ${Math.round(toolResultRatio * 100)}% of context tokens. Consider tighter queries and output limits.`,
+      message: `Tool results: ${Math.round(toolResultRatio * 100)}% of context — use narrower queries`,
       estimatedSavings: Math.floor(totalToolResultTokens * 0.25),
     });
   }
@@ -135,8 +135,8 @@ export function generateContextSuggestions(
       level: "warning",
       message:
         largeToolResult.kind === "aggregate"
-          ? `${largeToolResult.label} returned ${largeToolResult.tokens} tokens in a single result. Use offset/limit or narrower queries.`
-          : `A single tool result (${largeToolResult.label}) is ${largeToolResult.tokens} tokens. Use offset/limit or narrower queries.`,
+          ? `${largeToolResult.label}: ${largeToolResult.tokens} tokens — use offset/limit`
+          : `Tool result #${largeToolResult.label}: ${largeToolResult.tokens} tokens — use offset/limit`,
       estimatedSavings: Math.floor(largeToolResult.tokens * 0.5),
     });
   }

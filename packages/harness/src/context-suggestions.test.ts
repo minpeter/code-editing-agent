@@ -61,9 +61,7 @@ describe("generateContextSuggestions", () => {
     );
 
     const toolWarning = suggestions.find((item) => {
-      return item.message.includes(
-        "Tool results account for 25% of context tokens"
-      );
+      return item.message.includes("Tool results: 25%");
     });
 
     expect(toolWarning).toBeDefined();
@@ -110,9 +108,7 @@ describe("generateContextSuggestions", () => {
     );
 
     const largeToolResult = suggestions.find((item) => {
-      return item.message.includes(
-        "read_file returned 6200 tokens in a single result"
-      );
+      return item.message.includes("read_file: 6200 tokens");
     });
 
     expect(largeToolResult).toBeDefined();
