@@ -782,101 +782,107 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     config.messageHistory,
     {
       circuitBreaker: config.circuitBreaker,
-      ...userCompactionCallbacks,
-      onApplied: (appliedDetail) => {
-        const { baseMessageCount, jobId, newMessageCount, tokenDelta } =
-          appliedDetail;
-        const saved = Math.abs(tokenDelta);
-        const usage = config.messageHistory.getContextUsage();
-        const after = usage ? `${usage.used}` : "?";
-        const summarizedCount = baseMessageCount - newMessageCount;
-        const detailText = buildCompactionDetail(saved, after, summarizedCount);
-        addCompactionNotice(
-          formatCompactionAppliedNotice({ detail: detailText, jobId })
-        );
-        updateHeader();
-        tui.requestRender();
-        userCompactionCallbacks?.onApplied?.(appliedDetail);
-      },
-      onBlockingChange: (event) => {
-        if (event.blocking) {
-          blockingCompactionActive = true;
-          backgroundStatuses.clear();
-          setBackgroundStatus(
-            "blocking-compaction",
-            "Compacting...",
-            "running"
+      callbacks: {
+        ...userCompactionCallbacks,
+        onApplied: (appliedDetail) => {
+          const { baseMessageCount, jobId, newMessageCount, tokenDelta } =
+            appliedDetail;
+          const saved = Math.abs(tokenDelta);
+          const usage = config.messageHistory.getContextUsage();
+          const after = usage ? `${usage.used}` : "?";
+          const summarizedCount = baseMessageCount - newMessageCount;
+          const detailText = buildCompactionDetail(
+            saved,
+            after,
+            summarizedCount
           );
-          userCompactionCallbacks?.onBlockingChange?.(event);
-          return;
-        }
+          addCompactionNotice(
+            formatCompactionAppliedNotice({ detail: detailText, jobId })
+          );
+          updateHeader();
+          tui.requestRender();
+          userCompactionCallbacks?.onApplied?.(appliedDetail);
+        },
+        onBlockingChange: (event) => {
+          if (event.blocking) {
+            blockingCompactionActive = true;
+            backgroundStatuses.clear();
+            setBackgroundStatus(
+              "blocking-compaction",
+              "Compacting...",
+              "running"
+            );
+            userCompactionCallbacks?.onBlockingChange?.(event);
+            return;
+          }
 
-        blockingCompactionActive = false;
-        clearBackgroundStatus("blocking-compaction");
-        updateHeader();
-        tui.requestRender();
-        userCompactionCallbacks?.onBlockingChange?.(event);
-      },
-      onCompactionComplete: (result) => {
-        userCompactionCallbacks?.onCompactionComplete?.(result);
-      },
-      onCompactionError: (error) => {
-        userCompactionCallbacks?.onCompactionError?.(error);
-      },
-      onError: (message, error) => {
-        console.error(`${message}:`, error);
-        userCompactionCallbacks?.onError?.(message, error);
-      },
-      onJobStatus: (id, message, state) => {
-        if (
-          !shouldDisplayBackgroundCompactionStatus({
-            blockingCompactionActive,
-            state,
-          })
-        ) {
-          if (state === "clear") {
+          blockingCompactionActive = false;
+          clearBackgroundStatus("blocking-compaction");
+          updateHeader();
+          tui.requestRender();
+          userCompactionCallbacks?.onBlockingChange?.(event);
+        },
+        onCompactionComplete: (result) => {
+          userCompactionCallbacks?.onCompactionComplete?.(result);
+        },
+        onCompactionError: (error) => {
+          userCompactionCallbacks?.onCompactionError?.(error);
+        },
+        onError: (message, error) => {
+          console.error(`${message}:`, error);
+          userCompactionCallbacks?.onError?.(message, error);
+        },
+        onJobStatus: (id, message, state) => {
+          if (
+            !shouldDisplayBackgroundCompactionStatus({
+              blockingCompactionActive,
+              state,
+            })
+          ) {
+            if (state === "clear") {
+              clearBackgroundStatus(id);
+            }
+            updateHeader();
+            tui.requestRender();
+            userCompactionCallbacks?.onJobStatus?.(id, message, state);
+            return;
+          }
+
+          if (state === "running") {
+            setBackgroundStatus(id, "Background compaction...", "running");
+          } else {
             clearBackgroundStatus(id);
           }
           updateHeader();
           tui.requestRender();
           userCompactionCallbacks?.onJobStatus?.(id, message, state);
-          return;
-        }
-
-        if (state === "running") {
-          setBackgroundStatus(id, "Background compaction...", "running");
-        } else {
-          clearBackgroundStatus(id);
-        }
-        updateHeader();
-        tui.requestRender();
-        userCompactionCallbacks?.onJobStatus?.(id, message, state);
-      },
-      onRejected: () => {
-        addCompactionNotice("↻ Compaction skipped (no token reduction)");
-        updateHeader();
-        tui.requestRender();
-        userCompactionCallbacks?.onRejected?.();
-      },
-      onSpeculativeReady: () => {
-        const result = compactionOrchestrator.applyReady();
-        if (result.applied) {
-          measureUsageAfterCompaction()
-            .then(() => {
-              updateHeader();
-              tui.requestRender();
-            })
-            .catch(Boolean);
-        }
-        userCompactionCallbacks?.onSpeculativeReady?.();
-      },
-      onStillExceeded: () => {
-        addCompactionNotice(
-          "↻ Compaction: context limit still tight after retries — older messages were condensed, some detail may be lost"
-        );
-        updateHeader();
-        tui.requestRender();
-        userCompactionCallbacks?.onStillExceeded?.();
+        },
+        onRejected: () => {
+          addCompactionNotice("↻ Compaction skipped (no token reduction)");
+          updateHeader();
+          tui.requestRender();
+          userCompactionCallbacks?.onRejected?.();
+        },
+        onSpeculativeReady: () => {
+          const result = compactionOrchestrator.applyReady();
+          if (result.applied) {
+            measureUsageAfterCompaction()
+              .then(() => {
+                updateHeader();
+                tui.requestRender();
+              })
+              .catch(Boolean);
+          }
+          userCompactionCallbacks?.onSpeculativeReady?.();
+        },
+        onStillExceeded: () => {
+          addCompactionNotice(
+            "↻ Compaction: context limit still tight after retries — older messages were condensed, some detail may be lost"
+          );
+          updateHeader();
+          tui.requestRender();
+          userCompactionCallbacks?.onStillExceeded?.();
+        },
       },
     }
   );
