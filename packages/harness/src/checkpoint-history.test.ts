@@ -1531,12 +1531,11 @@ describe("systemPromptTokens in estimated usage", () => {
     expect(usage.used).toBeGreaterThanOrEqual(505);
   });
 
-  it("does NOT double-count systemPromptTokens when actualUsage is available", () => {
+  it("invalidates actualUsage when systemPromptTokens changes", () => {
     const h = new CheckpointHistory({
       compaction: { enabled: false, contextLimit: 0 },
     });
 
-    // Set actual usage from API (already includes system prompt in API's total)
     h.updateActualUsage({
       inputTokens: 4800,
       outputTokens: 200,
@@ -1544,13 +1543,32 @@ describe("systemPromptTokens in estimated usage", () => {
       updatedAt: new Date(),
     });
 
-    // Set system prompt tokens
+    expect(h.getContextUsage().source).toBe("actual");
+
+    h.setSystemPromptTokens(500);
+
+    const usage = h.getContextUsage();
+    expect(usage.source).toBe("estimated");
+  });
+
+  it("does NOT invalidate actualUsage when systemPromptTokens is set to the same value", () => {
+    const h = new CheckpointHistory({
+      compaction: { enabled: false, contextLimit: 0 },
+    });
+
+    h.setSystemPromptTokens(500);
+
+    h.updateActualUsage({
+      inputTokens: 4800,
+      outputTokens: 200,
+      totalTokens: 5000,
+      updatedAt: new Date(),
+    });
+
     h.setSystemPromptTokens(500);
 
     const usage = h.getContextUsage();
     expect(usage.source).toBe("actual");
-    // Must be exactly 4800 (inputTokens from actual, NO +500 double-count)
-    // getContextUsage actual branch uses: this.actualUsage.inputTokens
     expect(usage.used).toBe(4800);
   });
 
@@ -2005,5 +2023,145 @@ describe("API round split boundary adjustment", () => {
     ).adjustSplitIndexToApiRoundBoundary(history.getAll(), 1);
 
     expect(adjustedSplitIndex).toBe(1);
+  });
+});
+
+describe("truncateSingleToolResult immutability", () => {
+  it("does not mutate previously exposed message references", () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: false,
+        contextLimit: 50,
+        reserveTokens: 0,
+      },
+    });
+
+    const largeOutput = "x".repeat(6000);
+
+    h.addUserMessage("read the file");
+    h.addModelMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "read_file",
+            input: { path: "big.txt" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "read_file",
+            output: { type: "text" as const, value: largeOutput },
+          },
+        ],
+      },
+    ]);
+
+    const snapshotBefore = h.toModelMessages();
+    const toolMsg = snapshotBefore.find((m) => m.role === "tool");
+    const originalContent = Array.isArray(toolMsg?.content)
+      ? toolMsg.content
+      : [];
+    const originalPart = originalContent[0] as {
+      type: string;
+      output?: { type: string; value: string };
+    };
+    const originalValueRef = originalPart?.output?.value;
+
+    h.setContextLimit(50);
+    h.updateActualUsage({
+      inputTokens: 2000,
+      outputTokens: 0,
+      totalTokens: 2000,
+    });
+
+    const snapshotAfter = h.toModelMessages();
+    const toolMsgAfter = snapshotAfter.find((m) => m.role === "tool");
+    const afterContent = Array.isArray(toolMsgAfter?.content)
+      ? toolMsgAfter.content
+      : [];
+    const afterPart = afterContent[0] as {
+      type: string;
+      output?: { type: string; value: string };
+    };
+    expect(afterPart?.output?.value).not.toBe(largeOutput);
+
+    expect(originalPart?.output?.value).toBe(originalValueRef);
+  });
+
+  it("does not mutate object-typed tool result output in-place", () => {
+    const h = new CheckpointHistory({
+      compaction: {
+        enabled: false,
+        contextLimit: 50,
+        reserveTokens: 0,
+      },
+    });
+
+    const largeValue = "y".repeat(6000);
+
+    h.addUserMessage("read the file");
+    h.addModelMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_2",
+            toolName: "read_file",
+            input: { path: "big.txt" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_2",
+            toolName: "read_file",
+            output: { type: "text" as const, value: largeValue },
+          },
+        ],
+      },
+    ]);
+
+    const snapshotBefore = h.toModelMessages();
+    const toolMsg = snapshotBefore.find((m) => m.role === "tool");
+    const originalContent = Array.isArray(toolMsg?.content)
+      ? toolMsg.content
+      : [];
+    const originalPart = originalContent[0] as {
+      type: string;
+      output?: { type: string; value: string };
+    };
+    const originalValueRef = originalPart?.output?.value;
+
+    h.setContextLimit(50);
+    h.updateActualUsage({
+      inputTokens: 2000,
+      outputTokens: 0,
+      totalTokens: 2000,
+    });
+
+    const snapshotAfter = h.toModelMessages();
+    const toolMsgAfter = snapshotAfter.find((m) => m.role === "tool");
+    const afterContent = Array.isArray(toolMsgAfter?.content)
+      ? toolMsgAfter.content
+      : [];
+    const afterPart = afterContent[0] as {
+      type: string;
+      output?: { type: string; value: string };
+    };
+    expect(afterPart?.output?.value).not.toBe(largeValue);
+
+    expect(originalPart?.output?.value).toBe(originalValueRef);
   });
 });

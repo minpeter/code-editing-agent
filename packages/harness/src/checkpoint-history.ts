@@ -487,7 +487,11 @@ export class CheckpointHistory {
   }
 
   setSystemPromptTokens(tokens: number): void {
+    const prev = this.systemPromptTokens;
     this.systemPromptTokens = tokens;
+    if (prev !== tokens && this.actualUsage) {
+      this.actualUsage = null;
+    }
     this.revision += 1;
   }
 
@@ -1423,8 +1427,14 @@ export class CheckpointHistory {
           part.type === "tool-result"
         ) {
           const output = (part as { output?: unknown }).output;
+          // Use inner field text when available, consistent with truncateSingleToolResult.
+          // This ensures charsToFree math operates on the same text basis as the token estimate.
+          const innerFieldText = this.extractInnerFieldText(output);
           const text =
-            typeof output === "string" ? output : JSON.stringify(output ?? "");
+            innerFieldText ??
+            (typeof output === "string"
+              ? output
+              : JSON.stringify(output ?? ""));
           entries.push({
             messageIndex: mi,
             partIndex: pi,
@@ -1443,19 +1453,25 @@ export class CheckpointHistory {
     currentTokens: number,
     hardCeiling: number
   ): number {
-    const content = this.messages[entry.messageIndex].message.content;
+    const message = this.messages[entry.messageIndex];
+    const content = message.message.content;
     if (!Array.isArray(content)) {
       return currentTokens;
     }
-    const part = content[entry.partIndex] as {
+    const originalPart = content[entry.partIndex] as {
       type: string;
       output?: unknown;
     };
-    const originalOutput = part.output;
+    const originalOutput = originalPart.output;
+
+    // For object outputs with .value/.text, use the inner field for truncation math
+    // so that charsToFree targets the actual truncatable content, not the JSON wrapper.
+    const innerFieldText = this.extractInnerFieldText(originalOutput);
     const originalText =
-      typeof originalOutput === "string"
+      innerFieldText ??
+      (typeof originalOutput === "string"
         ? originalOutput
-        : JSON.stringify(originalOutput ?? "");
+        : JSON.stringify(originalOutput ?? ""));
     const tokensToFree = currentTokens - hardCeiling;
     const charsToFree = tokensToFree * TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL;
 
@@ -1469,25 +1485,66 @@ export class CheckpointHistory {
         `\n... [truncated ${originalText.length - keepChars} chars for context budget]`;
     }
 
+    // Shallow-clone the truncated part and its parent message/content array.
+    // NOTE: Only the truncated part at entry.partIndex is cloned — other parts
+    // in the same content array remain shared references with prior snapshots.
+    const clonedPart = { ...originalPart };
+
     if (typeof originalOutput === "string") {
-      (part as Record<string, unknown>).output = truncatedText;
+      (clonedPart as Record<string, unknown>).output = truncatedText;
     } else if (typeof originalOutput === "object" && originalOutput !== null) {
-      const obj = originalOutput as Record<string, unknown>;
-      if (typeof obj.value === "string") {
-        obj.value = truncatedText;
-      } else if (typeof obj.text === "string") {
-        obj.text = truncatedText;
+      const clonedOutput = { ...(originalOutput as Record<string, unknown>) };
+      if (typeof clonedOutput.value === "string") {
+        clonedOutput.value = truncatedText;
+        (clonedPart as Record<string, unknown>).output = clonedOutput;
+      } else if (typeof clonedOutput.text === "string") {
+        clonedOutput.text = truncatedText;
+        (clonedPart as Record<string, unknown>).output = clonedOutput;
       } else {
-        (part as Record<string, unknown>).output = truncatedText;
+        // No recognized inner field — replace the entire output
+        (clonedPart as Record<string, unknown>).output = truncatedText;
       }
     } else {
-      (part as Record<string, unknown>).output = truncatedText;
+      (clonedPart as Record<string, unknown>).output = truncatedText;
     }
 
+    const clonedContent = content.slice() as typeof content;
+    clonedContent[entry.partIndex] = clonedPart as (typeof content)[number];
+    this.messages[entry.messageIndex] = {
+      ...message,
+      message: {
+        ...message.message,
+        content: clonedContent,
+      } as typeof message.message,
+    };
+
+    // Compute new token count using the same logic as collectToolResultEntries:
+    // extract inner field text first, fall back to JSON.stringify.
+    const finalOutput = (clonedPart as Record<string, unknown>).output;
+    const finalInnerText = this.extractInnerFieldText(finalOutput);
+    const finalText =
+      finalInnerText ??
+      (typeof finalOutput === "string"
+        ? finalOutput
+        : JSON.stringify(finalOutput ?? ""));
     const newTokens = Math.ceil(
-      truncatedText.length / TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL
+      finalText.length / TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL
     );
     return currentTokens - (entry.tokens - newTokens);
+  }
+
+  private extractInnerFieldText(output: unknown): string | null {
+    if (typeof output !== "object" || output === null) {
+      return null;
+    }
+    const obj = output as Record<string, unknown>;
+    if (typeof obj.value === "string") {
+      return obj.value;
+    }
+    if (typeof obj.text === "string") {
+      return obj.text;
+    }
+    return null;
   }
 
   private getCurrentUsageTokens(): number {
