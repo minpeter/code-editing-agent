@@ -540,6 +540,7 @@ export interface AgentTUIConfig {
     input: string,
     hooks: PreprocessHooks
   ) => Promise<PreprocessResult | undefined>;
+  showContextSuggestions?: boolean;
   showRawToolIo?: boolean;
   skills?: SkillInfo[];
   theme?: { markdownTheme?: MarkdownTheme; editorTheme?: EditorTheme };
@@ -649,14 +650,10 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     return getContextPressureLevel(usage.used, budget);
   };
 
-  const contextSuggestionsEnabled =
-    process.env.CONTEXT_SUGGESTIONS === "1" ||
-    process.env.CONTEXT_SUGGESTIONS === "true";
-
   const refreshContextSuggestions = (
     pressure: "critical" | "elevated" | "normal" | "warning" | null
   ): void => {
-    if (!contextSuggestionsEnabled) {
+    if (!config.showContextSuggestions) {
       return;
     }
 
