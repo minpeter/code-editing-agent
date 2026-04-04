@@ -31,6 +31,8 @@ import {
 import { adjustSplitIndexForToolPairs } from "./tool-pair-validation";
 import { progressivePrune, pruneToolOutputs } from "./tool-pruning";
 
+const TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL = 6;
+
 const DEFAULT_COMPACTION_CONFIG: NormalizedCompactionConfig = {
   compactionDirection: "keep-recent",
   contextLimit: 0,
@@ -353,6 +355,7 @@ export class CheckpointHistory {
       this.refreshEstimatedUsage();
       this.revision += 1;
       this.messageRevision += 1;
+      this.truncateToolResultsIfOverBudget();
     }
     return accepted;
   }
@@ -1359,6 +1362,115 @@ export class CheckpointHistory {
       totalTokens: estimated,
       updatedAt: new Date(),
     };
+  }
+
+  private truncateToolResultsIfOverBudget(): void {
+    const contextLimit = this.getActiveContextLimit();
+    if (contextLimit <= 0) {
+      return;
+    }
+
+    const thresholdRatio = this.compactionConfig.thresholdRatio ?? 0.5;
+    const hardCeiling = Math.floor(
+      contextLimit * Math.max(thresholdRatio, 0.5)
+    );
+    const currentTokens = this.getCurrentUsageTokens();
+
+    if (currentTokens <= hardCeiling) {
+      return;
+    }
+
+    const entries = this.collectToolResultEntries();
+    entries.sort((a, b) => b.tokens - a.tokens);
+
+    let remaining = currentTokens;
+    for (const entry of entries) {
+      if (remaining <= hardCeiling) {
+        break;
+      }
+      remaining = this.truncateSingleToolResult(entry, remaining, hardCeiling);
+    }
+
+    if (remaining !== currentTokens) {
+      this.refreshEstimatedUsage();
+    }
+  }
+
+  private collectToolResultEntries(): Array<{
+    messageIndex: number;
+    partIndex: number;
+    tokens: number;
+  }> {
+    const entries: Array<{
+      messageIndex: number;
+      partIndex: number;
+      tokens: number;
+    }> = [];
+
+    for (let mi = 0; mi < this.messages.length; mi++) {
+      const content = this.messages[mi].message.content;
+      if (!Array.isArray(content)) {
+        continue;
+      }
+      for (let pi = 0; pi < content.length; pi++) {
+        const part = content[pi];
+        if (
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          part.type === "tool-result"
+        ) {
+          const output = (part as { output?: unknown }).output;
+          const text =
+            typeof output === "string" ? output : JSON.stringify(output ?? "");
+          entries.push({
+            messageIndex: mi,
+            partIndex: pi,
+            tokens: Math.ceil(
+              text.length / TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL
+            ),
+          });
+        }
+      }
+    }
+    return entries;
+  }
+
+  private truncateSingleToolResult(
+    entry: { messageIndex: number; partIndex: number; tokens: number },
+    currentTokens: number,
+    hardCeiling: number
+  ): number {
+    const content = this.messages[entry.messageIndex].message.content;
+    if (!Array.isArray(content)) {
+      return currentTokens;
+    }
+    const part = content[entry.partIndex] as {
+      type: string;
+      output?: unknown;
+    };
+    const originalText =
+      typeof part.output === "string"
+        ? part.output
+        : JSON.stringify(part.output ?? "");
+    const tokensToFree = currentTokens - hardCeiling;
+    const charsToFree = tokensToFree * TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL;
+
+    if (originalText.length <= charsToFree) {
+      (part as Record<string, unknown>).output =
+        `[truncated: ${entry.tokens} tokens freed for context budget]`;
+    } else {
+      const keepChars = Math.max(200, originalText.length - charsToFree);
+      (part as Record<string, unknown>).output =
+        originalText.slice(0, keepChars) +
+        `\n... [truncated ${originalText.length - keepChars} chars for context budget]`;
+    }
+
+    const newText = typeof part.output === "string" ? part.output : "";
+    const newTokens = Math.ceil(
+      newText.length / TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL
+    );
+    return currentTokens - (entry.tokens - newTokens);
   }
 
   private getCurrentUsageTokens(): number {
