@@ -323,7 +323,7 @@ export class CheckpointHistory {
 
     this.messages.push(message);
     this.persistMessage(message);
-    this.actualUsage = null;
+    this.refreshEstimatedUsage();
     this.revision += 1;
     this.messageRevision += 1;
 
@@ -350,7 +350,7 @@ export class CheckpointHistory {
     }
 
     if (accepted.length > 0) {
-      this.actualUsage = null;
+      this.refreshEstimatedUsage();
       this.revision += 1;
       this.messageRevision += 1;
     }
@@ -397,7 +397,7 @@ export class CheckpointHistory {
   clear(): void {
     this.messages = [];
     this.summaryMessageId = null;
-    this.actualUsage = null;
+    this.refreshEstimatedUsage();
     this.revision += 1;
     this.messageRevision += 1;
   }
@@ -817,7 +817,7 @@ export class CheckpointHistory {
     );
 
     this.summaryMessageId = summaryMessage.id;
-    this.actualUsage = null;
+    this.refreshEstimatedUsage();
     this.revision += 1;
     this.messageRevision += 1;
 
@@ -1351,6 +1351,16 @@ export class CheckpointHistory {
       : "keep-recent";
   }
 
+  private refreshEstimatedUsage(): void {
+    const estimated = this.getEstimatedTokens() + this.systemPromptTokens;
+    this.actualUsage = {
+      inputTokens: estimated,
+      outputTokens: 0,
+      totalTokens: estimated,
+      updatedAt: new Date(),
+    };
+  }
+
   private getCurrentUsageTokens(): number {
     if (this.actualUsage) {
       return this.actualUsage.inputTokens;
@@ -1790,7 +1800,7 @@ export class CheckpointHistory {
     } else {
       this.messages = pruneResult.messages;
     }
-    this.actualUsage = null;
+    this.refreshEstimatedUsage();
     this.revision += 1;
     this.messageRevision += 1;
 
@@ -1924,7 +1934,7 @@ export class CheckpointHistory {
       this.messages.push(replayMessageCopy);
     }
     this.summaryMessageId = summaryMessage.id;
-    this.actualUsage = null;
+    this.refreshEstimatedUsage();
     this.revision += 1;
     this.messageRevision += 1;
 
@@ -2049,7 +2059,7 @@ export class CheckpointHistory {
       this.messageRevision += 1;
     }
 
-    this.actualUsage = null;
+    this.refreshEstimatedUsage();
     const tokensAfter = this.getEstimatedTokens();
 
     if (tokensAfter >= contextLimit) {
