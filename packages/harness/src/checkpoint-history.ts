@@ -1451,26 +1451,41 @@ export class CheckpointHistory {
       type: string;
       output?: unknown;
     };
+    const originalOutput = part.output;
     const originalText =
-      typeof part.output === "string"
-        ? part.output
-        : JSON.stringify(part.output ?? "");
+      typeof originalOutput === "string"
+        ? originalOutput
+        : JSON.stringify(originalOutput ?? "");
     const tokensToFree = currentTokens - hardCeiling;
     const charsToFree = tokensToFree * TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL;
 
+    let truncatedText: string;
     if (originalText.length <= charsToFree) {
-      (part as Record<string, unknown>).output =
-        `[truncated: ${entry.tokens} tokens freed for context budget]`;
+      truncatedText = `[truncated: ${entry.tokens} tokens freed for context budget]`;
     } else {
       const keepChars = Math.max(200, originalText.length - charsToFree);
-      (part as Record<string, unknown>).output =
+      truncatedText =
         originalText.slice(0, keepChars) +
         `\n... [truncated ${originalText.length - keepChars} chars for context budget]`;
     }
 
-    const newText = typeof part.output === "string" ? part.output : "";
+    if (typeof originalOutput === "string") {
+      (part as Record<string, unknown>).output = truncatedText;
+    } else if (typeof originalOutput === "object" && originalOutput !== null) {
+      const obj = originalOutput as Record<string, unknown>;
+      if (typeof obj.value === "string") {
+        obj.value = truncatedText;
+      } else if (typeof obj.text === "string") {
+        obj.text = truncatedText;
+      } else {
+        (part as Record<string, unknown>).output = truncatedText;
+      }
+    } else {
+      (part as Record<string, unknown>).output = truncatedText;
+    }
+
     const newTokens = Math.ceil(
-      newText.length / TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL
+      truncatedText.length / TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL
     );
     return currentTokens - (entry.tokens - newTokens);
   }
