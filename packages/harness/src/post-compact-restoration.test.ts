@@ -217,4 +217,152 @@ describe("PostCompactRestorer", () => {
       },
     ]);
   });
+
+  it("setMaxTotalTokens dynamically reduces budget and excludes items", () => {
+    const restorer = new PostCompactRestorer({
+      maxItemTokens: 100,
+      maxTotalTokens: 100,
+    });
+
+    restorer.trackItem({
+      content: makeContent(8),
+      label: "large-item",
+      priority: 10,
+      type: "file",
+    });
+    restorer.trackItem({
+      content: makeContent(3),
+      label: "small-item",
+      priority: 5,
+      type: "file",
+    });
+
+    expect(restorer.getRestorationItems()).toHaveLength(2);
+
+    restorer.setMaxTotalTokens(5);
+
+    const items = restorer.getRestorationItems();
+    expect(items).toHaveLength(1);
+    expect(items[0]?.label).toBe("small-item");
+  });
+
+  it("setMaxTotalTokens to zero excludes all items", () => {
+    const restorer = new PostCompactRestorer({ maxTotalTokens: 100 });
+
+    restorer.trackItem({
+      content: "hello",
+      label: "test",
+      priority: 10,
+      type: "context",
+    });
+
+    restorer.setMaxTotalTokens(0);
+    expect(restorer.getRestorationItems()).toEqual([]);
+  });
+
+  it("filterAgainstKeptMessages uses boundary matching, not substring", () => {
+    const restorer = new PostCompactRestorer({
+      maxItemTokens: 100,
+      maxTotalTokens: 100,
+    });
+
+    restorer.trackItem({
+      content: "const x = 1",
+      label: "src/index.ts",
+      priority: 10,
+      type: "file",
+    });
+    restorer.trackItem({
+      content: "const y = 2",
+      label: "src/index.tsx",
+      priority: 10,
+      type: "file",
+    });
+
+    restorer.filterAgainstKeptMessages([
+      makeCheckpointMessage({
+        role: "assistant",
+        content: "I read src/index.ts and found the exports",
+      }),
+    ]);
+
+    const remaining = restorer.getRestorationItems().map((i) => i.label);
+    expect(remaining).toEqual(["src/index.tsx"]);
+  });
+
+  it("filterAgainstKeptMessages matches labels surrounded by non-word chars", () => {
+    const restorer = new PostCompactRestorer({
+      maxItemTokens: 100,
+      maxTotalTokens: 100,
+    });
+
+    restorer.trackItem({
+      content: "skill content",
+      label: "git-master",
+      priority: 5,
+      type: "skill",
+    });
+
+    restorer.filterAgainstKeptMessages([
+      makeCheckpointMessage({
+        role: "user",
+        content: "Load skill: git-master for this task",
+      }),
+    ]);
+
+    expect(restorer.getRestorationItems()).toEqual([]);
+  });
+
+  it("filterAgainstKeptMessages matches label at end of sentence (trailing period)", () => {
+    const restorer = new PostCompactRestorer({
+      maxItemTokens: 100,
+      maxTotalTokens: 100,
+    });
+
+    restorer.trackItem({
+      content: "const x = 1",
+      label: "src/index.ts",
+      priority: 10,
+      type: "file",
+    });
+
+    restorer.filterAgainstKeptMessages([
+      makeCheckpointMessage({
+        role: "assistant",
+        content: "I already read src/index.ts.",
+      }),
+    ]);
+
+    expect(restorer.getRestorationItems()).toEqual([]);
+  });
+
+  it("filterAgainstKeptMessages still distinguishes .ts from .tsx with trailing period", () => {
+    const restorer = new PostCompactRestorer({
+      maxItemTokens: 100,
+      maxTotalTokens: 100,
+    });
+
+    restorer.trackItem({
+      content: "const x = 1",
+      label: "src/index.ts",
+      priority: 10,
+      type: "file",
+    });
+    restorer.trackItem({
+      content: "const y = 2",
+      label: "src/index.tsx",
+      priority: 10,
+      type: "file",
+    });
+
+    restorer.filterAgainstKeptMessages([
+      makeCheckpointMessage({
+        role: "assistant",
+        content: "I already read src/index.tsx.",
+      }),
+    ]);
+
+    const remaining = restorer.getRestorationItems().map((i) => i.label);
+    expect(remaining).toEqual(["src/index.ts"]);
+  });
 });

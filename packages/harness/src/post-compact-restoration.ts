@@ -57,7 +57,7 @@ export class PostCompactRestorer {
       const text = extractMessageText(checkpointMessage.message);
 
       for (const label of this.items.keys()) {
-        if (text.includes(label)) {
+        if (textContainsLabel(text, label)) {
           keptLabels.add(label);
         }
       }
@@ -228,6 +228,68 @@ function truncateToTokenLimit(text: string, tokenLimit: number): string {
   }
 
   return text.slice(0, low).trimEnd();
+}
+
+function textContainsLabel(text: string, label: string): boolean {
+  if (label.length === 0) {
+    return false;
+  }
+
+  let startIndex = 0;
+  while (true) {
+    const pos = text.indexOf(label, startIndex);
+    if (pos === -1) {
+      return false;
+    }
+
+    const charBefore = pos > 0 ? text[pos - 1] : undefined;
+    const afterPos = pos + label.length;
+    const charAfter = afterPos < text.length ? text[afterPos] : undefined;
+
+    const boundaryBefore =
+      charBefore === undefined ||
+      !isContinuationCharBefore(charBefore, text, pos - 1);
+    const boundaryAfter =
+      charAfter === undefined || !isContinuationChar(charAfter, text, afterPos);
+
+    if (boundaryBefore && boundaryAfter) {
+      return true;
+    }
+
+    startIndex = pos + 1;
+  }
+}
+
+const WORD_CHAR_RE = /\w/;
+
+function isContinuationChar(
+  ch: string,
+  text: string,
+  charPos: number
+): boolean {
+  if (WORD_CHAR_RE.test(ch)) {
+    return true;
+  }
+  if (ch === "." || ch === "-") {
+    const next = charPos + 1 < text.length ? text[charPos + 1] : undefined;
+    return next !== undefined && WORD_CHAR_RE.test(next);
+  }
+  return false;
+}
+
+function isContinuationCharBefore(
+  ch: string,
+  text: string,
+  charPos: number
+): boolean {
+  if (WORD_CHAR_RE.test(ch)) {
+    return true;
+  }
+  if (ch === "." || ch === "-") {
+    const prev = charPos - 1 >= 0 ? text[charPos - 1] : undefined;
+    return prev !== undefined && WORD_CHAR_RE.test(prev);
+  }
+  return false;
 }
 
 function normalizeNonNegativeInteger(
