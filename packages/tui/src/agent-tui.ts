@@ -1,5 +1,4 @@
 import {
-  analyzeContextTokens,
   type CheckpointMessage,
   type Command,
   type CommandAction,
@@ -11,7 +10,6 @@ import {
   computeContextBudget,
   estimateTokens,
   executeCommand,
-  generateContextSuggestions,
   getContextPressureLevel,
   harnessEnv,
   isCommand,
@@ -540,7 +538,6 @@ export interface AgentTUIConfig {
     input: string,
     hooks: PreprocessHooks
   ) => Promise<PreprocessResult | undefined>;
-  showContextSuggestions?: boolean;
   showRawToolIo?: boolean;
   skills?: SkillInfo[];
   theme?: { markdownTheme?: MarkdownTheme; editorTheme?: EditorTheme };
@@ -588,7 +585,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         : style(`${ANSI_BOLD}${ANSI_BRIGHT_CYAN}`, headerTitle)
     );
     footerStatusBar.setRightText(footer, contextPressure ?? undefined);
-    refreshContextSuggestions(contextPressure);
     tui.requestRender();
   };
 
@@ -624,7 +620,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   let lastCtrlCPressAt = 0;
   let foregroundStatus: StatusSpinner | null = null;
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
-  let contextSuggestionEntries: FooterStatusEntry[] = [];
   let blockingCompactionActive = false;
   let commandInputListenerActive = false;
 
@@ -648,48 +643,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     });
 
     return getContextPressureLevel(usage.used, budget);
-  };
-
-  const refreshContextSuggestions = (
-    pressure: "critical" | "elevated" | "normal" | "warning" | null
-  ): void => {
-    if (!config.showContextSuggestions) {
-      return;
-    }
-
-    const usage = config.messageHistory.getContextUsage();
-    if (!(usage && usage.limit > 0)) {
-      contextSuggestionEntries = [];
-      renderFooterStatuses();
-      return;
-    }
-
-    const compactionConfig = config.messageHistory.getCompactionConfig();
-    const budget = computeContextBudget({
-      contextLimit: usage.limit,
-      maxOutputTokens: compactionConfig.maxTokens,
-      reserveTokens: compactionConfig.reserveTokens,
-      thresholdRatio: compactionConfig.thresholdRatio,
-    });
-
-    const stats = analyzeContextTokens(config.messageHistory.getAll(), {
-      topN: 3,
-    });
-    const suggestions = generateContextSuggestions(stats, budget, usage.used)
-      .filter((suggestion) => {
-        if (suggestion.level !== "info") {
-          return true;
-        }
-        return pressure !== "normal";
-      })
-      .slice(0, 2);
-
-    contextSuggestionEntries = suggestions.map((suggestion) => ({
-      level: suggestion.level,
-      message: suggestion.message,
-      state: "ready",
-    }));
-    renderFooterStatuses();
   };
 
   const getUsageNumber = (
@@ -759,10 +712,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   };
 
   const renderFooterStatuses = (): void => {
-    footerStatusBar.setEntries([
-      ...backgroundStatuses.values(),
-      ...contextSuggestionEntries,
-    ]);
+    footerStatusBar.setEntries([...backgroundStatuses.values()]);
   };
 
   const clearBackgroundStatus = (id: string): void => {
