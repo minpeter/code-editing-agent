@@ -257,7 +257,12 @@ export interface CompactionEffectiveness {
   triggerThresholdTokens: number;
 }
 
-/** Reason a compaction attempt was rejected by the acceptance gate. */
+/**
+ * Reason a compaction attempt was rejected by the acceptance gate.
+ * Note: Currently only "exceeds-budget" is actively produced by the
+ * acceptance logic. The other variants are retained for observability
+ * and potential future use.
+ */
 export type CompactionRejectionReason =
   | "above-trigger-threshold"
   | "exceeds-budget"

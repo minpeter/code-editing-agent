@@ -66,7 +66,7 @@ headless.ts (Docker)          output.jsonl          harbor_agent.py
 ### 1. Event Type Distribution
 ```bash
 cat jobs/<job_id>/*/agent/output.jsonl | jq -r '.type' | sort | uniq -c
-# Expected: metadata=1, step=N, compaction=M (optional), error=0
+# Expected output like:   1 metadata   N step   M compaction (no 'error' lines)
 ```
 
 ### 2. Step ID Sequence

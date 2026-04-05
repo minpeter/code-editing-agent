@@ -4,7 +4,7 @@
 - Model: GLM-5 (FriendliAI)
 - Temperature: 0
 - Benchmark: 80-turn conversation with memory probes every 5 turns
-- 16 probes testing: name, job, pets, family, hobbies, favorites, travel, health, home, social
+- 17 probes testing: name, job, pets, family, hobbies, favorites, travel, health, home, social
 
 ## Results Summary
 

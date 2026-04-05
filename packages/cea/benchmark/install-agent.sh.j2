@@ -12,7 +12,7 @@ fi
 
 if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 20 ]; then
   echo "Node.js not found — installing via NodeSource..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh && bash /tmp/nodesource_setup.sh && rm -f /tmp/nodesource_setup.sh
   apt-get install -y -qq nodejs
 fi
 

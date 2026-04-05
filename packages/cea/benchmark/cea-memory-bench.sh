@@ -41,18 +41,18 @@ run_bench() {
       node --conditions=@ai-sdk-tool/source --import tsx \
       packages/cea/src/index.ts \
       --headless --prompt "$TASK" \
-      2>"$log_file" | tee "$output_file" > /dev/null 2>&1 || true
+      2>"$log_file" > "$output_file" || { echo "[$label] WARNING: benchmark exited with code $?"; }
 
   if [ ! -f "$output_file" ]; then
     : > "$output_file"
   fi
 
   local compactions
-  compactions=$(grep -c "method=session-memory\|method=llm\|compact summary" "$log_file" 2>/dev/null || true)
+  compactions=$(grep -c "method=session-memory\|method=llm\|compact summary" "$log_file" 2>/dev/null) || compactions=0
   local sm_path
-  sm_path=$(grep -c "method=session-memory" "$log_file" 2>/dev/null || true)
+  sm_path=$(grep -c "method=session-memory" "$log_file" 2>/dev/null) || sm_path=0
   local llm_path
-  llm_path=$(grep -c "method=llm" "$log_file" 2>/dev/null || true)
+  llm_path=$(grep -c "method=llm" "$log_file" 2>/dev/null) || llm_path=0
 
   local last_assistant
   last_assistant=$(python3 -c "

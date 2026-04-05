@@ -8,11 +8,6 @@ interface CompactCommandOptions {
   messageHistory: CheckpointHistory;
 }
 
-const compactAction = (): CommandResult => ({
-  success: true,
-  message: "Compaction triggered.",
-});
-
 export const createCompactCommand = (
   options: CompactCommandOptions
 ): Command => ({
@@ -20,7 +15,14 @@ export const createCompactCommand = (
   description: "Manually compact conversation history",
   aliases: ["summarize"],
   execute: async (): Promise<CommandResult> => {
-    await options.messageHistory.compact();
-    return compactAction();
+    try {
+      await options.messageHistory.compact();
+      return { success: true, message: "Compaction completed." };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Compaction failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
   },
 });

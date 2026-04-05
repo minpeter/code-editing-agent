@@ -83,7 +83,7 @@ export interface CompactionOrchestratorOptions {
   /**
    * Maximum number of accepted compactions per user turn. Prevents infinite
    * compaction loops where a verbose summary causes immediate recompaction.
-   * Defaults to 3. Counter resets on notifyNewUserTurn().
+   * Defaults to 10. Counter resets on notifyNewUserTurn().
    */
   maxAcceptedCompactionsPerTurn?: number;
 }
