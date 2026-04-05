@@ -13,6 +13,12 @@ import { createFriendli } from "@friendliai/ai-provider";
 import { generateText, type LanguageModel, type ModelMessage } from "ai";
 import { defineCommand, runMain } from "citty";
 
+import {
+  COMPACTION_KEEP_RECENT_TOKENS,
+  COMPACTION_RESERVE_TOKENS,
+  COMPACTION_SPECULATIVE_RATIO,
+  COMPACTION_THRESHOLD_RATIO,
+} from "./compaction-config.js";
 import { env } from "./env.js";
 
 const SYSTEM_PROMPT = `You are a minimal example agent. Be concise and helpful.
@@ -790,12 +796,12 @@ async function runBenchmark(opts: {
 }) {
   const { contextLimit, model, modelId } = opts;
 
-  const thresholdRatio = 0.65;
-  const speculativeRatio = 0.8;
-  const reserveTokens = 512;
-  const keepRecentTokens = 800;
-  const blockingThreshold = Math.floor(contextLimit * thresholdRatio);
-  const speculativeThreshold = Math.floor(blockingThreshold * speculativeRatio);
+  const blockingThreshold = Math.floor(
+    contextLimit * COMPACTION_THRESHOLD_RATIO
+  );
+  const speculativeThreshold = Math.floor(
+    blockingThreshold * COMPACTION_SPECULATIVE_RATIO
+  );
 
   const summarizeFn = createModelSummarizer(model, {
     contextLimit,
@@ -816,18 +822,17 @@ async function runBenchmark(opts: {
     compaction: {
       enabled: true,
       contextLimit,
-      keepRecentTokens,
+      keepRecentTokens: COMPACTION_KEEP_RECENT_TOKENS,
       microCompact: true,
-      reserveTokens,
-      thresholdRatio,
-      speculativeStartRatio: speculativeRatio,
+      reserveTokens: COMPACTION_RESERVE_TOKENS,
+      thresholdRatio: COMPACTION_THRESHOLD_RATIO,
+      speculativeStartRatio: COMPACTION_SPECULATIVE_RATIO,
       summarizeFn,
       getStructuredState: bmeExtractor
         ? bmeExtractor.getStructuredState.bind(bmeExtractor)
         : memoryTracker.getStructuredState.bind(memoryTracker),
     },
   });
-  history.setContextLimit(contextLimit);
   history.setSystemPromptTokens(estimateTokens(SYSTEM_PROMPT));
 
   let compactionEvent = "";
@@ -1028,7 +1033,23 @@ const main = defineCommand({
   },
   async run({ args }) {
     const contextLimit = Number.parseInt(args.contextLimit || "4096", 10);
+    if (!(contextLimit > 0)) {
+      process.stderr.write(
+        `Error: --context-limit must be a positive integer, got "${args.contextLimit}"\n`
+      );
+      process.exit(1);
+    }
+
+    const VALID_PROVIDERS = ["friendli", "anthropic"] as const;
     const provider = args.provider || "friendli";
+    if (
+      !VALID_PROVIDERS.includes(provider as (typeof VALID_PROVIDERS)[number])
+    ) {
+      process.stderr.write(
+        `Error: --provider must be one of: ${VALID_PROVIDERS.join(", ")}, got "${provider}"\n`
+      );
+      process.exit(1);
+    }
 
     let model: LanguageModel;
     let modelId: string;

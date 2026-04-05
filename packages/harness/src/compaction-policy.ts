@@ -32,8 +32,15 @@ export function computeContextBudget(params: {
     contextLimit,
     maxOutputTokens,
     reserveTokens = 0,
-    thresholdRatio = 0.5,
+    thresholdRatio: rawThresholdRatio = 0.5,
   } = params;
+
+  const thresholdRatio =
+    Number.isFinite(rawThresholdRatio) &&
+    rawThresholdRatio > 0 &&
+    rawThresholdRatio <= 1
+      ? rawThresholdRatio
+      : 0.5;
 
   const compactionReserve = Math.min(
     MAX_COMPACTION_OUTPUT_RESERVE,
