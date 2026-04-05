@@ -42,7 +42,7 @@ const USER_MSG_PATTERNS: Array<{
   extract: (match: RegExpMatchArray) => { key: string; value: string } | null;
 }> = [
   {
-    pattern: /\bmy name is\s+([A-Z][a-z]+)\b/i,
+    pattern: /\bmy name is\s+([A-Z][\w]+(?:\s+[A-Z][\w]+)*)\b/i,
     extract: (m) => ({ key: "name", value: m[1] }),
   },
   {
@@ -149,6 +149,7 @@ function extractFactsFromSentence(
   sentence: string
 ): Array<{ key: string; value: string }> {
   const results: Array<{ key: string; value: string }> = [];
+  const seenFacts = new Set<string>();
 
   for (const { pattern, extract } of USER_MSG_PATTERNS) {
     const match = sentence.match(pattern);
@@ -158,6 +159,12 @@ function extractFactsFromSentence(
 
     const fact = extract(match);
     if (fact?.key && fact.value) {
+      const dedupeKey = `${normalizeFactKey(fact.key)}\u0000${fact.value.trim().toLowerCase()}`;
+      if (seenFacts.has(dedupeKey)) {
+        continue;
+      }
+
+      seenFacts.add(dedupeKey);
       results.push(fact);
     }
   }
@@ -242,7 +249,10 @@ function toTitleCase(input: string): string {
 }
 
 function matchesKeyword(key: string, keywords: readonly string[]): boolean {
-  return keywords.some((keyword) => key === keyword || key.includes(keyword));
+  return keywords.some((keyword) => {
+    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escapedKeyword}\\b`, "i").test(key);
+  });
 }
 
 export class SessionMemoryTracker {

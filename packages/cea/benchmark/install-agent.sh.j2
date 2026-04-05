@@ -5,7 +5,12 @@ apt-get update -qq && apt-get install -y -qq --no-install-recommends \
   curl git ca-certificates unzip tar ripgrep \
   && rm -rf /var/lib/apt/lists/*
 
-if ! command -v node &>/dev/null; then
+NODE_MAJOR=""
+if command -v node &>/dev/null; then
+  NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
+fi
+
+if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 20 ]; then
   echo "Node.js not found — installing via NodeSource..."
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y -qq nodejs

@@ -278,7 +278,7 @@ async function extractTaskIntent(
 }
 
 function filterUserMessages(messages: ModelMessage[]): ModelMessage[] {
-  return messages.filter((m) => m.role === "user");
+  return messages.filter((m) => m.role === "user").slice(-5);
 }
 
 function logSummarizerUsage(

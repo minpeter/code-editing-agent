@@ -104,6 +104,29 @@ export const handleToolInputDelta = (
   });
 };
 
+export const upsertCompletedToolCall = (
+  pendingToolCalls: Map<string, PendingToolCall>,
+  part: {
+    input?: unknown;
+    toolCallId: string;
+    toolName: string;
+  }
+): void => {
+  const existing = pendingToolCalls.get(part.toolCallId);
+  if (existing) {
+    existing.toolName = part.toolName;
+    existing.input = part.input;
+    return;
+  }
+
+  pendingToolCalls.set(part.toolCallId, {
+    id: part.toolCallId,
+    arguments: "",
+    input: part.input,
+    toolName: part.toolName,
+  });
+};
+
 export const bufferedToolCallData = (
   pendingToolCalls: Map<string, PendingToolCall>,
   completedToolCallIds: Set<string>
@@ -229,11 +252,7 @@ export const processStream = async (
       case "tool-call": {
         const callPart = part as Extract<typeof part, { type: "tool-call" }>;
         completedToolCallIds.add(callPart.toolCallId);
-        const pending = pendingToolCalls.get(callPart.toolCallId);
-        if (pending) {
-          pending.toolName = callPart.toolName;
-          pending.input = callPart.input;
-        }
+        upsertCompletedToolCall(pendingToolCalls, callPart);
         break;
       }
       case "tool-result": {

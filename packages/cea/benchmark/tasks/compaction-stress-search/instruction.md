@@ -46,7 +46,7 @@ Read EVERY source file found in Phase 2 that has issues (use shell_execute). The
 PHASE 4 — AUDIT REPORT (recall from memory)
 ══════════════════════════════════════
 
-Write work/audit_report.txt with EXACTLY these answers, one per line:
+Write /work/audit_report.txt with EXACTLY these answers, one per line:
   Line 1: The database port from database.json (just the number)
   Line 2: The Redis port from redis.json (just the number)
   Line 3: The JWT secret from auth.json (the exact string value)

@@ -737,14 +737,16 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         applyPendingMessages(pendingMessages);
         updateUsage(usage);
         const normalizedUsage = normalizeUsageMeasurement(usage) ?? undefined;
-        Promise.resolve(
-          config.onTurnComplete?.(
-            config.messageHistory.getAll(),
-            normalizedUsage
+        Promise.resolve()
+          .then(() =>
+            config.onTurnComplete?.(
+              config.messageHistory.getAll(),
+              normalizedUsage
+            )
           )
-        ).catch((error) => {
-          console.error("onTurnComplete callback failed in headless:", error);
-        });
+          .catch((error) => {
+            console.error("onTurnComplete callback failed in headless:", error);
+          });
         startSpeculativeCompaction();
         await compactBeforeNextTurnIfNeeded();
 

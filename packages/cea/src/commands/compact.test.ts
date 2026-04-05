@@ -1,16 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCompactCommand } from "./compact";
 
 describe("compact command", () => {
-  it("returns a compact command action", async () => {
-    const result = await createCompactCommand().execute({ args: [] });
+  it("triggers compaction directly", async () => {
+    const compact = vi.fn(async () => undefined);
+    const result = await createCompactCommand({
+      messageHistory: { compact } as never,
+    }).execute({ args: [] });
     expect(result.success).toBe(true);
-    expect(result.action).toEqual({ type: "compact" });
+    expect(compact).toHaveBeenCalledOnce();
     expect(result.message).toBe("Compaction triggered.");
   });
 
   it("keeps summarize alias for backward compatibility", () => {
-    const command = createCompactCommand();
+    const command = createCompactCommand({
+      messageHistory: { compact: async () => undefined } as never,
+    });
     expect(command.aliases).toContain("summarize");
   });
 });

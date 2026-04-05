@@ -105,7 +105,12 @@ export function generateContextSuggestions(
   const pressure = getContextPressureLevel(currentTokens, budget);
   const usagePercent = getUsagePercent(currentTokens, budget.hardLimitAt);
 
-  if (currentTokens >= budget.warningAt) {
+  if (budget.hardLimitAt <= budget.warningAt && pressure === "critical") {
+    suggestions.push({
+      level: "error",
+      message: `Context is ${usagePercent}% full and at the hard limit.`,
+    });
+  } else if (currentTokens >= budget.warningAt) {
     suggestions.push({
       level: pressure === "critical" ? "error" : "warning",
       message:

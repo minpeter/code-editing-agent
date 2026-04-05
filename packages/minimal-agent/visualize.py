@@ -283,7 +283,11 @@ def main() -> None:
 
     if "--output" in args:
         idx = args.index("--output")
-        out_dir = Path(args[idx + 1])
+        if idx + 1 < len(args):
+            out_dir = Path(args[idx + 1])
+        else:
+            print("Error: --output requires a directory argument")
+            sys.exit(1)
         args = args[:idx] + args[idx + 2 :]
 
     json_files = [a for a in args if not a.startswith("--")]

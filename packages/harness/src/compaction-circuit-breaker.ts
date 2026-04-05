@@ -26,7 +26,7 @@ export class CompactionCircuitBreaker {
     this.maxConsecutiveFailures =
       typeof options.maxConsecutiveFailures === "number" &&
       Number.isFinite(options.maxConsecutiveFailures) &&
-      options.maxConsecutiveFailures > 0
+      options.maxConsecutiveFailures >= 1
         ? Math.floor(options.maxConsecutiveFailures)
         : DEFAULT_MAX_CONSECUTIVE_FAILURES;
 

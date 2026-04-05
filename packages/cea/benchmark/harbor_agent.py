@@ -21,7 +21,10 @@ class CodeEditingAgent(BaseInstalledAgent):
         return Path(__file__).parent / "install-agent.sh.j2"
 
     def populate_context_post_run(self, context: AgentContext) -> None:
-        d, path = self.logs_dir, self.logs_dir / "trajectory.json"
+        d = self.logs_dir
+        path = Path(os.getenv("ATIF_OUTPUT_PATH", str(d / "trajectory.json")))
+        if not path.is_absolute():
+            path = d / path
         if not path.exists():
             items = "dir not found" if not d.exists() else list(d.glob("**/*"))
             print(f"No trajectory file found at: {path}")

@@ -431,7 +431,7 @@ export class CompactionOrchestrator {
         return DEFAULT_MAX_ACCEPTED_COMPACTIONS_PER_TURN;
       }
       const raw = value.maxAcceptedCompactionsPerTurn;
-      if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+      if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 1) {
         return DEFAULT_MAX_ACCEPTED_COMPACTIONS_PER_TURN;
       }
       return Math.floor(raw);

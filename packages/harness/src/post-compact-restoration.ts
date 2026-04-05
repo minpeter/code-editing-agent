@@ -72,6 +72,7 @@ export class PostCompactRestorer {
     const resolved = this.resolveConfig();
     const candidates = [...this.items.values()]
       .map((item) => truncateRestorationItem(item, resolved.maxItemTokens))
+      .filter((item) => item.tokens <= resolved.maxItemTokens)
       .sort((a, b) => {
         if (a.priority !== b.priority) {
           return b.priority - a.priority;
@@ -112,7 +113,8 @@ export class PostCompactRestorer {
     ];
 
     for (const item of items) {
-      parts.push(`<restored-${item.type} label="${item.label}">`);
+      const escapedLabel = escapeXmlAttribute(item.label);
+      parts.push(`<restored-${item.type} label="${escapedLabel}">`);
       parts.push(item.content);
       parts.push(`</restored-${item.type}>`);
       parts.push("");
@@ -258,6 +260,14 @@ function textContainsLabel(text: string, label: string): boolean {
 
     startIndex = pos + 1;
   }
+}
+
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 const WORD_CHAR_RE = /\w/;

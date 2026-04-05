@@ -43,12 +43,16 @@ run_bench() {
       --headless --prompt "$TASK" \
       2>"$log_file" | tee "$output_file" > /dev/null 2>&1 || true
 
+  if [ ! -f "$output_file" ]; then
+    : > "$output_file"
+  fi
+
   local compactions
-  compactions=$(grep -c "method=session-memory\|method=llm\|compact summary" "$log_file" 2>/dev/null || echo 0)
+  compactions=$(grep -c "method=session-memory\|method=llm\|compact summary" "$log_file" 2>/dev/null || true)
   local sm_path
-  sm_path=$(grep -c "method=session-memory" "$log_file" 2>/dev/null || echo 0)
+  sm_path=$(grep -c "method=session-memory" "$log_file" 2>/dev/null || true)
   local llm_path
-  llm_path=$(grep -c "method=llm" "$log_file" 2>/dev/null || echo 0)
+  llm_path=$(grep -c "method=llm" "$log_file" 2>/dev/null || true)
 
   local last_assistant
   last_assistant=$(python3 -c "

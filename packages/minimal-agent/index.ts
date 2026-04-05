@@ -19,10 +19,10 @@ import {
   createFriendli,
   type FriendliAIProvider,
 } from "@friendliai/ai-provider";
-import { createEnv } from "@t3-oss/env-core";
 import type { LanguageModel } from "ai";
 import { defineCommand, runMain } from "citty";
-import { z } from "zod";
+
+import { env } from "./env.js";
 
 const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 const DEFAULT_SYSTEM_PROMPT = `You are a minimal example agent. Be concise and helpful.
@@ -91,19 +91,9 @@ const LOCAL_COMMANDS: Command[] = [
   },
 ];
 
-const env = createEnv({
-  server: {
-    FRIENDLI_BASE_URL: z.string().min(1).optional(),
-    FRIENDLI_MODEL: z.string().min(1).optional(),
-    FRIENDLI_TOKEN: z.string().min(1),
-  },
-  runtimeEnv: process.env,
-  emptyStringAsUndefined: true,
-});
-
 function createFriendliProvider(): FriendliAIProvider {
   return createFriendli({
-    apiKey: env.FRIENDLI_TOKEN,
+    apiKey: env.FRIENDLI_TOKEN ?? "",
     baseURL: env.FRIENDLI_BASE_URL || "serverless",
     includeUsage: true,
   });
@@ -194,15 +184,18 @@ const main = defineCommand({
       model,
       instructions: DEFAULT_SYSTEM_PROMPT,
     });
+    let lastProcessedMessageCount = 0;
 
     const handleTurnComplete = (
       messages: Array<{ message: { role: string; content: unknown } }>
     ): void => {
-      for (const { message } of messages) {
+      for (const { message } of messages.slice(lastProcessedMessageCount)) {
         if (message.role === "user" && typeof message.content === "string") {
           sessionMemoryTracker.extractFactsFromUserMessage(message.content);
         }
       }
+
+      lastProcessedMessageCount = messages.length;
     };
 
     const handleCompactionComplete = (result: CompactionResult): void => {
@@ -272,6 +265,7 @@ const main = defineCommand({
           sessionManager.initialize();
           circuitBreaker.resetForNewSession();
           sessionMemoryTracker.clear();
+          lastProcessedMessageCount = 0;
         }
       },
     });

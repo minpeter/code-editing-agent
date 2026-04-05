@@ -1,14 +1,26 @@
-import type { Command, CommandResult } from "@ai-sdk-tool/harness";
+import type {
+  CheckpointHistory,
+  Command,
+  CommandResult,
+} from "@ai-sdk-tool/harness";
+
+interface CompactCommandOptions {
+  messageHistory: CheckpointHistory;
+}
 
 const compactAction = (): CommandResult => ({
   success: true,
-  action: { type: "compact" },
   message: "Compaction triggered.",
 });
 
-export const createCompactCommand = (): Command => ({
+export const createCompactCommand = (
+  options: CompactCommandOptions
+): Command => ({
   name: "compact",
   description: "Manually compact conversation history",
   aliases: ["summarize"],
-  execute: async (): Promise<CommandResult> => compactAction(),
+  execute: async (): Promise<CommandResult> => {
+    await options.messageHistory.compact();
+    return compactAction();
+  },
 });

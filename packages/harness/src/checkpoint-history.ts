@@ -1620,7 +1620,7 @@ export class CheckpointHistory {
       thresholdRatio: this.compactionConfig.thresholdRatio,
     });
 
-    return budget.effectiveContextWindow;
+    return Math.max(1, budget.effectiveContextWindow);
   }
 
   private getEffectiveReserveTokens(options?: {
@@ -1805,9 +1805,13 @@ export class CheckpointHistory {
     }
 
     if (splitIndex <= 0) {
-      const adjustedSplitIndex = adjustSplitIndexForToolPairs(
+      const adjustedToBoundary = this.adjustSplitIndexToApiRoundBoundary(
         activeMessages,
         1
+      );
+      const adjustedSplitIndex = adjustSplitIndexForToolPairs(
+        activeMessages,
+        adjustedToBoundary
       );
       return adjustedSplitIndex > 0 ? adjustedSplitIndex : null;
     }

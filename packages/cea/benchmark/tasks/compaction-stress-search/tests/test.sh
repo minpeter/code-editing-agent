@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-cd /agent
+cd /agent 2>/dev/null || cd /work || true
 
 REWARD=0
 PASS=0

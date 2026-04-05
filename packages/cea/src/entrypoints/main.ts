@@ -403,7 +403,7 @@ registerCommand(createClearCommand());
 registerCommand(createReasoningModeCommand());
 registerCommand(createToolFallbackCommand());
 registerCommand(createTranslateCommand());
-registerCommand(createCompactCommand());
+registerCommand(createCompactCommand({ messageHistory }));
 
 const createTranslationPreprocessor = () => {
   return async (

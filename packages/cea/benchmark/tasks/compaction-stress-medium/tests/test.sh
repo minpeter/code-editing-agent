@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 cd /agent
 
@@ -20,10 +21,16 @@ for f in /agent/work/calc.js /agent/work/calc.test.js /agent/work/index.js; do
 done
 
 # Run the actual tests
-if node /agent/work/calc.test.js 2>&1 | grep -q "ALL TESTS PASSED"; then
-    PASS=$((PASS + 1))
-    echo "calc.test.js: PASSED"
+if output=$(node /agent/work/calc.test.js 2>&1); then
+    if printf '%s\n' "$output" | grep -q "ALL TESTS PASSED"; then
+        PASS=$((PASS + 1))
+        echo "calc.test.js: PASSED"
+    else
+        echo "calc.test.js: FAILED"
+        FAIL=$((FAIL + 1))
+    fi
 else
+    echo "$output"
     echo "calc.test.js: FAILED"
     FAIL=$((FAIL + 1))
 fi

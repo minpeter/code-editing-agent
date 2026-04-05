@@ -97,7 +97,8 @@ export function shouldStartSpeculativeCompaction(params: {
   const hasValidThresholdRatio =
     typeof input.thresholdRatio === "number" &&
     Number.isFinite(input.thresholdRatio) &&
-    input.thresholdRatio > 0;
+    input.thresholdRatio > 0 &&
+    input.thresholdRatio <= 1;
 
   if (hasValidThresholdRatio) {
     const speculativeThreshold =

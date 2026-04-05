@@ -13,6 +13,8 @@ import { createFriendli } from "@friendliai/ai-provider";
 import { generateText, type LanguageModel, type ModelMessage } from "ai";
 import { defineCommand, runMain } from "citty";
 
+import { env } from "./env.js";
+
 const SYSTEM_PROMPT = `You are a minimal example agent. Be concise and helpful.
 When the user shares personal information (name, preferences, pets, job, hobbies, etc.), remember it carefully.
 When asked to recall information, list ALL known facts — do not omit any details.`;
@@ -1032,7 +1034,7 @@ const main = defineCommand({
     let modelId: string;
 
     if (provider === "anthropic") {
-      if (!process.env.ANTHROPIC_API_KEY) {
+      if (!env.ANTHROPIC_API_KEY) {
         process.stderr.write("Error: ANTHROPIC_API_KEY required\n");
         process.exit(1);
       }
@@ -1040,14 +1042,14 @@ const main = defineCommand({
       const anthropic = createAnthropic({});
       model = anthropic(modelId);
     } else {
-      if (!process.env.FRIENDLI_TOKEN) {
+      if (!env.FRIENDLI_TOKEN) {
         process.stderr.write("Error: FRIENDLI_TOKEN required\n");
         process.exit(1);
       }
-      modelId = args.model || process.env.FRIENDLI_MODEL || "zai-org/GLM-5";
+      modelId = args.model || env.FRIENDLI_MODEL || "zai-org/GLM-5";
       const friendli = createFriendli({
-        apiKey: process.env.FRIENDLI_TOKEN ?? "",
-        baseURL: process.env.FRIENDLI_BASE_URL || "serverless",
+        apiKey: env.FRIENDLI_TOKEN,
+        baseURL: env.FRIENDLI_BASE_URL || "serverless",
         includeUsage: true,
       });
       model = friendli(modelId);

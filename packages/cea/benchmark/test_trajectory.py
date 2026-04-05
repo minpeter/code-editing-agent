@@ -43,7 +43,12 @@ def validate_trajectory(path: str) -> list[str]:
         return errors  # can't validate step ids without steps
 
     # 5. step_ids are sequential from 1
-    step_ids = [s.get("step_id") for s in steps]
+    step_ids = []
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            errors.append(f"Step {i} is not a dictionary")
+            continue
+        step_ids.append(step.get("step_id"))
     expected = list(range(1, len(steps) + 1))
     if step_ids != expected:
         errors.append(f"step_ids: expected {expected}, got {step_ids}")
@@ -51,6 +56,8 @@ def validate_trajectory(path: str) -> list[str]:
     # 6. each step has required fields
     valid_sources = {"user", "agent", "system"}
     for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
         for field in ["step_id", "timestamp", "source", "message"]:
             if step.get(field) is None:
                 errors.append(f"steps[{i}].{field}: missing")
@@ -62,6 +69,8 @@ def validate_trajectory(path: str) -> list[str]:
 
     # 7. agent steps with tool_calls must have matching observations
     for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
         if step.get("source") == "agent" and step.get("tool_calls"):
             obs = step.get("observation", {})
             if not obs or not obs.get("results"):
@@ -72,6 +81,9 @@ def validate_trajectory(path: str) -> list[str]:
         errors.append("final_metrics: missing")
     else:
         fm = t["final_metrics"]
+        if not isinstance(fm, dict):
+            errors.append("final_metrics must be a dictionary")
+            return errors
         if not isinstance(fm.get("total_steps"), int):
             errors.append("final_metrics.total_steps: must be an integer")
 
