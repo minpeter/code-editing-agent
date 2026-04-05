@@ -597,7 +597,7 @@ const getAtifOutputPath = (args: { atif?: boolean }): string | undefined => {
     return undefined;
   }
 
-  return process.env.ATIF_OUTPUT_PATH || "trajectory.json";
+  return env.ATIF_OUTPUT_PATH || "trajectory.json";
 };
 
 process.once("exit", () => {

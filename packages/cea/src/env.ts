@@ -13,6 +13,7 @@ export const env = createEnv({
     DEBUG_SHOW_RAW_TOOL_IO: z.stringbool().default(false),
     BENCHMARK_SEED: z.coerce.number().int().optional(),
     BENCHMARK_TEMPERATURE: z.coerce.number().optional(),
+    ATIF_OUTPUT_PATH: z.string().min(1).optional(),
     DISABLE_BME: z.stringbool().default(false),
   },
   extends: [harnessEnv],

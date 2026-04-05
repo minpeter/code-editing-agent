@@ -36,7 +36,7 @@ def score_trajectory(trajectory: dict) -> dict:
     total_cached = fm.get("total_cached_tokens")
 
     token_efficiency_ratio: float | None = None
-    if total_prompt is not None and total_completion is not None:
+    if total_prompt and total_completion is not None:
         token_efficiency_ratio = round(total_completion / total_prompt, 4)
 
     # Compaction metrics
