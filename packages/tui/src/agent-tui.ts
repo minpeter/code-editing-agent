@@ -1594,6 +1594,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       addUserMessage(chatContainer, markdownTheme, trimmed);
       await blockOnlyIfAtHardContextLimit(commandResult.skillContent);
       config.messageHistory.addUserMessage(commandResult.skillContent);
+      compactionOrchestrator.notifyNewUserTurn();
       tui.requestRender();
       const responseState = await processAgentResponse();
       if (responseState === "completed") {
@@ -1641,6 +1642,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
     await blockOnlyIfAtHardContextLimit(contentForModel);
     config.messageHistory.addUserMessage(contentForModel, originalContent);
+    compactionOrchestrator.notifyNewUserTurn();
     tui.requestRender();
     const responseState = await processAgentResponse();
     if (responseState === "completed") {

@@ -720,6 +720,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       message.content,
       "originalContent" in message ? message.originalContent : undefined
     );
+    compactionOrchestrator.notifyNewUserTurn();
   };
 
   const processAgentResponse =

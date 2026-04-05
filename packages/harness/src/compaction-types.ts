@@ -237,15 +237,56 @@ export type ContinuationVariant = "manual" | "auto-with-replay" | "tool-loop";
 
 // --- Compaction Results ---
 
+/**
+ * Acceptance evaluation for a completed compaction attempt.
+ * 완료된 compaction 시도에 대한 수락 평가 결과입니다.
+ *
+ * A compaction is only accepted when all three gates pass:
+ * 1. `fitsBudget` — post-compaction tokens fit within recovery budget
+ * 2. `belowTriggerThreshold` — post-compaction tokens fall below the
+ *    auto-compact trigger so the next turn does not immediately recompact
+ * 3. `savingsRatio >= minSavingsRatio` — enough tokens were saved to make
+ *    progress; rejects pathological summaries that barely reduce size
+ */
+export interface CompactionEffectiveness {
+  belowTriggerThreshold: boolean;
+  fitsBudget: boolean;
+  meetsMinSavings: boolean;
+  savedTokens: number;
+  savingsRatio: number;
+  triggerThresholdTokens: number;
+}
+
+/** Reason a compaction attempt was rejected by the acceptance gate. */
+export type CompactionRejectionReason =
+  | "above-trigger-threshold"
+  | "exceeds-budget"
+  | "insufficient-savings";
+
 export interface CompactionResult {
   compactionMethod?: "llm" | "session-memory";
   continuationVariant?: ContinuationVariant;
+  effectiveness?: CompactionEffectiveness;
   reason?: string; // why compaction failed, if success=false
+  rejectionReason?: CompactionRejectionReason;
   success: boolean;
   summaryMessageId?: string;
   tokensAfter: number;
   tokensBefore: number;
 }
+
+/**
+ * Minimum ratio of tokens a compaction must save to be accepted.
+ * Compactions below this threshold are treated as ineffective and rolled back.
+ * compaction이 수락되기 위한 최소 토큰 절감 비율입니다.
+ */
+export const DEFAULT_MIN_SAVINGS_RATIO = 0.1;
+
+/**
+ * Benign compaction rejection reason returned to the orchestrator when the
+ * summary did not reduce context enough to make forward progress.
+ */
+export const INEFFECTIVE_COMPACTION_REASON = "ineffective compaction";
 
 export interface PreparedCompactionV2 {
   baseMessageIds: string[];

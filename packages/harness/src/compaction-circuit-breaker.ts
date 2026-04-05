@@ -49,6 +49,25 @@ export class CompactionCircuitBreaker {
   }
 
   isOpen(): boolean {
+    this.tryTransitionToHalfOpen();
+    return this.isOpenSnapshot();
+  }
+
+  isClosed(): boolean {
+    return !this.isOpen();
+  }
+
+  getState(): CompactionCircuitBreakerState {
+    this.tryTransitionToHalfOpen();
+    return {
+      failures: this.failures,
+      isOpen: this.isOpenSnapshot(),
+      lastFailureAt: this.lastFailureAt,
+      reason: this.reason,
+    };
+  }
+
+  private isOpenSnapshot(): boolean {
     if (this.failures < this.maxConsecutiveFailures) {
       return false;
     }
@@ -61,26 +80,26 @@ export class CompactionCircuitBreaker {
       return false;
     }
 
-    const cooldownExpired = Date.now() - this.lastFailureAt >= this.cooldownMs;
-    if (cooldownExpired) {
-      this.reset();
-      return false;
-    }
-
     return true;
   }
 
-  isClosed(): boolean {
-    return !this.isOpen();
-  }
+  private tryTransitionToHalfOpen(): void {
+    if (this.failures < this.maxConsecutiveFailures) {
+      return;
+    }
 
-  getState(): CompactionCircuitBreakerState {
-    return {
-      failures: this.failures,
-      isOpen: this.isOpen(),
-      lastFailureAt: this.lastFailureAt,
-      reason: this.reason,
-    };
+    if (this.cooldownMs === 0) {
+      return;
+    }
+
+    if (this.lastFailureAt === null) {
+      return;
+    }
+
+    const cooldownExpired = Date.now() - this.lastFailureAt >= this.cooldownMs;
+    if (cooldownExpired) {
+      this.reset();
+    }
   }
 
   reset(): void {

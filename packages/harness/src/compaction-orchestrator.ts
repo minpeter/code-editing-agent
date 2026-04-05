@@ -7,6 +7,7 @@ import {
   shouldStartSpeculativeCompaction,
 } from "./compaction-policy";
 import type { CompactionResult, PreparedCompaction } from "./compaction-types";
+import { INEFFECTIVE_COMPACTION_REASON } from "./compaction-types";
 import { env } from "./env";
 import { estimateTokens } from "./token-utils";
 
@@ -79,7 +80,17 @@ export interface CompactionOrchestratorCallbacks extends CompactionCallbacks {
 export interface CompactionOrchestratorOptions {
   callbacks?: CompactionOrchestratorCallbacks;
   circuitBreaker?: CompactionCircuitBreaker;
+  /**
+   * Maximum number of accepted compactions per user turn. Prevents infinite
+   * compaction loops where a verbose summary causes immediate recompaction.
+   * Defaults to 3. Counter resets on notifyNewUserTurn().
+   */
+  maxAcceptedCompactionsPerTurn?: number;
 }
+
+const DEFAULT_MAX_ACCEPTED_COMPACTIONS_PER_TURN = 10;
+
+export const COMPACTION_CAP_EXCEEDED_REASON = "compaction cap exceeded";
 
 function isCompactionOrchestratorOptions(
   value: unknown
@@ -88,7 +99,11 @@ function isCompactionOrchestratorOptions(
     return false;
   }
 
-  return "callbacks" in value || "circuitBreaker" in value;
+  return (
+    "callbacks" in value ||
+    "circuitBreaker" in value ||
+    "maxAcceptedCompactionsPerTurn" in value
+  );
 }
 
 export function discardAllJobsCore(params: {
@@ -357,6 +372,9 @@ export class CompactionOrchestrator {
   private readonly callbacks: CompactionOrchestratorCallbacks;
   private readonly circuitBreaker: CompactionCircuitBreaker | undefined;
   private readonly history: CompactionHistoryLike | null;
+  private readonly maxAcceptedCompactionsPerTurn: number;
+  private acceptedCompactionsThisTurn = 0;
+  private ineffectiveAttemptsThisTurn = 0;
   private compactionInProgress = false;
   private jobCounter = 0;
   private readonly jobs: SpeculativeCompactionJob[] = [];
@@ -406,16 +424,33 @@ export class CompactionOrchestrator {
       return value.circuitBreaker;
     };
 
+    const resolveMaxAcceptedCompactionsPerTurn = (
+      value?: CompactionOrchestratorCallbacks | CompactionOrchestratorOptions
+    ): number => {
+      if (!(value && isCompactionOrchestratorOptions(value))) {
+        return DEFAULT_MAX_ACCEPTED_COMPACTIONS_PER_TURN;
+      }
+      const raw = value.maxAcceptedCompactionsPerTurn;
+      if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+        return DEFAULT_MAX_ACCEPTED_COMPACTIONS_PER_TURN;
+      }
+      return Math.floor(raw);
+    };
+
     if (isHistoryLike(historyOrCallbacks)) {
       this.history = historyOrCallbacks;
       this.callbacks = resolveCallbacks(maybeCallbacks);
       this.circuitBreaker = resolveCircuitBreaker(maybeCallbacks);
+      this.maxAcceptedCompactionsPerTurn =
+        resolveMaxAcceptedCompactionsPerTurn(maybeCallbacks);
       return;
     }
 
     this.history = null;
     this.callbacks = resolveCallbacks(historyOrCallbacks);
     this.circuitBreaker = resolveCircuitBreaker(historyOrCallbacks);
+    this.maxAcceptedCompactionsPerTurn =
+      resolveMaxAcceptedCompactionsPerTurn(historyOrCallbacks);
   }
 
   private debugLog(message: string): void {
@@ -441,6 +476,34 @@ export class CompactionOrchestrator {
 
   isRunning(): boolean {
     return this.compactionInProgress;
+  }
+
+  /**
+   * Reset the per-turn compaction counter. Call this at the start of each
+   * user turn. Once the cap is reached within a turn, additional compaction
+   * attempts are blocked until notifyNewUserTurn() is invoked.
+   */
+  notifyNewUserTurn(): void {
+    this.acceptedCompactionsThisTurn = 0;
+    this.ineffectiveAttemptsThisTurn = 0;
+  }
+
+  getAcceptedCompactionsThisTurn(): number {
+    return this.acceptedCompactionsThisTurn;
+  }
+
+  getIneffectiveAttemptsThisTurn(): number {
+    return this.ineffectiveAttemptsThisTurn;
+  }
+
+  getMaxAcceptedCompactionsPerTurn(): number {
+    return this.maxAcceptedCompactionsPerTurn;
+  }
+
+  isCompactionCapReached(): boolean {
+    const totalAttempts =
+      this.acceptedCompactionsThisTurn + this.ineffectiveAttemptsThisTurn;
+    return totalAttempts >= this.maxAcceptedCompactionsPerTurn;
   }
 
   discardAll(): void {
@@ -474,6 +537,13 @@ export class CompactionOrchestrator {
 
     if (this.circuitBreaker?.isOpen()) {
       this.debugLog("checkAndCompact skip: circuit breaker open");
+      return false;
+    }
+
+    if (this.isCompactionCapReached()) {
+      this.debugLog(
+        `checkAndCompact skip: per-turn cap reached (${this.acceptedCompactionsThisTurn}/${this.maxAcceptedCompactionsPerTurn})`
+      );
       return false;
     }
 
@@ -558,6 +628,13 @@ export class CompactionOrchestrator {
 
   shouldStartSpeculative(history?: CompactionHistoryLike): boolean {
     if (env.DISABLE_AUTO_COMPACT) {
+      return false;
+    }
+
+    if (this.isCompactionCapReached()) {
+      this.debugLog(
+        `shouldStartSpeculative=false: per-turn cap reached (${this.acceptedCompactionsThisTurn}/${this.maxAcceptedCompactionsPerTurn})`
+      );
       return false;
     }
 
@@ -702,6 +779,14 @@ export class CompactionOrchestrator {
         jobId: job.id,
         phase: "new-turn",
       });
+      if (meta.result.success) {
+        this.acceptedCompactionsThisTurn += 1;
+      } else if (meta.result.reason === INEFFECTIVE_COMPACTION_REASON) {
+        this.ineffectiveAttemptsThisTurn += 1;
+        this.debugLog(
+          `applyReady ineffective (${meta.result.rejectionReason}): attempt ${this.ineffectiveAttemptsThisTurn}/${this.maxAcceptedCompactionsPerTurn}`
+        );
+      }
       return { applied: meta.result.success, stale };
     }
 
@@ -1035,6 +1120,12 @@ export class CompactionOrchestrator {
       const result = toCompactionResult(await history.compact(options));
       if (result.success) {
         this.circuitBreaker?.recordSuccess();
+        this.acceptedCompactionsThisTurn += 1;
+      } else if (result.reason === INEFFECTIVE_COMPACTION_REASON) {
+        this.ineffectiveAttemptsThisTurn += 1;
+        this.debugLog(
+          `runCompaction ineffective (${result.rejectionReason}): attempt ${this.ineffectiveAttemptsThisTurn}/${this.maxAcceptedCompactionsPerTurn}`
+        );
       } else if (!isBenignCompactionFailure(result)) {
         this.circuitBreaker?.recordFailure(
           result.reason ?? "compaction returned success: false"

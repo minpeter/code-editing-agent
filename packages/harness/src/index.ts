@@ -38,12 +38,14 @@ export type {
   BlockingCompactionStage,
   CompactionAppliedDetail,
   CompactionOrchestratorCallbacks,
+  CompactionOrchestratorOptions,
   CompactionPhase,
   SpeculativeCompactionJob,
 } from "./compaction-orchestrator";
 export {
   applyReadyCompactionCore,
   blockAtHardLimitCore,
+  COMPACTION_CAP_EXCEEDED_REASON,
   CompactionOrchestrator,
   discardAllJobsCore,
 } from "./compaction-orchestrator";
@@ -79,6 +81,10 @@ export {
   DEFAULT_COMPACTION_USER_PROMPT,
 } from "./compaction-prompts";
 export type * from "./compaction-types";
+export {
+  DEFAULT_MIN_SAVINGS_RATIO,
+  INEFFECTIVE_COMPACTION_REASON,
+} from "./compaction-types";
 export type { ContextTokenStats } from "./context-analysis";
 export { analyzeContextTokens } from "./context-analysis";
 export type {

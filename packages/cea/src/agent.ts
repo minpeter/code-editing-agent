@@ -653,6 +653,7 @@ export class AgentManager {
       {
         instructions: () => this.getInstructions(),
         contextLimit: effectiveContextLength,
+        taskAwareCompaction: true,
       }
     );
     const { summarizeFn, getStructuredState: fileTrackingState } =

@@ -12,11 +12,17 @@ import type {
   ActualTokenUsageInput,
   CheckpointMessage,
   CompactionConfig,
+  CompactionEffectiveness,
+  CompactionRejectionReason,
   CompactionResult,
   ContextUsage,
   ContinuationVariant,
   MessageLine,
   PruningConfig,
+} from "./compaction-types";
+import {
+  DEFAULT_MIN_SAVINGS_RATIO,
+  INEFFECTIVE_COMPACTION_REASON,
 } from "./compaction-types";
 import { collapseConsecutiveOps } from "./context-collapse";
 import { createContinuationMessage } from "./continuation";
@@ -81,6 +87,16 @@ export function getContinuationText(
   variant: keyof typeof COMPACTION_CONTINUATION_TEXTS
 ): string {
   return COMPACTION_CONTINUATION_TEXTS[variant];
+}
+
+function computeSavingsRatio(
+  savedTokens: number,
+  tokensBefore: number
+): number {
+  if (tokensBefore > 0) {
+    return savedTokens / tokensBefore;
+  }
+  return savedTokens > 0 ? 1 : 0;
 }
 
 type CompactionDirection = "keep-recent" | "keep-prefix";
@@ -815,6 +831,14 @@ export class CheckpointHistory {
       effectiveReplayMessage
     );
 
+    const preInstallSnapshot = {
+      messages: [...this.messages],
+      summaryMessageId: this.summaryMessageId,
+      revision: this.revision,
+      messageRevision: this.messageRevision,
+      actualUsage: this.actualUsage,
+    };
+
     const insertIndex = activeStartIndex + summaryInsertSplitIndex;
     this.messages.splice(insertIndex, 0, summaryMessage);
     this.messages.splice(insertIndex + 1, 0, continuationMessage);
@@ -829,17 +853,36 @@ export class CheckpointHistory {
     this.revision += 1;
     this.messageRevision += 1;
 
+    const tokensAfter = this.getEstimatedTokens();
+    const effectiveness = this.evaluateCompactionAcceptance({
+      contextLimit: this.compactionConfig.contextLimit,
+      tokensAfter,
+      tokensBefore,
+    });
+
+    const rejection = this.maybeRejectCompaction({
+      autoCompact,
+      compactionMethod,
+      effectiveness,
+      snapshot: preInstallSnapshot,
+      tokensAfter,
+      tokensBefore,
+    });
+    if (rejection) {
+      return rejection;
+    }
+
     await this.persistCompactionMessages({
       continuationMessage,
       replayMessageCopy,
       summaryMessage,
     });
 
-    const tokensAfter = this.getEstimatedTokens();
     return {
       success: true,
       compactionMethod,
       continuationVariant,
+      effectiveness,
       summaryMessageId: summaryMessage.id,
       tokensBefore,
       tokensAfter,
@@ -1941,19 +1984,140 @@ export class CheckpointHistory {
     return Math.floor(contextLimit * 0.95);
   }
 
-  private evaluateRecoveryAttempt(params: {
+  private evaluateCompactionAcceptance(params: {
     contextLimit: number;
+    minSavingsRatio?: number;
     tokensAfter: number;
     tokensBefore: number;
-  }): boolean {
-    const { contextLimit, tokensAfter, tokensBefore } = params;
-    // Unlimited context: success = any reduction achieved
+  }): CompactionEffectiveness {
+    const {
+      contextLimit,
+      minSavingsRatio = DEFAULT_MIN_SAVINGS_RATIO,
+      tokensAfter,
+      tokensBefore,
+    } = params;
+
+    const savedTokens = tokensBefore - tokensAfter;
+    const savingsRatio = computeSavingsRatio(savedTokens, tokensBefore);
+
+    // Unlimited context: any reduction counts as fitting and below-threshold;
+    // only require minimum savings to reject degenerate summaries.
     if (contextLimit <= 0) {
-      return tokensAfter < tokensBefore;
+      const meetsMinSavings = savingsRatio >= minSavingsRatio;
+      return {
+        belowTriggerThreshold: savedTokens > 0,
+        fitsBudget: savedTokens > 0,
+        meetsMinSavings,
+        savedTokens,
+        savingsRatio,
+        triggerThresholdTokens: 0,
+      };
     }
-    // Budget-based: must be under contextLimit (after reserve)
+
     const budget = this.getRecoveryBudget();
-    return tokensAfter < budget;
+    const thresholdRatio =
+      this.compactionConfig.thresholdRatio ??
+      DEFAULT_COMPACTION_CONFIG.thresholdRatio;
+    const triggerThresholdTokens = Math.floor(contextLimit * thresholdRatio);
+
+    const fitsBudget = tokensAfter < budget;
+    const belowTriggerThreshold = tokensAfter < triggerThresholdTokens;
+    const meetsMinSavings = savingsRatio >= minSavingsRatio;
+
+    return {
+      belowTriggerThreshold,
+      fitsBudget,
+      meetsMinSavings,
+      savedTokens,
+      savingsRatio,
+      triggerThresholdTokens,
+    };
+  }
+
+  private resolveRejectionReason(
+    effectiveness: CompactionEffectiveness
+  ): CompactionRejectionReason | null {
+    if (!effectiveness.fitsBudget) {
+      return "exceeds-budget";
+    }
+    // belowTriggerThreshold and meetsMinSavings are observability signals only.
+    // Rejecting on those causes false negatives with real LLM summaries that
+    // land just above the trigger ratio, leading to emergency blocking
+    // compaction when tokens eventually hit the hard limit. The per-turn cap
+    // in the orchestrator prevents degenerate retry loops.
+    return null;
+  }
+
+  private isCompactionAccepted(
+    effectiveness: CompactionEffectiveness
+  ): boolean {
+    return this.resolveRejectionReason(effectiveness) === null;
+  }
+
+  private isAutoCompactWarranted(tokensBefore: number): boolean {
+    const contextLimit = this.compactionConfig.contextLimit;
+    if (contextLimit <= 0) {
+      return false;
+    }
+
+    const thresholdRatio =
+      this.compactionConfig.thresholdRatio ??
+      DEFAULT_COMPACTION_CONFIG.thresholdRatio;
+    const triggerTokens = Math.floor(contextLimit * thresholdRatio);
+    return tokensBefore >= triggerTokens;
+  }
+
+  private maybeRejectCompaction(params: {
+    autoCompact: boolean;
+    compactionMethod: CompactionResult["compactionMethod"];
+    effectiveness: CompactionEffectiveness;
+    snapshot: {
+      actualUsage: ActualTokenUsage | null;
+      messages: CheckpointMessage[];
+      messageRevision: number;
+      revision: number;
+      summaryMessageId: string | null;
+    };
+    tokensAfter: number;
+    tokensBefore: number;
+  }): CompactionResult | null {
+    if (!params.autoCompact) {
+      return null;
+    }
+
+    // Gate only applies when compaction was actually warranted. If the
+    // pre-compaction token count is still below the auto-compact trigger, the
+    // caller is force-compacting at a tiny scale (tests, warm-up, etc.) and
+    // the gate would produce false rejections because overhead dominates.
+    if (!this.isAutoCompactWarranted(params.tokensBefore)) {
+      return null;
+    }
+
+    const rejectionReason = this.resolveRejectionReason(params.effectiveness);
+    if (!rejectionReason) {
+      return null;
+    }
+
+    this.messages = params.snapshot.messages;
+    this.summaryMessageId = params.snapshot.summaryMessageId;
+    this.actualUsage = params.snapshot.actualUsage;
+    this.revision = params.snapshot.revision;
+    this.messageRevision = params.snapshot.messageRevision;
+    this.refreshEstimatedUsage();
+
+    this.logCompactionDebug(
+      `compact rejected: ${rejectionReason} (saved=${params.effectiveness.savedTokens}, ratio=${params.effectiveness.savingsRatio.toFixed(3)})`
+    );
+
+    return {
+      success: false,
+      compactionMethod: params.compactionMethod,
+      effectiveness: params.effectiveness,
+      reason: INEFFECTIVE_COMPACTION_REASON,
+      rejectionReason,
+      tokensAfter: params.tokensAfter,
+      tokensBefore: params.tokensBefore,
+    };
   }
 
   private tryPruneRecovery(
@@ -1991,13 +2155,12 @@ export class CheckpointHistory {
     this.messageRevision += 1;
 
     const tokensAfter = this.getEstimatedTokens();
-    if (
-      !this.evaluateRecoveryAttempt({
-        contextLimit,
-        tokensAfter,
-        tokensBefore,
-      })
-    ) {
+    const pruneEffectiveness = this.evaluateCompactionAcceptance({
+      contextLimit,
+      tokensAfter,
+      tokensBefore,
+    });
+    if (!pruneEffectiveness.fitsBudget) {
       return null;
     }
 
@@ -2125,13 +2288,18 @@ export class CheckpointHistory {
     this.messageRevision += 1;
 
     const tokensAfter = this.getEstimatedTokens();
-    if (
-      !this.evaluateRecoveryAttempt({
-        contextLimit,
-        tokensAfter,
-        tokensBefore,
-      })
-    ) {
+    const effectiveness = this.evaluateCompactionAcceptance({
+      contextLimit,
+      tokensAfter,
+      tokensBefore,
+    });
+    // Aggressive overflow recovery is a last-resort strategy; only require that
+    // the result fits within the recovery budget. Non-aggressive overflow must
+    // pass the full acceptance gate to avoid pathological re-compaction loops.
+    const accepted = aggressive
+      ? effectiveness.fitsBudget
+      : this.isCompactionAccepted(effectiveness);
+    if (!accepted) {
       this.messages = snapshot.messages;
       this.summaryMessageId = snapshot.summaryMessageId;
       this.actualUsage = snapshot.actualUsage;
@@ -2258,13 +2426,12 @@ export class CheckpointHistory {
       };
     }
 
-    if (
-      !this.evaluateRecoveryAttempt({
-        contextLimit,
-        tokensAfter,
-        tokensBefore,
-      })
-    ) {
+    const truncateEffectiveness = this.evaluateCompactionAcceptance({
+      contextLimit,
+      tokensAfter,
+      tokensBefore,
+    });
+    if (!truncateEffectiveness.fitsBudget) {
       return null;
     }
 

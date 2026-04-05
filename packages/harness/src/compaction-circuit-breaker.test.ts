@@ -67,6 +67,42 @@ describe("CompactionCircuitBreaker", () => {
     }
   });
 
+  it("getState returns a consistent snapshot after cooldown expiry", () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(10_000);
+
+      const timedBreaker = new CompactionCircuitBreaker({
+        cooldownMs: 1000,
+        maxConsecutiveFailures: 2,
+      });
+
+      timedBreaker.recordFailure("first");
+      timedBreaker.recordFailure("second");
+
+      expect(timedBreaker.getState()).toEqual({
+        failures: 2,
+        isOpen: true,
+        lastFailureAt: 10_000,
+        reason: "second",
+      });
+
+      vi.advanceTimersByTime(1000);
+
+      // After cooldown expires, all fields must reflect the post-reset state
+      // consistently — no mix of pre-reset failures with post-reset nulls.
+      expect(timedBreaker.getState()).toEqual({
+        failures: 0,
+        isOpen: false,
+        lastFailureAt: null,
+        reason: null,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reset force-resets state", () => {
     breaker.recordFailure("failure-1");
     breaker.recordFailure("failure-2");
