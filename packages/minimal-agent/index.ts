@@ -183,7 +183,12 @@ const main = defineCommand({
       agent = await createAgent({
         model,
         instructions: DEFAULT_SYSTEM_PROMPT,
-        mcp: true,
+        mcp: [
+          {
+            command: "bunx",
+            args: ["--silent", "duckduckgo-mcp@latest"],
+          },
+        ],
       });
       let lastProcessedMessageCount = 0;
 
