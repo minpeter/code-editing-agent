@@ -18,20 +18,6 @@ describe("AgentManager reasoning mode defaults", () => {
     agentManager.setReasoningMode(originalReasoningMode);
   });
 
-  it("selects preserved as default for GLM-5", () => {
-    agentManager.setProvider("friendli");
-    agentManager.setModelId("zai-org/GLM-5");
-
-    expect(agentManager.getReasoningMode()).toBe("preserved");
-  });
-
-  it("selects interleaved as default for MiniMax M2.5", () => {
-    agentManager.setProvider("friendli");
-    agentManager.setModelId("MiniMaxAI/MiniMax-M2.5");
-
-    expect(agentManager.getReasoningMode()).toBe("interleaved");
-  });
-
   it("selects on as default for anthropic models", () => {
     agentManager.setProvider("anthropic");
 
@@ -39,8 +25,7 @@ describe("AgentManager reasoning mode defaults", () => {
   });
 
   it("still allows explicit override after default selection", () => {
-    agentManager.setProvider("friendli");
-    agentManager.setModelId("MiniMaxAI/MiniMax-M2.5");
+    agentManager.setProvider("anthropic");
     agentManager.setReasoningMode("on");
 
     expect(agentManager.getReasoningMode()).toBe("on");

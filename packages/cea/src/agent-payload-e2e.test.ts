@@ -42,14 +42,14 @@ function getLast<T>(values: T[]): T | null {
   return values.length > 0 ? ([...values].pop() ?? null) : null;
 }
 
-const createFriendliStub = () => {
+const createAnthropicStub = () => {
   return ((modelId: string) => ({ modelId })) as never;
 };
 
 async function capturePayloadFromHistory(history: CheckpointHistoryInstance) {
-  const manager = new AgentManager(createFriendliStub(), null);
-  manager.setProvider("friendli");
-  manager.setModelId("MiniMaxAI/MiniMax-M2.5");
+  const manager = new AgentManager(createAnthropicStub());
+  manager.setProvider("anthropic");
+  manager.setModelId("claude-sonnet-4-6");
 
   const messages = history.getMessagesForLLM();
   await manager.stream(messages);
@@ -57,7 +57,7 @@ async function capturePayloadFromHistory(history: CheckpointHistoryInstance) {
   return getLast(payloadState.calls);
 }
 
-describe("AgentManager Friendli payload E2E", () => {
+describe("AgentManager payload E2E", () => {
   beforeEach(() => {
     payloadState.calls.length = 0;
     payloadState.usage = undefined;
@@ -162,9 +162,9 @@ describe("AgentManager Friendli payload E2E", () => {
       totalTokens: 322,
     };
 
-    const manager = new AgentManager(createFriendliStub(), null);
-    manager.setProvider("friendli");
-    manager.setModelId("MiniMaxAI/MiniMax-M2.5");
+    const manager = new AgentManager(createAnthropicStub());
+    manager.setProvider("anthropic");
+    manager.setModelId("claude-sonnet-4-6");
 
     const usage = await manager.measureUsage([
       { role: "user", content: "measure this context" },
