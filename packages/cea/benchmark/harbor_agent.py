@@ -43,7 +43,7 @@ class CodeEditingAgent(BaseInstalledAgent):
     def create_run_agent_commands(self, instruction: str) -> list[ExecInput]:
         prompt = shlex.quote(instruction)
         env = {
-            "FRIENDLI_TOKEN": os.getenv("FRIENDLI_TOKEN", ""),
+            "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
             "PATH": "/usr/local/bin:/usr/bin:/bin",
             "ATIF_OUTPUT_PATH": "/logs/agent/trajectory.json",
         }
