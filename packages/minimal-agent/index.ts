@@ -1,4 +1,3 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
 import {
   CheckpointHistory,
   type Command,
@@ -13,8 +12,13 @@ import {
   SessionManager,
   SessionMemoryTracker,
 } from "@ai-sdk-tool/harness";
+
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
 import { createAgentTUI } from "@ai-sdk-tool/tui";
+import {
+  createFriendli,
+  type FriendliAIProvider,
+} from "@friendliai/ai-provider";
 import type { LanguageModel } from "ai";
 import { defineCommand, runMain } from "citty";
 
@@ -27,7 +31,7 @@ import {
 } from "./compaction-config.js";
 import { env } from "./env.js";
 
-const DEFAULT_MODEL_ID = "claude-sonnet-4-6";
+const DEFAULT_MODEL_ID = "zai-org/GLM-5";
 const DEFAULT_SYSTEM_PROMPT = `You are a minimal example agent. Be concise and helpful.
 When the user shares personal information (name, preferences, pets, job, hobbies, etc.), remember it carefully.
 When asked to recall information, list ALL known facts — do not omit any details.`;
@@ -81,15 +85,16 @@ const LOCAL_COMMANDS: Command[] = [
   },
 ];
 
-function createAnthropicProvider() {
-  return createAnthropic({
-    apiKey: env.ANTHROPIC_API_KEY ?? "",
-    ...(env.ANTHROPIC_BASE_URL ? { baseURL: env.ANTHROPIC_BASE_URL } : {}),
+function createFriendliProvider(): FriendliAIProvider {
+  return createFriendli({
+    apiKey: env.FRIENDLI_TOKEN ?? "",
+    baseURL: env.FRIENDLI_BASE_URL || "serverless",
+    includeUsage: true,
   });
 }
 
 function resolveModelId(cliModel?: string): string {
-  return cliModel?.trim() || env.ANTHROPIC_MODEL || DEFAULT_MODEL_ID;
+  return cliModel?.trim() || env.FRIENDLI_MODEL || DEFAULT_MODEL_ID;
 }
 
 function createCompactionConfig(
@@ -139,13 +144,13 @@ function formatContextUsage(contextUsage: ContextUsage): string {
 const main = defineCommand({
   meta: {
     name: "minimal-agent",
-    description: "Minimal Anthropic-backed agent example",
+    description: "Minimal FriendliAI-backed agent example",
   },
   args: {
     model: {
       alias: ["m"],
       type: "string",
-      description: "Override the Anthropic model ID",
+      description: "Override the Friendli model ID",
     },
     prompt: {
       alias: ["p"],
@@ -155,111 +160,125 @@ const main = defineCommand({
     },
   },
   async run({ args }) {
-    const sessionManager = new SessionManager("minimal-agent");
-    sessionManager.initialize();
-    const circuitBreaker = new CompactionCircuitBreaker();
-    const sessionMemoryTracker = new SessionMemoryTracker();
-    const selectedModelId = resolveModelId(args.model);
-    const anthropic = createAnthropicProvider();
-    const model = anthropic(selectedModelId);
-    const compaction = createCompactionConfig(model, sessionMemoryTracker);
-    const messageHistory = new CheckpointHistory({
-      compaction,
-    });
-    messageHistory.setSystemPromptTokens(estimateTokens(DEFAULT_SYSTEM_PROMPT));
+    let agent: Awaited<ReturnType<typeof createAgent>> | undefined;
 
-    const agent = createAgent({
-      model,
-      instructions: DEFAULT_SYSTEM_PROMPT,
-    });
-    let lastProcessedMessageCount = 0;
+    let shouldExit = false;
 
-    const handleTurnComplete = (
-      messages: Array<{ message: { role: string; content: unknown } }>
-    ): void => {
-      const startFrom = Math.min(lastProcessedMessageCount, messages.length);
-      for (const { message } of messages.slice(startFrom)) {
-        if (message.role === "user" && typeof message.content === "string") {
-          sessionMemoryTracker.extractFactsFromUserMessage(message.content);
+    try {
+      const sessionManager = new SessionManager("minimal-agent");
+      sessionManager.initialize();
+      const circuitBreaker = new CompactionCircuitBreaker();
+      const sessionMemoryTracker = new SessionMemoryTracker();
+      const selectedModelId = resolveModelId(args.model);
+      const friendli = createFriendliProvider();
+      const model = friendli(selectedModelId);
+      const compaction = createCompactionConfig(model, sessionMemoryTracker);
+      const messageHistory = new CheckpointHistory({
+        compaction,
+      });
+      messageHistory.setSystemPromptTokens(
+        estimateTokens(DEFAULT_SYSTEM_PROMPT)
+      );
+
+      agent = await createAgent({
+        model,
+        instructions: DEFAULT_SYSTEM_PROMPT,
+        mcp: true,
+      });
+      let lastProcessedMessageCount = 0;
+
+      const handleTurnComplete = (
+        messages: Array<{ message: { role: string; content: unknown } }>
+      ): void => {
+        const startFrom = Math.min(lastProcessedMessageCount, messages.length);
+        for (const { message } of messages.slice(startFrom)) {
+          if (message.role === "user" && typeof message.content === "string") {
+            sessionMemoryTracker.extractFactsFromUserMessage(message.content);
+          }
         }
-      }
 
-      lastProcessedMessageCount = messages.length;
-    };
+        lastProcessedMessageCount = messages.length;
+      };
 
-    const handleCompactionComplete = (result: CompactionResult): void => {
-      if (!(result.success && result.summaryMessageId)) {
+      const handleCompactionComplete = (result: CompactionResult): void => {
+        if (!(result.success && result.summaryMessageId)) {
+          return;
+        }
+
+        const msg = messageHistory
+          .getAll()
+          .find((m) => m.id === result.summaryMessageId);
+        if (
+          msg?.message.role === "assistant" &&
+          typeof msg.message.content === "string"
+        ) {
+          sessionMemoryTracker.extractFactsFromSummary(msg.message.content);
+        }
+      };
+
+      const prompt = args.prompt?.trim();
+      if (prompt) {
+        await runHeadless({
+          agent,
+          circuitBreaker,
+          sessionId: sessionManager.getId(),
+          emitEvent,
+          initialUserMessage: {
+            content: prompt,
+          },
+          messageHistory,
+          maxIterations: 1,
+          modelId: selectedModelId,
+          compactionCallbacks: {
+            onCompactionComplete: handleCompactionComplete,
+          },
+          onTurnComplete: handleTurnComplete,
+        });
         return;
       }
 
-      const msg = messageHistory
-        .getAll()
-        .find((m) => m.id === result.summaryMessageId);
-      if (
-        msg?.message.role === "assistant" &&
-        typeof msg.message.content === "string"
-      ) {
-        sessionMemoryTracker.extractFactsFromSummary(msg.message.content);
-      }
-    };
-
-    const prompt = args.prompt?.trim();
-    if (prompt) {
-      await runHeadless({
+      await createAgentTUI({
         agent,
         circuitBreaker,
-        sessionId: sessionManager.getId(),
-        emitEvent,
-        initialUserMessage: {
-          content: prompt,
+        commands: LOCAL_COMMANDS,
+        footer: {
+          get text() {
+            const contextUsage = messageHistory.getContextUsage();
+            if (!contextUsage) {
+              return undefined;
+            }
+
+            return formatContextUsage(contextUsage);
+          },
         },
         messageHistory,
-        maxIterations: 1,
-        modelId: selectedModelId,
         compactionCallbacks: {
           onCompactionComplete: handleCompactionComplete,
         },
         onTurnComplete: handleTurnComplete,
+        header: {
+          title: "Minimal Agent",
+          get subtitle() {
+            return `${selectedModelId}\nSession: ${sessionManager.getId()}`;
+          },
+        },
+        onCommandAction: (action) => {
+          if (action.type === "new-session") {
+            sessionManager.initialize();
+            circuitBreaker.resetForNewSession();
+            sessionMemoryTracker.clear();
+            lastProcessedMessageCount = 0;
+          }
+        },
       });
-      return;
+      shouldExit = true;
+    } finally {
+      await agent?.close();
     }
 
-    await createAgentTUI({
-      agent,
-      circuitBreaker,
-      commands: LOCAL_COMMANDS,
-      footer: {
-        get text() {
-          const contextUsage = messageHistory.getContextUsage();
-          if (!contextUsage) {
-            return undefined;
-          }
-
-          return formatContextUsage(contextUsage);
-        },
-      },
-      messageHistory,
-      compactionCallbacks: {
-        onCompactionComplete: handleCompactionComplete,
-      },
-      onTurnComplete: handleTurnComplete,
-      header: {
-        title: "Minimal Agent",
-        get subtitle() {
-          return `${selectedModelId}\nSession: ${sessionManager.getId()}`;
-        },
-      },
-      onCommandAction: (action) => {
-        if (action.type === "new-session") {
-          sessionManager.initialize();
-          circuitBreaker.resetForNewSession();
-          sessionMemoryTracker.clear();
-          lastProcessedMessageCount = 0;
-        }
-      },
-    });
-
-    process.exit(0);
+    if (shouldExit) {
+      process.exit(0);
+    }
   },
 });
 
