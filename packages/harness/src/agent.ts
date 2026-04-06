@@ -4,13 +4,13 @@
  */
 
 import { stepCountIs, streamText } from "ai";
+import { resolveMCPOption } from "./mcp-init.js";
 import type {
   Agent,
   AgentConfig,
   AgentStreamOptions,
   AgentStreamResult,
 } from "./types";
-import { resolveMCPOption } from "./mcp-init.js";
 
 /**
  * Creates an {@link Agent} instance that wraps a Vercel AI SDK `streamText` call.

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolSet } from "ai";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { managerCloseMock, managerInitMock, managerToolsByServerMock } =
   vi.hoisted(() => ({
@@ -29,8 +29,8 @@ vi.mock("./mcp-manager.js", () => ({
 import { loadMCPConfig } from "./mcp-config.js";
 import { clearMCPCache, resolveMCPOption } from "./mcp-init.js";
 import { MCPManager } from "./mcp-manager.js";
-import type { MCPServerConfig } from "./mcp-types.js";
 import { mergeMCPTools } from "./mcp-tool-merger.js";
+import type { MCPServerConfig } from "./mcp-types.js";
 
 const loadMCPConfigMock = vi.mocked(loadMCPConfig);
 const mergeMCPToolsMock = vi.mocked(mergeMCPTools);
