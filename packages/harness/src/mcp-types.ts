@@ -11,10 +11,10 @@ import type { ToolSet } from "ai";
  * The server is launched as a subprocess with the given command and arguments.
  */
 export interface MCPStdioServerConfig {
-  /** The executable command to run (e.g., "python", "node", "/usr/local/bin/my-server") */
-  command: string;
   /** Optional arguments to pass to the command */
   args?: string[];
+  /** The executable command to run (e.g., "python", "node", "/usr/local/bin/my-server") */
+  command: string;
   /** Optional environment variables to pass to the subprocess */
   env?: Record<string, string>;
 }
@@ -24,12 +24,12 @@ export interface MCPStdioServerConfig {
  * The server is accessed via HTTP at the given URL.
  */
 export interface MCPRemoteServerConfig {
-  /** The base URL of the remote MCP server (e.g., "http://localhost:3000", "https://api.example.com") */
-  url: string;
-  /** Transport type: 'http' (Streamable HTTP, default) or 'sse' (Server-Sent Events) */
-  type?: "http" | "sse";
   /** Optional HTTP headers to include in requests (e.g., authorization, custom headers) */
   headers?: Record<string, string>;
+  /** Transport type: 'http' (Streamable HTTP, default) or 'sse' (Server-Sent Events) */
+  type?: "http" | "sse";
+  /** The base URL of the remote MCP server (e.g., "http://localhost:3000", "https://api.example.com") */
+  url: string;
 }
 
 /**
@@ -63,8 +63,6 @@ export interface MCPManagerOptions {
  * Result of merging tools from multiple MCP servers.
  */
 export interface MCPToolMergeResult {
-  /** Merged set of tools from all connected servers */
-  tools: ToolSet;
   /** List of tool name conflicts detected during merge */
   conflicts: Array<{
     /** The conflicting tool name */
@@ -72,18 +70,20 @@ export interface MCPToolMergeResult {
     /** List of server names that provided this tool */
     sources: string[];
   }>;
+  /** Merged set of tools from all connected servers */
+  tools: ToolSet;
 }
 
 /**
  * Status information for a connected MCP server.
  */
 export interface MCPServerStatus {
+  /** Error message if status is "failed" (e.g., connection refused, timeout) */
+  error?: string;
   /** Name of the server (key in the MCP config) */
   name: string;
   /** Current connection state */
   status: "connected" | "failed" | "closed";
   /** Number of tools provided by this server */
   toolCount: number;
-  /** Error message if status is "failed" (e.g., connection refused, timeout) */
-  error?: string;
 }

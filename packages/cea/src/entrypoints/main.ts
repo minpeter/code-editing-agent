@@ -668,7 +668,7 @@ const mainCommand = defineCommand({
     const mcpTools = mcpManager.tools();
     if (Object.keys(mcpTools).length > 0) {
       agentManager.setTools({ ...agentManager.getTools(), ...mcpTools });
-      console.log(
+      console.warn(
         `[MCP] Loaded ${Object.keys(mcpTools).length} tools from MCP servers`
       );
     }

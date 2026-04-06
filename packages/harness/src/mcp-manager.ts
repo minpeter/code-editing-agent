@@ -15,8 +15,8 @@ const DEFAULT_TOOLS_TIMEOUT_MS = 30_000;
 type MCPClient = Awaited<ReturnType<typeof createMCPClient>>;
 
 interface ManagedClient {
-  name: string;
   client: MCPClient;
+  name: string;
 }
 
 export class MCPManager {

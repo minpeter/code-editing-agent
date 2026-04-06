@@ -2,8 +2,8 @@ import type { ToolSet } from "ai";
 import type { MCPToolMergeResult } from "./mcp-types.js";
 
 export interface ToolConflict {
-  toolName: string;
   sources: string[];
+  toolName: string;
 }
 
 export interface MergeOptions {
