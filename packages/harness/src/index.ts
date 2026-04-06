@@ -152,4 +152,18 @@ export type {
   PruningConfig,
 } from "./tool-pruning";
 export { progressivePrune, pruneToolOutputs } from "./tool-pruning";
+// MCP integration
+export { MCPManager } from "./mcp-manager";
+export { loadMCPConfig, isStdioConfig, isRemoteConfig } from "./mcp-config";
+export { mergeMCPTools, sanitizeServerName } from "./mcp-tool-merger";
+export type {
+  MCPConfigFile,
+  MCPManagerOptions,
+  MCPRemoteServerConfig,
+  MCPServerConfig,
+  MCPServerStatus,
+  MCPStdioServerConfig,
+  MCPToolMergeResult,
+} from "./mcp-types";
+export type { MergeOptions, ToolConflict } from "./mcp-tool-merger";
 export type * from "./types";
