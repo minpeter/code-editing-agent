@@ -1,4 +1,4 @@
-import type { ModelMessage, TextPart } from "ai";
+import type { ModelMessage, TextPart, ToolSet } from "ai";
 
 // Constants for token estimation
 export const LATIN_CHARS_PER_TOKEN = 4;
@@ -166,4 +166,27 @@ export function estimateMessageTokens(message: ModelMessage): number {
   }
 
   return estimateTokens(extractMessageText(message));
+}
+
+export function estimateToolSchemasTokens(tools: ToolSet): number {
+  const entries = Object.entries(tools);
+  if (entries.length === 0) {
+    return 0;
+  }
+
+  let total = 0;
+  for (const [name, tool] of entries) {
+    total += estimateTokens(name);
+    if (tool.description) {
+      total += estimateTokens(tool.description);
+    }
+    const schema =
+      "inputSchema" in tool
+        ? (tool as { inputSchema: unknown }).inputSchema
+        : undefined;
+    if (schema) {
+      total += estimateTokens(JSON.stringify(schema));
+    }
+  }
+  return total;
 }

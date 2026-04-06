@@ -9,6 +9,7 @@ import {
   CompactionCircuitBreaker,
   type CompactionResult,
   estimateTokens,
+  estimateToolSchemasTokens,
   MCPManager,
   mergeMCPTools,
   PostCompactRestorer,
@@ -525,6 +526,9 @@ const updateCompactionForCurrentModel = async (): Promise<void> => {
   );
   const instructions = await agentManager.getInstructions();
   messageHistory.setSystemPromptTokens(estimateTokens(instructions));
+  messageHistory.setToolSchemasTokens(
+    estimateToolSchemasTokens(agentManager.getTools())
+  );
 };
 
 const applyCurrentSessionToRuntime = (): void => {

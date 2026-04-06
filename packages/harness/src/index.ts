@@ -154,7 +154,12 @@ export type { SkillInfo, SkillsConfig } from "./skills";
 export { SkillsEngine } from "./skills";
 export type { TodoConfig, TodoItem } from "./todo-continuation";
 export { TodoContinuation } from "./todo-continuation";
-export { estimateTokens, extractMessageText } from "./token-utils";
+export {
+  estimateMessageTokens,
+  estimateTokens,
+  estimateToolSchemasTokens,
+  extractMessageText,
+} from "./token-utils";
 export {
   normalizeFinishReason,
   shouldContinueManualToolLoop,
