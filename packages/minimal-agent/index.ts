@@ -1,3 +1,4 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
 import {
   CheckpointHistory,
   type Command,
@@ -12,8 +13,6 @@ import {
   SessionManager,
   SessionMemoryTracker,
 } from "@ai-sdk-tool/harness";
-
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
 import { createAgentTUI } from "@ai-sdk-tool/tui";
 import type { LanguageModel } from "ai";
