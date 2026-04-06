@@ -34,9 +34,7 @@ export function findModelBySelection(
   return models.find((m) => m.id === selection);
 }
 
-const getProviderLabel = (provider: ProviderType): string => {
-  return provider === "anthropic" ? "Anthropic" : provider;
-};
+const getProviderLabel = (): string => "Anthropic";
 
 export const applyModelSelection = (
   selectedModel: ModelInfo
@@ -60,7 +58,7 @@ export const applyModelSelection = (
 
   agentManager.setModelId(selectedModel.id);
 
-  const providerLabel = getProviderLabel(selectedModel.provider);
+  const providerLabel = getProviderLabel();
   return {
     success: true,
     message: colorize(

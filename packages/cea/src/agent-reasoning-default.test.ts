@@ -26,8 +26,8 @@ describe("AgentManager reasoning mode defaults", () => {
 
   it("still allows explicit override after default selection", () => {
     agentManager.setProvider("anthropic");
-    agentManager.setReasoningMode("on");
+    agentManager.setReasoningMode("off");
 
-    expect(agentManager.getReasoningMode()).toBe("on");
+    expect(agentManager.getReasoningMode()).toBe("off");
   });
 });

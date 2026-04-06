@@ -217,14 +217,7 @@ const isAnthropicWithReasoning = (
   );
 };
 
-const getModelMaxCompletionTokens = (
-  modelId: string,
-  provider: ProviderType
-): number => {
-  if (provider !== "anthropic") {
-    return OUTPUT_TOKEN_CAP;
-  }
-
+const getModelMaxCompletionTokens = (modelId: string): number => {
   const model = ANTHROPIC_MODELS.find((m) => m.id === modelId);
   return model?.maxCompletionTokens ?? OUTPUT_TOKEN_CAP;
 };
@@ -234,33 +227,17 @@ const getModelMaxCompletionTokens = (
  * Prevents models where maxCompletionTokens == contextLength
  * (e.g. GLM-5: 202K/202K) from consuming the entire context window.
  */
-const getEffectiveMaxOutputTokens = (
-  modelId: string,
-  provider: ProviderType
-): number => {
-  return Math.min(
-    getModelMaxCompletionTokens(modelId, provider),
-    OUTPUT_TOKEN_CAP
-  );
+const getEffectiveMaxOutputTokens = (modelId: string): number => {
+  return Math.min(getModelMaxCompletionTokens(modelId), OUTPUT_TOKEN_CAP);
 };
 
-const getModelContextLength = (
-  modelId: string,
-  provider: ProviderType
-): number => {
-  if (provider !== "anthropic") {
-    return DEFAULT_CONTEXT_LENGTH;
-  }
-
+const getModelContextLength = (modelId: string): number => {
   const model = ANTHROPIC_MODELS.find((m) => m.id === modelId);
   return model?.contextLength ?? DEFAULT_CONTEXT_LENGTH;
 };
 
-const getCompactionReserveTokens = (
-  modelId: string,
-  provider: ProviderType
-): number => {
-  return getEffectiveMaxOutputTokens(modelId, provider);
+const getCompactionReserveTokens = (modelId: string): number => {
+  return getEffectiveMaxOutputTokens(modelId);
 };
 
 const getProviderOptions = (
@@ -269,7 +246,7 @@ const getProviderOptions = (
   reasoningMode: ReasoningMode
 ): { options: ProviderOptions; maxOutputTokens: number } => {
   const thinkingEnabled = reasoningMode !== "off";
-  const effectiveMaxTokens = getEffectiveMaxOutputTokens(modelId, provider);
+  const effectiveMaxTokens = getEffectiveMaxOutputTokens(modelId);
 
   const getAnthropicProviderOptions = (): ProviderOptions => {
     if (!thinkingEnabled) {
@@ -520,7 +497,7 @@ export class AgentManager {
     );
   }
 
-  private getProviderModel(modelId: string, _provider: ProviderType) {
+  private getProviderModel(modelId: string) {
     if (!this.anthropicClient) {
       throw new Error(
         "ANTHROPIC_API_KEY is not set. Please set it in your environment."
@@ -531,7 +508,7 @@ export class AgentManager {
   }
 
   private buildModel(reasoningMode: ReasoningMode = this.reasoningMode) {
-    const model = this.getProviderModel(this.modelId, this.provider);
+    const model = this.getProviderModel(this.modelId);
     const { options, maxOutputTokens } = getProviderOptions(
       this.modelId,
       this.provider,
@@ -558,26 +535,19 @@ export class AgentManager {
    */
   getModelTokenLimits(): ModelTokenLimits {
     const contextLength =
-      this.getContextLimitOverride() ??
-      getModelContextLength(this.modelId, this.provider);
+      this.getContextLimitOverride() ?? getModelContextLength(this.modelId);
 
     return {
       contextLength,
-      maxCompletionTokens: getModelMaxCompletionTokens(
-        this.modelId,
-        this.provider
-      ),
+      maxCompletionTokens: getModelMaxCompletionTokens(this.modelId),
     };
   }
 
   buildCompactionConfig(
     overrides?: Partial<CompactionConfig>
   ): CompactionConfig {
-    const contextLength = getModelContextLength(this.modelId, this.provider);
-    const compactionReserveTokens = getCompactionReserveTokens(
-      this.modelId,
-      this.provider
-    );
+    const contextLength = getModelContextLength(this.modelId);
+    const compactionReserveTokens = getCompactionReserveTokens(this.modelId);
 
     const contextOverride = this.getContextLimitOverride();
     const effectiveContextLength = contextOverride ?? contextLength;
@@ -598,7 +568,7 @@ export class AgentManager {
     }
 
     const baseModelSummarizer = createModelSummarizer(
-      this.getProviderModel(this.modelId, this.provider),
+      this.getProviderModel(this.modelId),
       {
         instructions: () => this.getInstructions(),
         contextLimit: effectiveContextLength,
@@ -616,12 +586,10 @@ export class AgentManager {
       this._memoryExtractor &&
       this._memoryExtractorStorePath === this.sessionMemoryStorePath
     ) {
-      this._memoryExtractor.updateModel(
-        this.getProviderModel(this.modelId, this.provider)
-      );
+      this._memoryExtractor.updateModel(this.getProviderModel(this.modelId));
     } else {
       this._memoryExtractor = new BackgroundMemoryExtractor({
-        model: this.getProviderModel(this.modelId, this.provider),
+        model: this.getProviderModel(this.modelId),
         store: new FileMemoryStore(this.sessionMemoryStorePath),
         preset: "code",
       });
