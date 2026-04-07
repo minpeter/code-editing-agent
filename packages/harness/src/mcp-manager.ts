@@ -95,11 +95,20 @@ export class MCPManager {
         }
 
         const { client } = result.value;
-        this.clients.push({ name: serverName, client });
+        if (this.closed) {
+          client.close().catch(() => undefined);
+        } else {
+          this.clients.push({ name: serverName, client });
+        }
       }
 
       if (this.closed) {
-        await this.close();
+        await Promise.allSettled(
+          this.clients.map(({ client }) =>
+            client.close().catch(() => undefined)
+          )
+        );
+        this.clients = [];
         throw new Error("MCPManager has been closed. Create a new instance.");
       }
 

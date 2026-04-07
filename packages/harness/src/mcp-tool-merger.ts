@@ -16,68 +16,100 @@ export function mergeMCPTools(options: MergeOptions): MCPToolMergeResult {
   const { localTools, mcpTools, onConflict } = options;
 
   const localToolNames = new Set(Object.keys(localTools));
+  const allMCPEntries = buildMCPEntries(mcpTools);
+  const toolNameToServers = buildServerIndex(allMCPEntries);
+
+  const mergedTools: ToolSet = { ...localTools };
+  const reservedKeys = new Set(Object.keys(localTools));
   const conflicts: Array<{ toolName: string; sources: string[] }> = [];
   const processedConflicts = new Set<string>();
 
-  const allMCPEntries: Array<{
+  for (const { serverName, toolName, tool } of allMCPEntries) {
+    const serversWithThisTool = toolNameToServers.get(toolName) ?? [];
+    const hasConflict =
+      localToolNames.has(toolName) || serversWithThisTool.length > 1;
+
+    if (hasConflict) {
+      const alias = resolveAlias(serverName, toolName, reservedKeys);
+      mergedTools[alias] = tool;
+      reservedKeys.add(alias);
+      recordConflict(
+        toolName,
+        serverName,
+        serversWithThisTool,
+        localToolNames,
+        processedConflicts,
+        conflicts,
+        onConflict
+      );
+    } else if (!reservedKeys.has(toolName)) {
+      mergedTools[toolName] = tool;
+      reservedKeys.add(toolName);
+    }
+  }
+
+  return { tools: mergedTools, conflicts };
+}
+
+function buildMCPEntries(
+  mcpTools: Record<string, ToolSet>
+): Array<{ serverName: string; toolName: string; tool: ToolSet[string] }> {
+  const entries: Array<{
     serverName: string;
     toolName: string;
     tool: ToolSet[string];
   }> = [];
-
   for (const [serverName, serverTools] of Object.entries(mcpTools)) {
     for (const [toolName, tool] of Object.entries(serverTools)) {
-      allMCPEntries.push({
-        serverName,
-        toolName,
-        tool: tool as ToolSet[string],
-      });
+      entries.push({ serverName, toolName, tool: tool as ToolSet[string] });
     }
   }
+  return entries;
+}
 
-  const toolNameToServers = new Map<string, string[]>();
-
-  for (const entry of allMCPEntries) {
-    const existing = toolNameToServers.get(entry.toolName) ?? [];
-    toolNameToServers.set(entry.toolName, [...existing, entry.serverName]);
+function buildServerIndex(
+  entries: Array<{ serverName: string; toolName: string }>
+): Map<string, string[]> {
+  const index = new Map<string, string[]>();
+  for (const { toolName, serverName } of entries) {
+    index.set(toolName, [...(index.get(toolName) ?? []), serverName]);
   }
+  return index;
+}
 
-  const mergedTools: ToolSet = { ...localTools };
-
-  for (const entry of allMCPEntries) {
-    const { serverName, toolName, tool } = entry;
-    const serversWithThisTool = toolNameToServers.get(toolName) ?? [];
-    const conflictsWithLocal = localToolNames.has(toolName);
-    const conflictsWithOtherMCP = serversWithThisTool.length > 1;
-
-    if (conflictsWithLocal || conflictsWithOtherMCP) {
-      const sanitizedServerName = sanitizeServerName(serverName);
-      let prefixedName = `${sanitizedServerName}_${toolName}`;
-      let suffix = 2;
-      while (prefixedName in mergedTools) {
-        prefixedName = `${sanitizedServerName}_${toolName}_${suffix}`;
-        suffix++;
-      }
-      mergedTools[prefixedName] = tool;
-
-      const sources = conflictsWithLocal
-        ? ["local", ...serversWithThisTool]
-        : serversWithThisTool;
-      const uniqueSources = [...new Set(sources)];
-
-      if (!processedConflicts.has(toolName)) {
-        processedConflicts.add(toolName);
-        const conflict = { toolName, sources: uniqueSources };
-        conflicts.push(conflict);
-        onConflict?.(conflict);
-      }
-      continue;
-    }
-
-    mergedTools[toolName] = tool;
+function resolveAlias(
+  serverName: string,
+  toolName: string,
+  reservedKeys: Set<string>
+): string {
+  const prefix = sanitizeServerName(serverName);
+  let alias = `${prefix}_${toolName}`;
+  let suffix = 2;
+  while (reservedKeys.has(alias)) {
+    alias = `${prefix}_${toolName}_${suffix++}`;
   }
+  return alias;
+}
 
-  return { tools: mergedTools, conflicts };
+function recordConflict(
+  toolName: string,
+  _serverName: string,
+  serversWithTool: string[],
+  localToolNames: Set<string>,
+  processedConflicts: Set<string>,
+  conflicts: Array<{ toolName: string; sources: string[] }>,
+  onConflict?: (conflict: ToolConflict) => void
+): void {
+  if (processedConflicts.has(toolName)) {
+    return;
+  }
+  processedConflicts.add(toolName);
+  const sources = localToolNames.has(toolName)
+    ? ["local", ...serversWithTool]
+    : serversWithTool;
+  const conflict = { toolName, sources: [...new Set(sources)] };
+  conflicts.push(conflict);
+  onConflict?.(conflict);
 }
 
 export function sanitizeServerName(name: string): string {

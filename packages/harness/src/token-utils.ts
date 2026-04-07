@@ -185,7 +185,11 @@ export function estimateToolSchemasTokens(tools: ToolSet): number {
         ? (tool as { inputSchema: unknown }).inputSchema
         : undefined;
     if (schema) {
-      total += estimateTokens(JSON.stringify(schema));
+      try {
+        total += estimateTokens(JSON.stringify(schema));
+      } catch {
+        return total;
+      }
     }
   }
   return total;

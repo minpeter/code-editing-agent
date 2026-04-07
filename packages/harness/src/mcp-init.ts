@@ -140,8 +140,10 @@ async function resolveConfig(mcp: Exclude<MCPOption, MCPManager>): Promise<{
   const inlineServers = mcp.servers ?? [];
   const namedInline = arrayToNamedServers(inlineServers, "inline");
   const allServers = { ...fileServers, ...namedInline };
+  const timeoutSuffix =
+    mcp.toolsTimeout !== undefined ? `+timeout:${mcp.toolsTimeout}` : "";
   return {
-    cacheKey: `combined:${configPath ?? (mcp.config ? ".mcp.json" : "")}+${stableStringify(sortServers(inlineServers))}`,
+    cacheKey: `combined:${configPath ?? (mcp.config ? ".mcp.json" : "")}+${stableStringify(sortServers(inlineServers))}${timeoutSuffix}`,
     options: {
       configPath: mcp.config ? configPath : undefined,
       onError: mcp.onError,
