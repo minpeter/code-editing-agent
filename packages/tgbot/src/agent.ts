@@ -62,12 +62,13 @@ function getHistory(threadId: string): CheckpointHistory {
   return history;
 }
 
-export async function handleMessage(
-  threadId: string,
-  userText: string
-): Promise<string> {
+export function recordMessage(threadId: string, userText: string): void {
   const history = getHistory(threadId);
   history.addUserMessage(userText);
+}
+
+export async function handleMessage(threadId: string): Promise<string> {
+  const history = getHistory(threadId);
 
   const result: RunAgentLoopResult = await runAgentLoop({
     agent,
@@ -100,12 +101,8 @@ export async function handleMessage(
   return text;
 }
 
-export function handleMessageStream(
-  threadId: string,
-  userText: string
-): AsyncIterable<string> {
+export function handleMessageStream(threadId: string): AsyncIterable<string> {
   const history = getHistory(threadId);
-  history.addUserMessage(userText);
 
   const stream = agent.stream({
     messages: history.getMessagesForLLM(),

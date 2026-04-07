@@ -6,9 +6,10 @@ setGlobalDispatcher(new Agent({ connect: { autoSelectFamily: false } }));
 
 import "./env";
 import { closeAgent } from "./agent";
-import { bot } from "./bot";
+import { bot, registerCommands } from "./bot";
 
 await bot.initialize();
+await registerCommands();
 
 console.log("[tgbot] Bot initialized and running.");
 

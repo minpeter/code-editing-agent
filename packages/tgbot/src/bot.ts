@@ -1,11 +1,12 @@
-import { Chat, type Thread } from "chat";
+import { Chat, type Message, type Thread } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createRedisState } from "@chat-adapter/state-redis";
-import { clearHistory, handleMessage } from "./agent";
+import { clearHistory, handleMessage, recordMessage } from "./agent";
 import { env } from "./env";
 
 const telegram = createTelegramAdapter({
   mode: "polling",
+  userName: env.TELEGRAM_BOT_USERNAME,
 });
 
 export const bot = new Chat({
@@ -13,12 +14,49 @@ export const bot = new Chat({
   adapters: { telegram },
   state: createRedisState({ url: env.REDIS_URL }),
   onLockConflict: "force",
+  logger: "debug",
 });
 
-async function respond(thread: Thread, messageText: string): Promise<void> {
+async function registerCommands(): Promise<void> {
+  const baseUrl = env.TELEGRAM_API_BASE_URL;
+  try {
+    const res = await fetch(
+      `${baseUrl}/bot${env.TELEGRAM_BOT_TOKEN}/setMyCommands`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commands: [
+            { command: "clear", description: "Clear conversation history" },
+          ],
+        }),
+      }
+    );
+    if (!res.ok) {
+      console.error("[tgbot] Failed to register commands:", await res.text());
+    }
+  } catch (error) {
+    console.error("[tgbot] Failed to register commands:", error);
+  }
+}
+
+export { registerCommands };
+
+const triggerWords = env.TRIGGER_WORDS;
+const CLEAR_COMMAND = /^\/clear(@\w+)?$/i;
+
+function hasTriggerWord(text: string): boolean {
+  if (triggerWords.length === 0) {
+    return false;
+  }
+  const lower = text.toLowerCase();
+  return triggerWords.some((w) => lower.includes(w));
+}
+
+async function respond(thread: Thread): Promise<void> {
   try {
     await thread.startTyping();
-    const text = await handleMessage(thread.id, messageText);
+    const text = await handleMessage(thread.id);
     try {
       await thread.post({ markdown: text });
     } catch {
@@ -31,20 +69,30 @@ async function respond(thread: Thread, messageText: string): Promise<void> {
   }
 }
 
-bot.onNewMention(async (thread, message) => {
-  await thread.subscribe();
-  await respond(thread, message.text);
-});
-
-bot.onSubscribedMessage(async (thread, message) => {
-  if (message.text?.toLowerCase() === "/clear") {
+async function handleIncoming(thread: Thread, message: Message): Promise<void> {
+  if (CLEAR_COMMAND.test(message.text ?? "")) {
     clearHistory(thread.id);
-    await thread.unsubscribe();
     await thread.post(
       "History cleared. Mention me to start a new conversation."
     );
     return;
   }
 
-  await respond(thread, message.text);
+  recordMessage(thread.id, message.text);
+
+  if (message.isMention || hasTriggerWord(message.text)) {
+    await respond(thread);
+  }
+}
+
+bot.onNewMention(async (thread, message) => {
+  await handleIncoming(thread, message);
+});
+
+bot.onSubscribedMessage(async (thread, message) => {
+  await handleIncoming(thread, message);
+});
+
+bot.onNewMessage(/.*/, async (thread, message) => {
+  await handleIncoming(thread, message);
 });
