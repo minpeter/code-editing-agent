@@ -44,6 +44,24 @@ export { registerCommands };
 
 const triggerWords = env.TRIGGER_WORDS;
 const CLEAR_COMMAND = /^\/clear(@\w+)?$/i;
+interface TelegramRawReply {
+  reply_to_message?: {
+    from?: { id?: number; username?: string; is_bot?: boolean };
+  };
+}
+
+function isReplyToBot(message: Message): boolean {
+  const raw = message.raw as TelegramRawReply | undefined;
+  const replyFrom = raw?.reply_to_message?.from;
+  if (!replyFrom?.is_bot) {
+    return false;
+  }
+  const botUsername = env.TELEGRAM_BOT_USERNAME;
+  if (botUsername && replyFrom.username) {
+    return replyFrom.username.toLowerCase() === botUsername.toLowerCase();
+  }
+  return replyFrom.is_bot === true;
+}
 
 function hasTriggerWord(text: string): boolean {
   if (triggerWords.length === 0) {
@@ -80,7 +98,11 @@ async function handleIncoming(thread: Thread, message: Message): Promise<void> {
 
   recordMessage(thread.id, message.text);
 
-  if (message.isMention || hasTriggerWord(message.text)) {
+  if (
+    message.isMention ||
+    hasTriggerWord(message.text) ||
+    isReplyToBot(message)
+  ) {
     await respond(thread);
   }
 }
