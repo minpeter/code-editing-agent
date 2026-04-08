@@ -170,20 +170,52 @@ describe("SessionStore", () => {
     expect(encodeSessionId("ABCdef-789")).toBe("ABCdef-789");
   });
 
-  it("encodeSessionId escapes underscore to keep mapping injective", () => {
-    expect(encodeSessionId("abc_def")).toBe("abc_5fdef");
-    expect(encodeSessionId("_3a")).toBe("_5f3a");
-    expect(encodeSessionId(":")).toBe("_3a");
-    expect(encodeSessionId("_3a")).not.toBe(encodeSessionId(":"));
+  it("encodeSessionId uses fixed-width 4-digit hex escapes", () => {
+    expect(encodeSessionId("abc_def")).toBe("abc_005fdef");
+    expect(encodeSessionId(":")).toBe("_003a");
+    expect(encodeSessionId("_003a")).toBe("_005f003a");
+    expect(encodeSessionId(":")).not.toBe(encodeSessionId("_003a"));
+  });
+
+  it("encodeSessionId is injective for multi-byte BMP characters", () => {
+    expect(encodeSessionId(":b")).toBe("_003ab");
+    expect(encodeSessionId("\u03AB")).toBe("_03ab");
+    expect(encodeSessionId(":b")).not.toBe(encodeSessionId("\u03AB"));
   });
 
   it("encodeSessionId escapes special characters deterministically", () => {
-    expect(encodeSessionId("a:b")).toBe("a_3ab");
-    expect(encodeSessionId("foo/bar")).toBe("foo_2fbar");
-    expect(encodeSessionId("a.b.c")).toBe("a_2eb_2ec");
+    expect(encodeSessionId("a:b")).toBe("a_003ab");
+    expect(encodeSessionId("foo/bar")).toBe("foo_002fbar");
+    expect(encodeSessionId("a.b.c")).toBe("a_002eb_002ec");
   });
 
   it("encodeSessionId rejects empty string", () => {
     expect(() => encodeSessionId("")).toThrow("sessionId must not be empty");
+  });
+
+  it("loadSession falls back to legacy (unencoded) filename", async () => {
+    const sessionId = "legacy_session";
+    const legacyPath = join(tmpDir, `${sessionId}.jsonl`);
+    const header = {
+      type: "header",
+      sessionId,
+      createdAt: Date.now(),
+      version: 1,
+    };
+    const msg = {
+      type: "message",
+      id: "msg-1",
+      createdAt: Date.now(),
+      isSummary: false,
+      message: { role: "user", content: "from legacy" },
+    };
+    appendFileSync(
+      legacyPath,
+      `${JSON.stringify(header)}\n${JSON.stringify(msg)}\n`
+    );
+
+    const result = expectSessionData(await store.loadSession(sessionId));
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0].id).toBe("msg-1");
   });
 });

@@ -8,15 +8,14 @@ export interface SessionData {
   summaryMessageId: string | null;
 }
 
-// `_` is the escape prefix, so it must itself be escaped to keep the mapping
-// injective. Safe passthrough set is [A-Za-z0-9-] only.
+// Fixed-width `_xxxx` (4-digit hex) escape. `_` is the escape prefix so it is
+// itself escaped, making the mapping injective across the full BMP range.
 export function encodeSessionId(sessionId: string): string {
   if (sessionId.length === 0) {
     throw new Error("sessionId must not be empty");
   }
   return sessionId.replace(/[^A-Za-z0-9-]/g, (ch) => {
-    const hex = ch.charCodeAt(0).toString(16).padStart(2, "0");
-    return `_${hex}`;
+    return `_${ch.charCodeAt(0).toString(16).padStart(4, "0")}`;
   });
 }
 
@@ -28,7 +27,16 @@ export class SessionStore {
   }
 
   private getFilePath(sessionId: string): string {
-    return join(this.baseDir, `${encodeSessionId(sessionId)}.jsonl`);
+    const encoded = encodeSessionId(sessionId);
+    const primary = join(this.baseDir, `${encoded}.jsonl`);
+    if (existsSync(primary)) {
+      return primary;
+    }
+    const legacy = join(this.baseDir, `${sessionId}.jsonl`);
+    if (existsSync(legacy)) {
+      return legacy;
+    }
+    return primary;
   }
 
   private ensureHeader(sessionId: string): void {
