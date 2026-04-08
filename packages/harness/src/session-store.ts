@@ -8,13 +8,13 @@ export interface SessionData {
   summaryMessageId: string | null;
 }
 
-// Escape non-alphanumeric chars as `_xx` (hex). IDs using only [A-Za-z0-9_-]
-// pass through unchanged, preserving existing session filenames on disk.
+// `_` is the escape prefix, so it must itself be escaped to keep the mapping
+// injective. Safe passthrough set is [A-Za-z0-9-] only.
 export function encodeSessionId(sessionId: string): string {
   if (sessionId.length === 0) {
     throw new Error("sessionId must not be empty");
   }
-  return sessionId.replace(/[^A-Za-z0-9_-]/g, (ch) => {
+  return sessionId.replace(/[^A-Za-z0-9-]/g, (ch) => {
     const hex = ch.charCodeAt(0).toString(16).padStart(2, "0");
     return `_${hex}`;
   });

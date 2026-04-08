@@ -165,9 +165,16 @@ describe("SessionStore", () => {
     expect(await store.loadSession(sessionId)).toBeNull();
   });
 
-  it("encodeSessionId is backwards-compatible for simple IDs", () => {
+  it("encodeSessionId passes through alphanumeric and hyphen only", () => {
     expect(encodeSessionId("test-session-1")).toBe("test-session-1");
-    expect(encodeSessionId("abc_def-123")).toBe("abc_def-123");
+    expect(encodeSessionId("ABCdef-789")).toBe("ABCdef-789");
+  });
+
+  it("encodeSessionId escapes underscore to keep mapping injective", () => {
+    expect(encodeSessionId("abc_def")).toBe("abc_5fdef");
+    expect(encodeSessionId("_3a")).toBe("_5f3a");
+    expect(encodeSessionId(":")).toBe("_3a");
+    expect(encodeSessionId("_3a")).not.toBe(encodeSessionId(":"));
   });
 
   it("encodeSessionId escapes special characters deterministically", () => {
