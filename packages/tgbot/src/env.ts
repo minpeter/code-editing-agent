@@ -1,6 +1,10 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { harnessEnv } from "@ai-sdk-tool/harness";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
+
+const TRAILING_SLASHES = /\/+$/;
 
 export const env = createEnv({
   server: {
@@ -10,7 +14,7 @@ export const env = createEnv({
     TELEGRAM_API_BASE_URL: z
       .url()
       .default("https://api.telegram.org")
-      .transform((v) => v.replace(/\/+$/, "")),
+      .transform((v) => v.replace(TRAILING_SLASHES, "")),
     REDIS_URL: z.url(),
     AI_API_KEY: z.string().min(1),
     AI_BASE_URL: z.url(),
@@ -25,6 +29,10 @@ export const env = createEnv({
           .map((w) => w.trim().toLowerCase())
           .filter(Boolean)
       ),
+    SESSION_DIR: z.string().default(join(tmpdir(), "tgbot-sessions")),
+    LOG_LEVEL: z
+      .enum(["debug", "info", "warn", "error", "silent"])
+      .default("info"),
   },
   extends: [harnessEnv],
   runtimeEnv: process.env,

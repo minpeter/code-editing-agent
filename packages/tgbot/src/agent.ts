@@ -1,13 +1,14 @@
+import { mkdirSync } from "node:fs";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
-  type CheckpointHistoryOptions,
   CheckpointHistory,
   createAgent,
   createModelSummarizer,
-  type ModelMessage,
+  getLastMessageText,
   type RunAgentLoopResult,
   runAgentLoop,
+  SessionStore,
 } from "@ai-sdk-tool/harness";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { env } from "./env";
 
 const provider = createOpenAICompatible({
@@ -20,13 +21,16 @@ const model = provider.chatModel(env.AI_MODEL_ID);
 
 const summarize = createModelSummarizer(model);
 
-const historyOptions: CheckpointHistoryOptions = {
+mkdirSync(env.SESSION_DIR, { recursive: true });
+const sessionStore = new SessionStore(env.SESSION_DIR);
+
+const compactionOptions = {
   compaction: {
     enabled: true,
     speculativeStartRatio: 0.8,
     summarizeFn: summarize,
   },
-};
+} as const;
 
 const agent = await createAgent({
   model,
@@ -51,24 +55,31 @@ const agent = await createAgent({
   ].join("\n"),
 });
 
-const chatHistories = new Map<string, CheckpointHistory>();
+const chatHistories = new Map<string, Promise<CheckpointHistory>>();
 
-function getHistory(threadId: string): CheckpointHistory {
-  let history = chatHistories.get(threadId);
-  if (!history) {
-    history = new CheckpointHistory(historyOptions);
-    chatHistories.set(threadId, history);
+function getHistory(threadId: string): Promise<CheckpointHistory> {
+  let promise = chatHistories.get(threadId);
+  if (!promise) {
+    promise = CheckpointHistory.fromSession(
+      sessionStore,
+      threadId,
+      compactionOptions
+    );
+    chatHistories.set(threadId, promise);
   }
-  return history;
+  return promise;
 }
 
-export function recordMessage(threadId: string, userText: string): void {
-  const history = getHistory(threadId);
+export async function recordMessage(
+  threadId: string,
+  userText: string
+): Promise<void> {
+  const history = await getHistory(threadId);
   history.addUserMessage(userText);
 }
 
 export async function handleMessage(threadId: string): Promise<string> {
-  const history = getHistory(threadId);
+  const history = await getHistory(threadId);
 
   const result: RunAgentLoopResult = await runAgentLoop({
     agent,
@@ -94,61 +105,22 @@ export async function handleMessage(threadId: string): Promise<string> {
   console.log(
     `[tgbot] Loop done: iterations=${result.iterations}, finishReason=${result.finishReason}, totalMessages=${result.messages.length}`
   );
-  const text = extractLastAssistantText(result.messages);
+  const text =
+    getLastMessageText(result.messages, "assistant", { joiner: "" }) ||
+    "I couldn't generate a response.";
   console.log(
     `[tgbot] Extracted text (first 200 chars): ${text.substring(0, 200)}`
   );
   return text;
 }
 
-export function handleMessageStream(threadId: string): AsyncIterable<string> {
-  const history = getHistory(threadId);
-
-  const stream = agent.stream({
-    messages: history.getMessagesForLLM(),
-  });
-
-  async function* textStream(): AsyncIterable<string> {
-    for await (const part of stream.fullStream) {
-      if (part.type === "text-delta") {
-        yield part.text;
-      }
-    }
-
-    const response = await stream.response;
-    history.addModelMessages(response.messages);
-  }
-
-  return textStream();
-}
-
 export function clearHistory(threadId: string): void {
   chatHistories.delete(threadId);
+  sessionStore.deleteSession(threadId).catch((error) => {
+    console.warn("[tgbot] Failed to delete session:", threadId, error);
+  });
 }
 
 export async function closeAgent(): Promise<void> {
   await agent.close();
-}
-
-function extractLastAssistantText(messages: ModelMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role !== "assistant") {
-      continue;
-    }
-
-    if (typeof msg.content === "string") {
-      return msg.content;
-    }
-
-    if (Array.isArray(msg.content)) {
-      const textParts = msg.content
-        .filter((p) => p.type === "text")
-        .map((p) => p.text);
-      if (textParts.length > 0) {
-        return textParts.join("");
-      }
-    }
-  }
-  return "I couldn't generate a response.";
 }

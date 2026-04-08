@@ -1,22 +1,32 @@
-import { Chat, type Message, type Thread } from "chat";
-import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createRedisState } from "@chat-adapter/state-redis";
+import { createTelegramAdapter } from "@chat-adapter/telegram";
+import { Chat, type Message, type Thread } from "chat";
 import { clearHistory, handleMessage, recordMessage } from "./agent";
 import { env } from "./env";
 
+// Both the adapter and the Chat instance need a userName for mention detection.
+// The adapter reads TELEGRAM_BOT_USERNAME directly from process.env as a fallback,
+// but we pass it explicitly here so both sides stay in sync. If unset, the adapter
+// resolves the actual username via Telegram's getMe API during initialize().
+const botUsername = env.TELEGRAM_BOT_USERNAME;
+
 const telegram = createTelegramAdapter({
   mode: "polling",
-  userName: env.TELEGRAM_BOT_USERNAME,
+  userName: botUsername,
 });
 
 export const bot = new Chat({
-  userName: env.TELEGRAM_BOT_USERNAME ?? "Apex",
+  userName: botUsername ?? "bot",
   adapters: { telegram },
   state: createRedisState({ url: env.REDIS_URL }),
   onLockConflict: "force",
-  logger: "debug",
+  logger: env.LOG_LEVEL,
 });
 
+// Register Telegram bot commands via the Bot API so they appear in the
+// command picker (the "/" menu in chat). We call the API directly because
+// @chat-adapter/telegram's telegramFetch is private and the Chat SDK does
+// not expose a command registration API.
 async function registerCommands(): Promise<void> {
   const baseUrl = env.TELEGRAM_API_BASE_URL;
   try {
@@ -44,23 +54,39 @@ export { registerCommands };
 
 const triggerWords = env.TRIGGER_WORDS;
 const CLEAR_COMMAND = /^\/clear(@\w+)?$/i;
-interface TelegramRawReply {
-  reply_to_message?: {
-    from?: { id?: number; username?: string; is_bot?: boolean };
-  };
-}
 
+/**
+ * Check whether `message` is a reply to one of the bot's own messages.
+ *
+ * Chat SDK does not expose reply_to_message in its typed Message, so we
+ * reach into `message.raw` (the original Telegram API payload). Each
+ * nesting level is guarded with runtime typeof checks so the function
+ * returns false instead of throwing if the raw shape changes.
+ */
 function isReplyToBot(message: Message): boolean {
-  const raw = message.raw as TelegramRawReply | undefined;
-  const replyFrom = raw?.reply_to_message?.from;
-  if (!replyFrom?.is_bot) {
+  const raw = message.raw;
+  if (typeof raw !== "object" || raw === null) {
     return false;
   }
-  const botUsername = env.TELEGRAM_BOT_USERNAME;
-  if (botUsername && replyFrom.username) {
-    return replyFrom.username.toLowerCase() === botUsername.toLowerCase();
+  const reply = (raw as Record<string, unknown>).reply_to_message;
+  if (typeof reply !== "object" || reply === null) {
+    return false;
   }
-  return replyFrom.is_bot === true;
+  const from = (reply as Record<string, unknown>).from;
+  if (typeof from !== "object" || from === null) {
+    return false;
+  }
+  const { is_bot, username } = from as {
+    is_bot?: boolean;
+    username?: string;
+  };
+  if (is_bot !== true) {
+    return false;
+  }
+  if (botUsername && typeof username === "string") {
+    return username.toLowerCase() === botUsername.toLowerCase();
+  }
+  return true;
 }
 
 function hasTriggerWord(text: string): boolean {
@@ -77,13 +103,21 @@ async function respond(thread: Thread): Promise<void> {
     const text = await handleMessage(thread.id);
     try {
       await thread.post({ markdown: text });
-    } catch {
+    } catch (markdownError) {
+      console.warn(
+        "[tgbot] Markdown post failed, falling back to plain text:",
+        markdownError
+      );
       await thread.post(text);
     }
   } catch (error) {
     console.error("[tgbot] Error handling message:", error);
-    const errMsg = error instanceof Error ? error.message : "Unknown error";
-    await thread.post(`Error: ${errMsg}`);
+    try {
+      const errMsg = error instanceof Error ? error.message : "Unknown error";
+      await thread.post(`Error: ${errMsg}`);
+    } catch (sendError) {
+      console.error("[tgbot] Failed to send error message:", sendError);
+    }
   }
 }
 
@@ -96,7 +130,7 @@ async function handleIncoming(thread: Thread, message: Message): Promise<void> {
     return;
   }
 
-  recordMessage(thread.id, message.text);
+  await recordMessage(thread.id, message.text);
 
   if (
     message.isMention ||
@@ -115,6 +149,10 @@ bot.onSubscribedMessage(async (thread, message) => {
   await handleIncoming(thread, message);
 });
 
+// NOTE: onNewMessage with a catch-all pattern (/.*/). This only fires for
+// messages in unsubscribed threads that do NOT @-mention the bot. For it to
+// receive group messages the bot must either be a group admin or have Privacy
+// Mode disabled in BotFather (Bot Settings → Group Privacy → Turn off).
 bot.onNewMessage(/.*/, async (thread, message) => {
   await handleIncoming(thread, message);
 });
