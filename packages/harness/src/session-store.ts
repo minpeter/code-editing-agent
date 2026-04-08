@@ -8,7 +8,17 @@ export interface SessionData {
   summaryMessageId: string | null;
 }
 
-const VALID_SESSION_ID = /^[A-Za-z0-9_-]+$/;
+// Escape non-alphanumeric chars as `_xx` (hex). IDs using only [A-Za-z0-9_-]
+// pass through unchanged, preserving existing session filenames on disk.
+export function encodeSessionId(sessionId: string): string {
+  if (sessionId.length === 0) {
+    throw new Error("sessionId must not be empty");
+  }
+  return sessionId.replace(/[^A-Za-z0-9_-]/g, (ch) => {
+    const hex = ch.charCodeAt(0).toString(16).padStart(2, "0");
+    return `_${hex}`;
+  });
+}
 
 export class SessionStore {
   private readonly baseDir: string;
@@ -17,15 +27,8 @@ export class SessionStore {
     this.baseDir = baseDir;
   }
 
-  private static validateSessionId(sessionId: string): void {
-    if (!VALID_SESSION_ID.test(sessionId)) {
-      throw new Error(`Invalid sessionId: ${sessionId}`);
-    }
-  }
-
   private getFilePath(sessionId: string): string {
-    SessionStore.validateSessionId(sessionId);
-    return join(this.baseDir, `${sessionId}.jsonl`);
+    return join(this.baseDir, `${encodeSessionId(sessionId)}.jsonl`);
   }
 
   private ensureHeader(sessionId: string): void {

@@ -145,7 +145,7 @@ export { SessionManager } from "./session";
 export type { MemoryFact, SessionMemoryConfig } from "./session-memory";
 export { SessionMemoryTracker } from "./session-memory";
 export type { SessionData } from "./session-store";
-export { SessionStore } from "./session-store";
+export { encodeSessionId, SessionStore } from "./session-store";
 export {
   PROMPTS_COMMAND_PREFIX,
   parsePromptsCommandName,

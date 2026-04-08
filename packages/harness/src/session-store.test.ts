@@ -1,8 +1,8 @@
-import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SessionStore } from "./session-store";
+import { encodeSessionId, SessionStore } from "./session-store";
 
 describe("SessionStore", () => {
   let tmpDir: string;
@@ -141,5 +141,42 @@ describe("SessionStore", () => {
     const sessionId = "nonexistent-session";
 
     await expect(store.deleteSession(sessionId)).resolves.toBeUndefined();
+  });
+
+  it("accepts namespaced session IDs containing colons", async () => {
+    const sessionId = "telegram:chat:-1001234:topic:5";
+
+    await store.appendMessage(sessionId, {
+      type: "message",
+      id: "msg-1",
+      createdAt: Date.now(),
+      isSummary: false,
+      message: { role: "user", content: "hello from telegram" },
+    });
+
+    const result = expectSessionData(await store.loadSession(sessionId));
+    expect(result.messages).toHaveLength(1);
+    expect(result.sessionId).toBe(sessionId);
+
+    const encoded = encodeSessionId(sessionId);
+    expect(existsSync(join(tmpDir, `${encoded}.jsonl`))).toBe(true);
+
+    await store.deleteSession(sessionId);
+    expect(await store.loadSession(sessionId)).toBeNull();
+  });
+
+  it("encodeSessionId is backwards-compatible for simple IDs", () => {
+    expect(encodeSessionId("test-session-1")).toBe("test-session-1");
+    expect(encodeSessionId("abc_def-123")).toBe("abc_def-123");
+  });
+
+  it("encodeSessionId escapes special characters deterministically", () => {
+    expect(encodeSessionId("a:b")).toBe("a_3ab");
+    expect(encodeSessionId("foo/bar")).toBe("foo_2fbar");
+    expect(encodeSessionId("a.b.c")).toBe("a_2eb_2ec");
+  });
+
+  it("encodeSessionId rejects empty string", () => {
+    expect(() => encodeSessionId("")).toThrow("sessionId must not be empty");
   });
 });
