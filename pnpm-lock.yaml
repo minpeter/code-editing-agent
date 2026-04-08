@@ -211,8 +211,8 @@ importers:
         specifier: ^4.23.0
         version: 4.23.0
       undici:
-        specifier: ^8.0.2
-        version: 8.0.2
+        specifier: ^7.0.0
+        version: 7.24.7
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -1618,9 +1618,9 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
-  undici@8.0.2:
-    resolution: {integrity: sha512-B9MeU5wuFhkFAuNeA19K2GDFcQXZxq33fL0nRy2Aq30wdufZbyyvxW3/ChaeipXVfy/wUweZyzovQGk39+9k2w==}
-    engines: {node: '>=22.19.0'}
+  undici@7.24.7:
+    resolution: {integrity: sha512-H/nlJ/h0ggGC+uRL3ovD+G0i4bqhvsDOpbDv7At5eFLlj2b41L8QliGbnl2H7SnDiYhENphh1tQFJZf+MyfLsQ==}
+    engines: {node: '>=20.18.1'}
 
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
@@ -3182,7 +3182,7 @@ snapshots:
 
   undici-types@7.18.2: {}
 
-  undici@8.0.2: {}
+  undici@7.24.7: {}
 
   unified@11.0.5:
     dependencies:

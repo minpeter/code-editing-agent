@@ -128,9 +128,6 @@ export async function handleMessage(threadId: string): Promise<string> {
   const text =
     getLastMessageText(result.messages, "assistant", { joiner: "" }) ||
     "I couldn't generate a response.";
-  console.log(
-    `[tgbot] Extracted text (first 200 chars): ${text.substring(0, 200)}`
-  );
   return text;
 }
 

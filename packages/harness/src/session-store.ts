@@ -8,6 +8,8 @@ export interface SessionData {
   summaryMessageId: string | null;
 }
 
+const VALID_SESSION_ID = /^[A-Za-z0-9_-]+$/;
+
 export class SessionStore {
   private readonly baseDir: string;
 
@@ -15,7 +17,14 @@ export class SessionStore {
     this.baseDir = baseDir;
   }
 
+  private static validateSessionId(sessionId: string): void {
+    if (!VALID_SESSION_ID.test(sessionId)) {
+      throw new Error(`Invalid sessionId: ${sessionId}`);
+    }
+  }
+
   private getFilePath(sessionId: string): string {
+    SessionStore.validateSessionId(sessionId);
     return join(this.baseDir, `${sessionId}.jsonl`);
   }
 
