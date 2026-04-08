@@ -101,8 +101,10 @@ export class SessionStore {
     const filePath = this.getFilePath(sessionId);
     try {
       rmSync(filePath, { force: true });
-    } catch {
-      // File already deleted or inaccessible
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
     }
     return Promise.resolve();
   }

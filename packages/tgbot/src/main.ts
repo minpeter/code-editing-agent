@@ -15,13 +15,21 @@ console.log("[tgbot] Bot initialized and running.");
 
 process.on("SIGINT", async () => {
   console.log("\n[tgbot] Shutting down...");
-  await closeAgent();
-  await bot.shutdown();
+  try {
+    await closeAgent();
+    await bot.shutdown();
+  } catch (error) {
+    console.error("[tgbot] Error during shutdown:", error);
+  }
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
-  await closeAgent();
-  await bot.shutdown();
+  try {
+    await closeAgent();
+    await bot.shutdown();
+  } catch (error) {
+    console.error("[tgbot] Error during shutdown:", error);
+  }
   process.exit(0);
 });

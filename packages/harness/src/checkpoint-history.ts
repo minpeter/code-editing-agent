@@ -460,6 +460,7 @@ export class CheckpointHistory {
   resetForSession(sessionId: string): void {
     this.sessionId = sessionId;
     this.clear();
+    this.actualUsage = null;
   }
 
   updateActualUsage(usage: ActualTokenUsageInput): void {
