@@ -1,5 +1,15 @@
 # plugsuits
 
+## 2.3.2
+
+### Patch Changes
+
+- Updated dependencies [f819d0c]
+- Updated dependencies [bd8bd8a]
+  - @ai-sdk-tool/headless@3.0.2
+  - @ai-sdk-tool/harness@1.2.3
+  - @ai-sdk-tool/tui@3.0.1
+
 ## 2.3.1
 
 ### Patch Changes

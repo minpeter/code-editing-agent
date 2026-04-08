@@ -1,5 +1,13 @@
 # @ai-sdk-tool/headless
 
+## 3.0.2
+
+### Patch Changes
+
+- f819d0c: Remove "(no text output)" fallback from agent step events in stream processor. Tool-call-only steps now emit an empty string instead of the placeholder, preventing downstream consumers from concatenating the literal into final responses.
+- Updated dependencies [bd8bd8a]
+  - @ai-sdk-tool/harness@1.2.3
+
 ## 3.0.1
 
 ### Patch Changes
