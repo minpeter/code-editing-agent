@@ -1,19 +1,23 @@
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ProviderOptions as AiProviderOptions } from "@ai-sdk/provider-utils";
 import {
   BackgroundMemoryExtractor,
+  CheckpointHistory,
   type CompactionConfig,
   computeAdaptiveThresholdRatio as computeAdaptiveThresholdRatioFromPolicy,
   computeCompactionMaxTokens as computeCompactionMaxTokensFromPolicy,
   computeSpeculativeStartRatio as computeSpeculativeStartRatioFromPolicy,
   createAgent,
+  createDefaultPruningConfig,
   createModelSummarizer,
   estimateTokens,
   FileMemoryStore,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
   type PruningConfig,
+  SessionStore,
 } from "@ai-sdk-tool/harness";
 import {
   InvalidToolInputError,
@@ -439,6 +443,10 @@ export function buildFileTrackingSummarizeFn(
 export class AgentManager {
   _memoryExtractor?: BackgroundMemoryExtractor | null;
   private _memoryExtractorStorePath: string | null = null;
+  private readonly sessionHistories = new Map<
+    string,
+    Promise<CheckpointHistory>
+  >();
   private modelId: string = DEFAULT_MODEL_ID;
   private modelType: ModelType = "serverless";
   private provider: ProviderType = "anthropic";
@@ -457,6 +465,7 @@ export class AgentManager {
   }
 
   resetForTesting(): void {
+    this.sessionHistories.clear();
     this.modelId = DEFAULT_MODEL_ID;
     this.modelType = "serverless";
     this.provider = "anthropic";
@@ -647,11 +656,37 @@ export class AgentManager {
 
   buildPruningConfig(overrides?: Partial<PruningConfig>): PruningConfig {
     return {
-      eagerPruneToolNames: ["read_file", "grep_files"],
+      ...createDefaultPruningConfig(),
       enabled: true,
       protectRecentTokens: 40_000,
       ...overrides,
     };
+  }
+
+  private getSessionHistory(sessionId: string): Promise<CheckpointHistory> {
+    const existing = this.sessionHistories.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+
+    mkdirSync(this.sessionMemoryStorePath, { recursive: true });
+    const historyPromise = CheckpointHistory.fromSession(
+      new SessionStore(this.sessionMemoryStorePath),
+      sessionId,
+      {
+        compaction: this.buildCompactionConfig(),
+        pruning: this.buildPruningConfig(),
+      }
+    );
+
+    historyPromise.catch(() => {
+      if (this.sessionHistories.get(sessionId) === historyPromise) {
+        this.sessionHistories.delete(sessionId);
+      }
+    });
+
+    this.sessionHistories.set(sessionId, historyPromise);
+    return historyPromise;
   }
 
   getModelId(): string {
@@ -796,7 +831,23 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
         ? Math.min(options.maxOutputTokens, providerMaxOutputTokens)
         : providerMaxOutputTokens;
 
-    const preparedMessages = messages;
+    const sessionId = "default";
+    const messageHistory = await this.getSessionHistory(sessionId);
+    messageHistory.updateCompaction(this.buildCompactionConfig());
+    messageHistory.updatePruning(this.buildPruningConfig());
+    messageHistory.setContextLimit(this.getModelTokenLimits().contextLength);
+
+    const instructions = await this.getInstructions();
+    messageHistory.setSystemPromptTokens(estimateTokens(instructions));
+    messageHistory.setToolSchemasTokens(
+      estimateTokens(JSON.stringify(Object.keys(this.toolRegistry)))
+    );
+
+    if (messages.length > 0) {
+      messageHistory.addModelMessages(messages);
+    }
+
+    const preparedMessages = messageHistory.getMessagesForLLM();
 
     if (preparedMessages.length === 0) {
       throw new Error(
@@ -807,18 +858,27 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
     const agent = await createAgent({
       model,
       tools: this.toolRegistry,
-      instructions: await this.getInstructions(),
+      instructions,
       maxStepsPerTurn: 1,
       experimental_repairToolCall: repairToolCall,
     });
 
-    return agent.stream({
+    const result = agent.stream({
       messages: preparedMessages,
       abortSignal: options.abortSignal,
       providerOptions,
       maxOutputTokens: effectiveMaxOutputTokens,
       ...getBenchmarkSamplingOverrides(),
     });
+
+    void Promise.resolve(result.response).then(
+      (response: Awaited<typeof result.response>) => {
+        messageHistory.addModelMessages(response.messages);
+      },
+      () => undefined
+    );
+
+    return result;
   }
 
   async measureUsage(
