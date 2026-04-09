@@ -2,11 +2,13 @@ import { mkdirSync } from "node:fs";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   CheckpointHistory,
+  createDefaultPruningConfig,
   createAgent,
   createModelSummarizer,
   getLastMessageText,
   type RunAgentLoopResult,
   runAgentLoop,
+  SessionMemoryTracker,
   SessionStore,
 } from "@ai-sdk-tool/harness";
 import { env } from "./env";
@@ -20,6 +22,7 @@ const provider = createOpenAICompatible({
 const model = provider.chatModel(env.AI_MODEL_ID);
 
 const summarize = createModelSummarizer(model);
+const tracker = new SessionMemoryTracker();
 
 mkdirSync(env.SESSION_DIR, { recursive: true });
 const sessionStore = new SessionStore(env.SESSION_DIR);
@@ -27,9 +30,16 @@ const sessionStore = new SessionStore(env.SESSION_DIR);
 const compactionOptions = {
   compaction: {
     enabled: true,
+    contextLimit: 100_000,
+    keepRecentTokens: 30_000,
+    reserveTokens: 20_000,
+    maxTokens: 50_000,
+    thresholdRatio: 0.65,
     speculativeStartRatio: 0.8,
+    getStructuredState: tracker.getStructuredState.bind(tracker),
     summarizeFn: summarize,
   },
+  pruning: createDefaultPruningConfig(),
 } as const;
 
 const agent = await createAgent({
@@ -95,6 +105,7 @@ export async function recordMessage(
   userText: string
 ): Promise<void> {
   const history = await getHistory(threadId);
+  tracker.extractFactsFromUserMessage(userText);
   history.addUserMessage(userText);
 }
 
