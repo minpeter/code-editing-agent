@@ -27,6 +27,7 @@ import {
 import { collapseConsecutiveOps } from "./context-collapse";
 import { createContinuationMessage, getContinuationText } from "./continuation";
 import { env } from "./env";
+import { isContextOverflowError } from "./overflow-detection";
 import { microCompactMessages } from "./micro-compact";
 import type { SessionStore } from "./session-store";
 import {
@@ -85,6 +86,17 @@ function computeSavingsRatio(
   return savedTokens > 0 ? 1 : 0;
 }
 
+function validateCompactionConfig(config: NormalizedCompactionConfig): void {
+  if (config.enabled && !config.summarizeFn) {
+    console.warn(
+      "compaction enabled without summarizeFn — will use naive truncation"
+    );
+  }
+  if (config.contextLimit === 0 && config.enabled) {
+    console.warn("contextLimit is 0, compaction may not work correctly");
+  }
+}
+
 type CompactionDirection = "keep-recent" | "keep-prefix";
 
 type NormalizedCompactionConfig = Omit<
@@ -121,24 +133,7 @@ export interface OverflowRecoveryResult {
   tokensBefore: number;
 }
 
-export function isContextOverflowError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const msg = error.message.toLowerCase();
-  return (
-    msg.includes("context_length_exceeded") ||
-    msg.includes("context length exceeded") ||
-    msg.includes("context window") ||
-    msg.includes("maximum context") ||
-    msg.includes("too many tokens") ||
-    msg.includes("input is too long") ||
-    msg.includes("prompt is too long") ||
-    msg.includes("tokens exceeds") ||
-    msg.includes("token limit")
-  );
-}
+export { isContextOverflowError } from "./overflow-detection";
 
 function hasToolCalls(message: ModelMessage): boolean {
   if (message.role !== "assistant" || !Array.isArray(message.content)) {
@@ -312,6 +307,7 @@ export class CheckpointHistory {
       ...DEFAULT_COMPACTION_CONFIG,
       ...options?.compaction,
     };
+    validateCompactionConfig(this.compactionConfig);
     this.contextLimit = this.compactionConfig.contextLimit ?? 0;
     this.pruningConfig = {
       ...DEFAULT_PRUNING_CONFIG,

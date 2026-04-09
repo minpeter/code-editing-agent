@@ -13,52 +13,78 @@
  * Regex patterns for detecting context overflow errors from LLM providers.
  * Max 15 patterns total: prioritizes Anthropic + OpenAI + Google/Gemini.
  */
-const OVERFLOW_PATTERNS: RegExp[] = [
-  // Anthropic (3 patterns)
-  /prompt is too long/i,
+const HIGH_CONFIDENCE_PATTERNS: RegExp[] = [
+  // Anthropic (2 patterns - most specific)
   /context_length_exceeded/i,
-  /too many tokens/i,
+  /prompt is too long/i,
 
-  // OpenAI-compatible (4 patterns)
+  // OpenAI-compatible (2 patterns)
   /maximum context length/i,
   /context length exceeded/i,
+];
+
+const MEDIUM_CONFIDENCE_PATTERNS: RegExp[] = [
+  // OpenAI-compatible
   /token limit exceeded/i,
   /tokens exceeds the context window/i,
 
-  // Google / Gemini (3 patterns)
+  // Google / Gemini
   /exceeds the context window/i,
+];
+
+const LOW_CONFIDENCE_PATTERNS: RegExp[] = [
+  // Generic / shared (less specific)
   /context window/i,
   /input too long/i,
-
-  // Generic / shared (2 patterns)
   /input is too long/i,
   /token limit/i,
+  /too many tokens/i,
 ];
 
 /**
- * Checks if an error is a context overflow error from any supported LLM provider.
+ * Detects context overflow errors with confidence levels.
  *
  * @param error - The error object to check
- * @returns true if the error matches a known context overflow pattern
+ * @returns An object with `detected` boolean and `confidence` level ("high" | "medium" | "low")
  *
  * @example
  * ```typescript
  * try {
  *   await streamText({ model, messages });
  * } catch (error) {
- *   if (isContextOverflowError(error)) {
- *     console.log("Context window exceeded");
+ *   const result = isContextOverflowError(error);
+ *   if (result.detected && result.confidence === "high") {
+ *     console.log("Definite context overflow — apply recovery");
  *   }
  * }
  * ```
  */
-export function isContextOverflowError(error: unknown): boolean {
+export function isContextOverflowError(error: unknown): {
+  detected: boolean;
+  confidence: "high" | "medium" | "low";
+} {
   if (!(error instanceof Error)) {
-    return false;
+    return { detected: false, confidence: "low" };
   }
 
   const message = error.message;
-  return OVERFLOW_PATTERNS.some((pattern) => pattern.test(message));
+
+  if (HIGH_CONFIDENCE_PATTERNS.some((pattern) => pattern.test(message))) {
+    return { detected: true, confidence: "high" };
+  }
+
+  const mediumMatches = MEDIUM_CONFIDENCE_PATTERNS.filter((pattern) =>
+    pattern.test(message)
+  ).length;
+  if (mediumMatches >= 2) {
+    return { detected: true, confidence: "medium" };
+  }
+
+  if (LOW_CONFIDENCE_PATTERNS.some((pattern) => pattern.test(message))) {
+    return { detected: true, confidence: "low" };
+  }
+
+  return { detected: false, confidence: "low" };
 }
 
 /**

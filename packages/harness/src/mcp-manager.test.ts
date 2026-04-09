@@ -1,38 +1,30 @@
 import type { ToolSet } from "ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const NOT_INITIALIZED_ERROR_PATTERN = /not initialized/i;
+const originalSetTimeout = globalThis.setTimeout;
+const originalClearTimeout = globalThis.clearTimeout;
+
 const CLOSED_ERROR_PATTERN = /closed/i;
 
-const {
-  createMCPClientMock,
-  stdioTransportMock,
-  loadMCPConfigMock,
-  isStdioConfigMock,
-  mergeMCPToolsMock,
-  timeoutSpy,
-  clearTimeoutSpy,
-} = vi.hoisted(() => ({
-  createMCPClientMock: vi.fn(),
-  stdioTransportMock: vi.fn().mockImplementation((options) => options),
-  loadMCPConfigMock: vi.fn(),
-  isStdioConfigMock: vi.fn(),
-  mergeMCPToolsMock: vi.fn(),
-  timeoutSpy: vi.fn((callback: () => void) => {
-    const handle = { cancelled: false };
-    Promise.resolve().then(() => {
-      if (!handle.cancelled) {
-        callback();
-      }
-    });
-    return handle;
-  }),
-  clearTimeoutSpy: vi.fn((handle: { cancelled?: boolean }) => {
-    if (handle) {
-      handle.cancelled = true;
+const createMCPClientMock = vi.fn();
+const stdioTransportMock = vi.fn().mockImplementation((options) => options);
+const loadMCPConfigMock = vi.fn();
+const isStdioConfigMock = vi.fn();
+const mergeMCPToolsMock = vi.fn();
+const timeoutSpy = vi.fn((callback: () => void) => {
+  const handle = { cancelled: false };
+  Promise.resolve().then(() => {
+    if (!handle.cancelled) {
+      callback();
     }
-  }),
-}));
+  });
+  return handle;
+});
+const clearTimeoutSpy = vi.fn((handle: { cancelled?: boolean }) => {
+  if (handle) {
+    handle.cancelled = true;
+  }
+});
 
 vi.mock("@ai-sdk/mcp", () => ({
   createMCPClient: createMCPClientMock,
@@ -88,11 +80,8 @@ describe("MCPManager", () => {
     timeoutSpy.mockClear();
     clearTimeoutSpy.mockClear();
 
-    vi.stubGlobal("setTimeout", timeoutSpy as unknown as typeof setTimeout);
-    vi.stubGlobal(
-      "clearTimeout",
-      clearTimeoutSpy as unknown as typeof clearTimeout
-    );
+    globalThis.setTimeout = timeoutSpy as unknown as typeof setTimeout;
+    globalThis.clearTimeout = clearTimeoutSpy as unknown as typeof clearTimeout;
 
     loadMCPConfigMock.mockResolvedValue({ mcpServers: {} });
     isStdioConfigMock.mockImplementation(
@@ -108,7 +97,8 @@ describe("MCPManager", () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
   });
 
   it("init() with valid config connects all servers, and tools() returns merged ToolSet", async () => {
@@ -394,10 +384,13 @@ describe("MCPManager", () => {
     });
   });
 
-  it("tools() before init() throws error containing not initialized", () => {
+  it("tools() before init() throws helpful initialization error", () => {
     const manager = new MCPManager();
 
-    expect(() => manager.tools()).toThrow(NOT_INITIALIZED_ERROR_PATTERN);
+    expect(manager.isInitialized).toBe(false);
+    expect(() => manager.tools()).toThrow(
+      "MCPManager not initialized. Did you forget 'await manager.init()'?"
+    );
   });
 
   it("transport timeout aborts tool loading after toolsTimeout and skips server", async () => {

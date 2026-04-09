@@ -128,10 +128,11 @@ describe("runAgentLoop", () => {
   it("stops when shouldContinue returns false", async () => {
     const agent = createMockAgent(["tool-calls", "tool-calls", "tool-calls"]);
 
-    // shouldContinue receives post-increment iteration (= completed iteration count)
-    // Loop: iteration 0 done → iteration=1 → shouldContinue(iteration=1) → 1 < 2 → true
-    // Loop: iteration 1 done → iteration=2 → shouldContinue(iteration=2) → 2 < 2 → false → stop
-    // Result: 2 iterations completed
+    // shouldContinue is checked BEFORE appending messages
+    // Loop: iteration 0 → shouldContinue(0) → true → append → iteration=1
+    // Loop: iteration 1 → shouldContinue(1) → true → append → iteration=2
+    // Loop: iteration 2 → shouldContinue(2) → false → break (no append)
+    // Result: 3 iterations attempted, messages only appended for first 2
     const result = await runAgentLoop({
       agent,
       messages: [{ role: "user", content: "Hello" }],
@@ -140,7 +141,7 @@ describe("runAgentLoop", () => {
       },
     });
 
-    expect(result.iterations).toBe(2);
+    expect(result.iterations).toBe(3);
   });
 
   it("stops on abort signal", async () => {
@@ -175,8 +176,9 @@ describe("runAgentLoop", () => {
       messages: [{ role: "user", content: "Hello" }],
     });
 
-    // Initial message + 2 response messages
-    expect(result.messages.length).toBe(3);
+    // Initial message + response from iteration 0 (tool-calls continues)
+    // Iteration 1 (stop) doesn't append because shouldContinue returns false
+    expect(result.messages.length).toBe(2);
   });
 
   it("calls onToolCall for each tool call", async () => {

@@ -69,8 +69,16 @@ export async function runAgentLoop(
         stream.finishReason,
       ]);
 
-      messages.push(...response.messages);
       lastFinishReason = finishReason;
+
+      // Check whether to continue BEFORE appending messages
+      if (!shouldContinue(lastFinishReason, { iteration, messages })) {
+        // Don't append messages if not continuing
+        iteration += 1;
+        break;
+      }
+
+      messages.push(...response.messages);
 
       await onStepComplete?.({
         finishReason: lastFinishReason,
@@ -80,12 +88,31 @@ export async function runAgentLoop(
       });
 
       iteration += 1;
-
-      if (!shouldContinue(lastFinishReason, { iteration, messages })) {
-        break;
-      }
     } catch (error) {
-      await onError?.(error, context);
+      const errorResult = await onError?.(error, context);
+
+      // If onError returns void or undefined, re-throw
+      if (!errorResult) {
+        throw error;
+      }
+
+      // If onError returns an object with shouldContinue: true, optionally recover
+      if (
+        errorResult &&
+        typeof errorResult === "object" &&
+        "shouldContinue" in errorResult
+      ) {
+        if (errorResult.shouldContinue === true) {
+          // Add recovery messages if provided
+          if (errorResult.recovery && Array.isArray(errorResult.recovery)) {
+            messages.push(...errorResult.recovery);
+          }
+          iteration += 1;
+          continue;
+        }
+      }
+
+      // Default: re-throw
       throw error;
     }
   }

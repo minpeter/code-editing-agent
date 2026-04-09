@@ -6,6 +6,8 @@
 
 import type { ToolSet } from "ai";
 
+import type { MCPManager } from "./mcp-manager";
+
 /**
  * Configuration for a stdio-based MCP server.
  * The server is launched as a subprocess with the given command and arguments.
@@ -102,4 +104,20 @@ export interface MCPServerStatus {
   status: "connected" | "failed" | "closed";
   /** Number of tools provided by this server */
   toolCount: number;
+}
+
+export namespace MCPLoader {
+  export const fromFile = (path?: string) => ({ type: "file" as const, path });
+
+  export const fromServers = (servers: MCPServerConfig[]) => ({
+    type: "inline" as const,
+    servers,
+  });
+
+  export const merged = (opts: {
+    file?: string | boolean;
+    servers?: MCPServerConfig[];
+  }) => ({ type: "merged" as const, ...opts });
+
+  export const preinitialized = (manager: MCPManager) => manager;
 }

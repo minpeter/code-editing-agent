@@ -116,6 +116,7 @@ export type {
   MCPStdioServerConfig,
   MCPToolMergeResult,
 } from "./mcp-types";
+export { MCPLoader } from "./mcp-types";
 export { CHAT_MEMORY_PRESET, CODE_MEMORY_PRESET } from "./memory-presets";
 export type { MemoryStore } from "./memory-store";
 export { FileMemoryStore, InMemoryStore } from "./memory-store";

@@ -4,13 +4,87 @@
  */
 
 import { stepCountIs, streamText } from "ai";
+import { AgentError, AgentErrorCode } from "./errors";
 import { resolveMCPOption } from "./mcp-init";
 import type {
   Agent,
   AgentConfig,
+  AgentGuardrails,
   AgentStreamOptions,
   AgentStreamResult,
+  ToolCallPart,
 } from "./types";
+
+type StreamTextConfig = Parameters<typeof streamText>[0];
+type StopConditionInput = {
+  steps: Array<{
+    toolCalls?: ToolCallPart[];
+  }>;
+};
+type StopCondition = (input: StopConditionInput) => boolean;
+
+const serializeToolCall = (
+  toolCall: Pick<ToolCallPart, "input" | "toolName">
+) => {
+  return JSON.stringify({ input: toolCall.input, toolName: toolCall.toolName });
+};
+
+const textResponseReceived = (): StopCondition => {
+  return ({ steps }: StopConditionInput) => {
+    const lastStep = steps[steps.length - 1];
+    if (!lastStep) return false;
+    const hasTools = (lastStep.toolCalls?.length ?? 0) > 0;
+    return !hasTools;
+  };
+};
+
+const createGuardedStopCondition = (
+  guardrails: AgentGuardrails
+): StopCondition => {
+  return ({ steps }: StopConditionInput) => {
+    const lastStep = steps[steps.length - 1];
+    if (!lastStep) return false;
+
+    const lastStepToolCalls = lastStep.toolCalls ?? [];
+    if (lastStepToolCalls.length === 0) {
+      return true;
+    }
+
+    const maxToolCalls = guardrails.maxToolCallsPerTurn ?? 50;
+    const totalToolCalls = steps.reduce(
+      (sum: number, step) => sum + (step.toolCalls?.length ?? 0),
+      0
+    );
+    if (totalToolCalls >= maxToolCalls) {
+      throw new AgentError(
+        AgentErrorCode.MAX_TOOL_CALLS,
+        `Exceeded maxToolCallsPerTurn (${maxToolCalls})`
+      );
+    }
+
+    const threshold = guardrails.repeatedToolCallThreshold ?? 3;
+    if (threshold > 0) {
+      const flattenedToolCalls = steps.flatMap((step) => step.toolCalls ?? []);
+      if (flattenedToolCalls.length >= threshold) {
+        const recentSequence = flattenedToolCalls.slice(-threshold);
+        const firstCall = recentSequence[0];
+        const repeatedSignature = serializeToolCall(firstCall);
+        const isRepeated = recentSequence.every(
+          (toolCall) => serializeToolCall(toolCall) === repeatedSignature
+        );
+
+        if (isRepeated) {
+          throw new AgentError(
+            AgentErrorCode.REPEATED_TOOL_CALL,
+            `Detected repeated tool call ${threshold} times in a row: ${firstCall.toolName}`
+          );
+        }
+      }
+    }
+
+    return false;
+  };
+};
 
 /**
  * Creates an {@link Agent} instance that wraps a Vercel AI SDK `streamText` call.
@@ -62,7 +136,14 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
         providerOptions: opts.providerOptions,
         maxOutputTokens: opts.maxOutputTokens,
         seed: opts.seed,
-        stopWhen: stepCountIs(effectiveConfig.maxStepsPerTurn ?? 1),
+        stopWhen:
+          effectiveConfig.maxStepsPerTurn !== undefined
+            ? stepCountIs(effectiveConfig.maxStepsPerTurn)
+            : [
+                effectiveConfig.guardrails
+                  ? createGuardedStopCondition(effectiveConfig.guardrails)
+                  : textResponseReceived(),
+              ],
         temperature: opts.temperature,
         abortSignal: opts.abortSignal,
         experimental_repairToolCall:

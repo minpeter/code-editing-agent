@@ -28,6 +28,11 @@ type StreamTextOptions = Parameters<typeof streamText>[0];
 
 export type AgentInstructions = string | (() => Promise<string>);
 
+export interface AgentGuardrails {
+  maxToolCallsPerTurn?: number;
+  repeatedToolCallThreshold?: number;
+}
+
 /**
  * Options for configuring MCP (Model Context Protocol) client integration.
  * Passed to {@link AgentConfig.mcp} to enable automatic MCP tool loading.
@@ -51,6 +56,7 @@ export type MCPOption =
 /** Configuration for creating an agent via {@link createAgent}. */
 export interface AgentConfig {
   experimental_repairToolCall?: StreamTextOptions["experimental_repairToolCall"];
+  guardrails?: AgentGuardrails;
   instructions?: AgentInstructions;
   maxStepsPerTurn?: number;
   /** Optional MCP (Model Context Protocol) configuration. When provided, MCP tools are loaded and merged with local tools at agent creation time. */
@@ -87,12 +93,14 @@ export interface AgentStreamOptions {
 
 /** Result of a single streaming turn from {@link Agent.stream}. */
 export interface AgentStreamResult {
+  /** Promise resolving to the finish reason. Await: `const reason = await result.finishReason` */
   finishReason: CoreStreamResult["finishReason"];
   fullStream: CoreStreamResult["fullStream"];
+  /** Promise resolving to the full response. Await: `const res = await result.response` */
   response: CoreStreamResult["response"];
-  /** Aggregated token usage across all steps in this turn. */
+  /** Promise resolving to aggregated token usage across all steps in this turn. Await: `const total = await result.totalUsage` */
   totalUsage: CoreStreamResult["totalUsage"];
-  /** Token usage for this turn (last step). Resolves after streaming completes. */
+  /** Promise resolving to per-step token usage. Await: `const usage = await result.usage` */
   usage: CoreStreamResult["usage"];
 }
 
@@ -117,7 +125,11 @@ export interface LoopHooks {
   onError?: (
     error: unknown,
     context: LoopContinueContext
-  ) => void | Promise<void>;
+  ) =>
+    | void
+    | Promise<void>
+    | { shouldContinue?: boolean; recovery?: ModelMessage[] }
+    | Promise<{ shouldContinue?: boolean; recovery?: ModelMessage[] } | void>;
   onStepComplete?: (step: LoopStepInfo) => void | Promise<void>;
   onToolCall?: (
     call: ToolCallPart,
