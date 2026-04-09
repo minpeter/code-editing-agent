@@ -1,0 +1,53 @@
+docs/ARCHETYPES.md
+  5fc64ceb20929d26 1-92
+packages/tgbot/src/agent.ts
+  e30bf208a5b7ad95 5,11,25,33-37,39,42,108
+docs/DECISION-GUIDE.md
+  df26de9f90e861eb 1-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.6",
+  "base_commit_sha": "63fed15816f1fffd729c7780eaa4ebd669494337",
+  "prompts": {
+    "5fc64ceb20929d26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_28e7a5ec2ffeZAlWggbnzHekGM-eb29c283-fd85-44d0-a694-530f05bfdbb2",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 92,
+      "total_deletions": 0,
+      "accepted_lines": 92,
+      "overriden_lines": 0
+    },
+    "df26de9f90e861eb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_28e7a5ec2ffeZAlWggbnzHekGM-cab2af3b-9158-4d9e-a7d3-af9a9a696bd8",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 43,
+      "total_deletions": 0,
+      "accepted_lines": 43,
+      "overriden_lines": 0
+    },
+    "e30bf208a5b7ad95": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_28e7bc3e8ffeNFwwMzmr0ix2a1",
+        "model": "minpeter/gpt-latest"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 0,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    }
+  }
+}
