@@ -106,6 +106,14 @@ export { createContinuationMessage, getContinuationText } from "./continuation";
 export { env as harnessEnv } from "./env";
 export type { AgentError } from "./errors";
 export { AgentErrorCode } from "./errors";
+export type {
+  AgentConfig,
+  AgentGuardrails,
+  AgentStreamOptions,
+  AgentStreamResult,
+  RunnableAgent,
+} from "./types";
+export type { CheckpointMessage } from "./compaction-types";
 export { runAgentLoop } from "./loop";
 export { isRemoteConfig, isStdioConfig, loadMCPConfig } from "./mcp-config";
 // MCP integration
