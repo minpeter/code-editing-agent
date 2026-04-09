@@ -99,6 +99,8 @@ export { formatContextUsage, formatTokens } from "./context-usage-format";
 export type { ContinuationMessageData } from "./continuation";
 export { createContinuationMessage, getContinuationText } from "./continuation";
 export { env as harnessEnv } from "./env";
+export type { AgentError } from "./errors";
+export { AgentErrorCode } from "./errors";
 export { runAgentLoop } from "./loop";
 export { isRemoteConfig, isStdioConfig, loadMCPConfig } from "./mcp-config";
 // MCP integration
@@ -128,8 +130,8 @@ export type {
   MicroCompactResult,
 } from "./micro-compact";
 export { microCompactMessages } from "./micro-compact";
-export type { MiddlewareConfig } from "./middleware";
-export { buildMiddlewareChain } from "./middleware";
+export type { UsageMeasurement } from "./usage";
+export { normalizeUsageMeasurement } from "./usage";
 export {
   isContextOverflowError,
   isUsageSilentOverflow,
@@ -145,7 +147,11 @@ export { SessionManager } from "./session";
 export type { MemoryFact, SessionMemoryConfig } from "./session-memory";
 export { SessionMemoryTracker } from "./session-memory";
 export type { SessionData } from "./session-store";
-export { encodeSessionId, SessionStore } from "./session-store";
+export {
+  decodeSessionId,
+  encodeSessionId,
+  SessionStore,
+} from "./session-store";
 export {
   PROMPTS_COMMAND_PREFIX,
   parsePromptsCommandName,

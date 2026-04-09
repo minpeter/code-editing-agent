@@ -16,11 +16,13 @@ import {
   isContextOverflowError,
   isSkillCommandResult,
   type ModelMessage,
+  normalizeUsageMeasurement,
   type OverflowRecoveryResult,
   parseCommand,
   type RunnableAgent,
   type SkillInfo,
   shouldContinueManualToolLoop,
+  type UsageMeasurement,
 } from "@ai-sdk-tool/harness";
 import {
   Container,
@@ -446,12 +448,6 @@ export interface AgentTUIMessageHistory {
   }): void;
 }
 
-interface UsageMeasurement {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-}
-
 export function shouldDisplayBackgroundCompactionStatus(params: {
   blockingCompactionActive: boolean;
   state: "clear" | "running";
@@ -643,55 +639,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     });
 
     return getContextPressureLevel(usage.used, budget);
-  };
-
-  const getUsageNumber = (
-    usage: Record<string, unknown>,
-    ...keys: string[]
-  ): number | undefined => {
-    for (const key of keys) {
-      const value = usage[key];
-      if (typeof value === "number" && Number.isFinite(value)) {
-        return value;
-      }
-    }
-
-    return undefined;
-  };
-
-  const normalizeUsageMeasurement = (
-    usage: UsageMeasurement | null | undefined
-  ): UsageMeasurement | null => {
-    if (!usage) {
-      return null;
-    }
-
-    const usageRecord = usage as Record<string, unknown>;
-    const inputTokens = getUsageNumber(
-      usageRecord,
-      "inputTokens",
-      "promptTokens"
-    );
-    const outputTokens = getUsageNumber(
-      usageRecord,
-      "outputTokens",
-      "completionTokens"
-    );
-    const totalTokens = getUsageNumber(usageRecord, "totalTokens");
-
-    if (
-      inputTokens === undefined &&
-      outputTokens === undefined &&
-      totalTokens === undefined
-    ) {
-      return null;
-    }
-
-    return {
-      inputTokens,
-      outputTokens,
-      totalTokens,
-    };
   };
 
   const createStatusSpinner = (message: string): StatusSpinner => {

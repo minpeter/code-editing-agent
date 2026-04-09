@@ -6,11 +6,13 @@ import type {
   CompactionOrchestratorCallbacks,
   ModelMessage,
   RunnableAgent,
+  UsageMeasurement,
 } from "@ai-sdk-tool/harness";
 import {
   CompactionOrchestrator,
   harnessEnv,
   isContextOverflowError,
+  normalizeUsageMeasurement,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
 import { emitEvent as defaultEmitEvent } from "./emit";
@@ -34,12 +36,6 @@ type MaxOutputAwareMessageHistory = HeadlessMessageHistory & {
   getRecommendedMaxOutputTokens: CheckpointHistory["getRecommendedMaxOutputTokens"];
 };
 
-interface UsageMeasurement {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-}
-
 type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
 
 const MAX_NO_OUTPUT_RETRIES = 3;
@@ -52,55 +48,6 @@ function isNoOutputGeneratedError(error: unknown): boolean {
   return (
     error instanceof Error && error.message.includes("No output generated")
   );
-}
-
-function getUsageNumber(
-  usage: Record<string, unknown>,
-  ...keys: string[]
-): number | undefined {
-  for (const key of keys) {
-    const value = usage[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function normalizeUsageMeasurement(
-  usage: UsageMeasurement | null | undefined
-): UsageMeasurement | null {
-  if (!usage) {
-    return null;
-  }
-
-  const usageRecord = usage as Record<string, unknown>;
-  const inputTokens = getUsageNumber(
-    usageRecord,
-    "inputTokens",
-    "promptTokens"
-  );
-  const outputTokens = getUsageNumber(
-    usageRecord,
-    "outputTokens",
-    "completionTokens"
-  );
-  const totalTokens = getUsageNumber(usageRecord, "totalTokens");
-
-  if (
-    inputTokens === undefined &&
-    outputTokens === undefined &&
-    totalTokens === undefined
-  ) {
-    return null;
-  }
-
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens,
-  };
 }
 
 function hasUsageTracking(
