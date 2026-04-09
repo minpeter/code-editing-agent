@@ -116,9 +116,48 @@ export interface CompactionEvent {
  * An error event for fatal or iteration-limit failures.
  */
 export interface ErrorEvent {
+  code?: string;
   error: string;
   timestamp: string;
   type: "error";
+}
+
+export interface HeadlessRunnerConfig {
+  abortSignal?: AbortSignal;
+  agent: import("@ai-sdk-tool/harness").RunnableAgent;
+  atifOutputPath?: string;
+  circuitBreaker?: import("@ai-sdk-tool/harness").CompactionCircuitBreaker;
+  compactionCallbacks?: import("@ai-sdk-tool/harness").CompactionOrchestratorCallbacks;
+  emitEvent?: (event: TrajectoryEvent) => void;
+  initialUserMessage?: {
+    content: string;
+    eventContent?: string;
+    originalContent?: string;
+  };
+  /**
+   * Global iteration budget across all agent turns, including TODO reminder iterations.
+   * Prefer maxTodoReminders when you only want to cap reminder follow-ups.
+   */
+  maxIterations?: number;
+  maxTodoReminders?: number;
+  measureUsage?: (
+    messages: import("@ai-sdk-tool/harness").ModelMessage[]
+  ) => Promise<import("@ai-sdk-tool/harness").UsageMeasurement | null>;
+  messageHistory: import("@ai-sdk-tool/harness").CheckpointHistory;
+  modelId: string;
+  onTodoReminder?: () => Promise<{
+    hasReminder: boolean;
+    message: string | null;
+  }>;
+  onTurnComplete?: (
+    messages: import("@ai-sdk-tool/harness").CheckpointMessage[],
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+    }
+  ) => Promise<void> | void;
+  sessionId: string;
+  streamTimeoutMs?: number;
 }
 
 /**

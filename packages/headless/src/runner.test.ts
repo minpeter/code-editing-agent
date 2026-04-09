@@ -560,4 +560,69 @@ describe("runHeadless", () => {
     );
     expect(agentEvents).toHaveLength(1);
   });
+
+  it("emits an abort error event and stops when the caller aborts", async () => {
+    const events: TrajectoryEvent[] = [];
+    const controller = new AbortController();
+
+    await runHeadless({
+      agent: {
+        stream: async () => {
+          await Promise.resolve();
+          controller.abort();
+          throw new Error("Aborted by caller");
+        },
+      },
+      abortSignal: controller.signal,
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: {
+        content: "abort me",
+      },
+      messageHistory: new CheckpointHistory(),
+      modelId: "mock-model",
+      sessionId: "session-abort",
+    });
+
+    expect(events.filter((event) => event.type === "error")).toContainEqual(
+      expect.objectContaining({
+        code: "TIMEOUT",
+        error: "Aborted by caller",
+      })
+    );
+  });
+
+  it("uses maxTodoReminders instead of the legacy hardcoded reminder cap", async () => {
+    const events: TrajectoryEvent[] = [];
+
+    await runHeadless({
+      agent: {
+        stream: () =>
+          createMockStream([{ role: "assistant", content: "done" }]),
+      },
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: {
+        content: "initial",
+      },
+      maxTodoReminders: 2,
+      messageHistory: new CheckpointHistory(),
+      modelId: "mock-model",
+      onTodoReminder: () =>
+        Promise.resolve({
+          hasReminder: true,
+          message: "follow-up",
+        }),
+      sessionId: "session-max-todo-reminders",
+    });
+
+    expect(events.filter((event) => event.type === "error")).toContainEqual(
+      expect.objectContaining({
+        code: "MAX_ITERATIONS",
+        error: "Todo continuation safety cap reached (2 reminders).",
+      })
+    );
+  });
 });

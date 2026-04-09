@@ -1,14 +1,11 @@
 import type {
   CheckpointHistory,
-  CheckpointMessage,
   CompactionAppliedDetail,
-  CompactionCircuitBreaker,
   CompactionOrchestratorCallbacks,
   ModelMessage,
-  RunnableAgent,
-  UsageMeasurement,
 } from "@ai-sdk-tool/harness";
 import {
+  AgentErrorCode,
   CompactionOrchestrator,
   harnessEnv,
   isContextOverflowError,
@@ -18,7 +15,7 @@ import {
 import { emitEvent as defaultEmitEvent } from "./emit";
 import { processStream } from "./stream-processor";
 import { TrajectoryCollector } from "./trajectory-collector";
-import type { TrajectoryEvent } from "./types";
+import type { HeadlessRunnerConfig, TrajectoryEvent } from "./types";
 
 export interface InitialUserMessage {
   content: string;
@@ -142,25 +139,40 @@ function createEmitAndCollect(
   };
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Aborted by caller";
+}
+
+function isStreamTimeoutError(
+  error: unknown,
+  streamTimeoutMs: number
+): boolean {
+  return (
+    error instanceof Error &&
+    error.message === `Stream response timeout after ${streamTimeoutMs}ms`
+  );
+}
+
 async function runTodoReminderLoop(params: {
   emitAndCollect: (event: TrajectoryEvent) => void;
   enqueueUserMessage: (message: { content: string }) => Promise<void>;
+  maxTodoReminders: number;
   onTodoReminder: () => Promise<{
     hasReminder: boolean;
     message: string | null;
   }>;
   processAgentResponse: () => Promise<ProcessAgentResponseResult>;
 }): Promise<void> {
-  const MAX_TODO_REMINDER_ITERATIONS = 20;
   let todoReminderCount = 0;
 
   while (true) {
     todoReminderCount += 1;
-    if (todoReminderCount > MAX_TODO_REMINDER_ITERATIONS) {
+    if (todoReminderCount > params.maxTodoReminders) {
       params.emitAndCollect({
         timestamp: new Date().toISOString(),
         type: "error",
-        error: `Todo continuation safety cap reached (${MAX_TODO_REMINDER_ITERATIONS} reminders).`,
+        code: AgentErrorCode.MAX_ITERATIONS,
+        error: `Todo continuation safety cap reached (${params.maxTodoReminders} reminders).`,
       });
       break;
     }
@@ -183,31 +195,6 @@ async function runTodoReminderLoop(params: {
   }
 }
 
-export interface HeadlessRunnerConfig {
-  agent: RunnableAgent;
-  atifOutputPath?: string;
-  circuitBreaker?: CompactionCircuitBreaker;
-  compactionCallbacks?: CompactionOrchestratorCallbacks;
-  emitEvent?: (event: TrajectoryEvent) => void;
-  initialUserMessage?: InitialUserMessage;
-  maxIterations?: number;
-  measureUsage?: (messages: ModelMessage[]) => Promise<UsageMeasurement | null>;
-  messageHistory: HeadlessMessageHistory;
-  modelId: string;
-  onTodoReminder?: () => Promise<{
-    hasReminder: boolean;
-    message: string | null;
-  }>;
-  onTurnComplete?: (
-    messages: CheckpointMessage[],
-    usage?: {
-      inputTokens?: number;
-      outputTokens?: number;
-    }
-  ) => Promise<void> | void;
-  sessionId: string;
-}
-
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const emitEventSink = config.emitEvent ?? defaultEmitEvent;
   const trajectoryCollector = config.atifOutputPath
@@ -227,9 +214,11 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         );
       }
     : undefined;
+  const streamTimeoutMs = config.streamTimeoutMs ?? 30_000;
+  const maxTodoReminders = config.maxTodoReminders ?? 20;
   let totalIterationCount = 0;
   type StreamTurnResult = Awaited<ReturnType<typeof processStream>>;
-  type StreamUsage = StreamTurnResult["usage"];
+  type StreamUsage = StreamTurnResult["usage"] | undefined;
   const measureUsageIfAvailable = async (
     messages: ModelMessage[]
   ): Promise<boolean> => {
@@ -329,7 +318,11 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         tokensBefore: config.messageHistory.getContextUsage().used,
       });
     },
-    onCompactionComplete: (result) => {
+    onCompactionComplete: (
+      result: Parameters<
+        NonNullable<CompactionOrchestratorCallbacks["onCompactionComplete"]>
+      >[0]
+    ) => {
       emitMetric?.({
         event: "compaction_complete",
         turn: turnNumber,
@@ -356,7 +349,11 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         error: String(error),
       });
     },
-    onBlockingChange: (event) => {
+    onBlockingChange: (
+      event: Parameters<
+        NonNullable<CompactionOrchestratorCallbacks["onBlockingChange"]>
+      >[0]
+    ) => {
       let durationMs: number | undefined;
       if (!event.blocking && blockingStartTime != null) {
         durationMs = Date.now() - blockingStartTime;
@@ -458,6 +455,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     emitAndCollect({
       timestamp: new Date().toISOString(),
       type: "error",
+      code: AgentErrorCode.MAX_ITERATIONS,
       error: `Max iterations (${config.maxIterations}) reached`,
     });
     return true;
@@ -549,13 +547,49 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       streamMessages: ModelMessage[],
       streamMaxOutputTokens: number | undefined
     ) => {
-      try {
-        const stream = await config.agent.stream({
-          messages: streamMessages,
-          ...(streamMaxOutputTokens !== undefined
-            ? { maxOutputTokens: streamMaxOutputTokens }
-            : {}),
+      if (config.abortSignal?.aborted) {
+        emitAndCollect({
+          timestamp: new Date().toISOString(),
+          type: "error",
+          code: AgentErrorCode.TIMEOUT,
+          error: "Aborted by caller",
         });
+        return {
+          pendingMessages,
+          shouldContinue: false,
+          usage: undefined,
+        };
+      }
+
+      try {
+        const streamPromise = Promise.resolve(
+          config.agent.stream({
+            messages: streamMessages,
+            ...(streamMaxOutputTokens !== undefined
+              ? { maxOutputTokens: streamMaxOutputTokens }
+              : {}),
+            ...(config.abortSignal ? { abortSignal: config.abortSignal } : {}),
+          })
+        );
+        const stream = await Promise.race([
+          streamPromise,
+          new Promise<never>((_, reject) => {
+            const timeoutId = setTimeout(() => {
+              reject(
+                new Error(`Stream response timeout after ${streamTimeoutMs}ms`)
+              );
+            }, streamTimeoutMs);
+
+            config.abortSignal?.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timeoutId);
+                reject(new Error("Aborted by caller"));
+              },
+              { once: true }
+            );
+          }),
+        ]);
         const nextStepId = stepId + 1;
         const processStreamResult = await processStream({
           emitEvent: emitAndCollect,
@@ -574,6 +608,35 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           usage: processStreamResult.usage,
         };
       } catch (error) {
+        if (isAbortError(error)) {
+          emitAndCollect({
+            timestamp: new Date().toISOString(),
+            type: "error",
+            code: AgentErrorCode.TIMEOUT,
+            error: "Aborted by caller",
+          });
+          return {
+            pendingMessages,
+            shouldContinue: false,
+            usage: undefined,
+          };
+        }
+
+        if (isStreamTimeoutError(error, streamTimeoutMs)) {
+          const timeoutError = error as Error;
+          emitAndCollect({
+            timestamp: new Date().toISOString(),
+            type: "error",
+            code: AgentErrorCode.TIMEOUT,
+            error: timeoutError.message,
+          });
+          return {
+            pendingMessages,
+            shouldContinue: false,
+            usage: undefined,
+          };
+        }
+
         if (!overflowRetried && isContextOverflowError(error)) {
           overflowRetried = true;
           await blockAtHardContextLimit(0, phase);
@@ -726,6 +789,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     await runTodoReminderLoop({
       emitAndCollect,
       enqueueUserMessage,
+      maxTodoReminders,
       onTodoReminder: config.onTodoReminder,
       processAgentResponse,
     });

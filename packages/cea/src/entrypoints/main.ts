@@ -387,7 +387,7 @@ const createTranslationPreprocessor = () => {
 
       if (result.error) {
         return {
-          contentForModel: input,
+          success: false,
           error: `[translation] Failed to translate input: ${result.error}. Using original text.`,
         };
       }
@@ -397,8 +397,8 @@ const createTranslationPreprocessor = () => {
       }
 
       return {
-        contentForModel: result.text,
-        originalContent: input,
+        success: true,
+        message: result.text,
         translatedDisplay: result.text,
       };
     } finally {

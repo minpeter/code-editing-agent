@@ -377,12 +377,16 @@ const addNewSessionMessage = (chatContainer: Container): void => {
   );
 };
 
-export interface PreprocessResult {
-  contentForModel: string;
-  error?: string;
-  originalContent?: string;
-  translatedDisplay?: string;
-}
+export type PreprocessResult =
+  | {
+      success: true;
+      message: string;
+      translatedDisplay?: string;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 export interface PreprocessHooks {
   clearStatus: () => void;
@@ -403,16 +407,25 @@ export interface CommandPreprocessHooks {
   updateHeader: () => void;
 }
 
-export interface AgentTUIMessageHistory {
+export interface MessageReadable {
+  getAll(): CheckpointMessage[];
+  getMessagesForLLM(): ModelMessage[];
+  toModelMessages(): ModelMessage[];
+}
+
+export interface MessageWritable {
   addModelMessages(messages: ModelMessage[]): unknown;
   addUserMessage(content: string, originalContent?: string): unknown;
   clear(): void;
+  reset?(): void;
+}
+
+export interface ContextAware {
   compact(options?: {
     aggressive?: boolean;
     auto?: boolean;
   }): Promise<boolean | CompactionResult>;
   getActualUsage(): { inputTokens?: number; totalTokens?: number } | null;
-  getAll(): CheckpointMessage[];
   getCompactionConfig(): {
     contextLimit?: number;
     enabled?: boolean;
@@ -429,8 +442,8 @@ export interface AgentTUIMessageHistory {
     source: "actual" | "estimated";
     used: number;
   } | null;
+  getContextLimit(): number;
   getEstimatedTokens(): number;
-  getMessagesForLLM(): ModelMessage[];
   getRecommendedMaxOutputTokens(
     messagesForLLM?: ModelMessage[]
   ): number | undefined;
@@ -447,6 +460,23 @@ export interface AgentTUIMessageHistory {
     totalTokens?: number;
   }): void;
 }
+
+export interface AgentTUIMessageHistory
+  extends MessageReadable,
+    MessageWritable,
+    ContextAware {}
+
+const getMessageHistoryContextLimit = (
+  history: Pick<AgentTUIMessageHistory, "getCompactionConfig"> & {
+    getContextLimit?: () => number;
+  }
+): number => {
+  if (typeof history.getContextLimit === "function") {
+    return history.getContextLimit();
+  }
+
+  return history.getCompactionConfig().contextLimit ?? 0;
+};
 
 export function shouldDisplayBackgroundCompactionStatus(params: {
   blockingCompactionActive: boolean;
@@ -626,13 +656,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     | "warning"
     | null => {
     const usage = config.messageHistory.getContextUsage();
-    if (!usage || usage.limit <= 0) {
+    const contextLimit = getMessageHistoryContextLimit(config.messageHistory);
+    if (!usage || contextLimit <= 0) {
       return null;
     }
 
     const compactionConfig = config.messageHistory.getCompactionConfig();
     const budget = computeContextBudget({
-      contextLimit: usage.limit,
+      contextLimit,
       maxOutputTokens: compactionConfig.maxTokens,
       reserveTokens: compactionConfig.reserveTokens,
       thresholdRatio: compactionConfig.thresholdRatio,
@@ -901,6 +932,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     streamInterruptRequested = true;
+    addSystemMessage(chatContainer, "⚡ Interrupted");
     activeStreamController.abort("User requested stream interruption");
     return true;
   };
@@ -1454,7 +1486,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     compactionOrchestrator.discardAll();
-    config.messageHistory.clear();
+    config.messageHistory.reset?.() ?? config.messageHistory.clear();
     chatContainer.clear();
     addNewSessionMessage(chatContainer);
     await config.onCommandAction?.(commandResult.action);
@@ -1556,7 +1588,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   const processUserInputMessage = async (trimmed: string): Promise<void> => {
     let contentForModel = trimmed;
-    let originalContent: string | undefined;
 
     if (config.preprocessUserInput) {
       addUserMessage(chatContainer, markdownTheme, trimmed);
@@ -1568,18 +1599,17 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       });
 
       if (result) {
-        contentForModel = result.contentForModel;
-        originalContent = result.originalContent;
+        if (result.success) {
+          contentForModel = result.message;
 
-        if (result.translatedDisplay) {
-          addTranslatedMessage(
-            chatContainer,
-            markdownTheme,
-            result.translatedDisplay
-          );
-        }
-
-        if (result.error) {
+          if (result.translatedDisplay) {
+            addTranslatedMessage(
+              chatContainer,
+              markdownTheme,
+              result.translatedDisplay
+            );
+          }
+        } else {
           addSystemMessage(chatContainer, result.error);
         }
       }
@@ -1588,7 +1618,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     await blockOnlyIfAtHardContextLimit(contentForModel);
-    config.messageHistory.addUserMessage(contentForModel, originalContent);
+    config.messageHistory.addUserMessage(contentForModel);
     compactionOrchestrator.notifyNewUserTurn();
     tui.requestRender();
     const responseState = await processAgentResponse();
@@ -1600,6 +1630,8 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const processInput = async (input: string): Promise<boolean> => {
     const trimmed = input.trim();
     if (trimmed.length === 0) {
+      addSystemMessage(chatContainer, "메시지를 입력해주세요");
+      tui.requestRender();
       return true;
     }
 
