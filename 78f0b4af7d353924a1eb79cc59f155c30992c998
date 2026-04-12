@@ -1,0 +1,70 @@
+packages/harness/src/snapshot-store.ts
+  66e13c83ee5aadb5 13-14
+packages/harness/src/file-snapshot-store.ts
+  66e13c83ee5aadb5 5
+packages/harness/src/loop.test.ts
+  66e13c83ee5aadb5 3
+packages/tui/src/agent-tui.ts
+  66e13c83ee5aadb5 533-538
+packages/harness/src/subpath/mcp.ts
+  66e13c83ee5aadb5 1,3-4,14
+packages/minimal-agent/index.ts
+  66e13c83ee5aadb5 12
+packages/harness/src/loop.ts
+  66e13c83ee5aadb5 7
+packages/harness/src/history-snapshot.ts
+  66e13c83ee5aadb5 6,8,10,14-17,28-29,31-32,38-40
+packages/harness/src/subpath/utils.ts
+  66e13c83ee5aadb5 2-8,14-15,17-21,27
+packages/harness/src/file-snapshot-store.test.ts
+  66e13c83ee5aadb5 6
+packages/harness/src/subpath/compaction.ts
+  66e13c83ee5aadb5 1-6,18-23,29-33,47-54,61-62,68,70-72,77-93
+packages/harness/src/subpath/memory.ts
+  66e13c83ee5aadb5 2,4-7
+packages/harness/src/subpath/sessions.ts
+  66e13c83ee5aadb5 5,8,10,14,16-17
+biome.jsonc
+  4251c075ee0d985c 15-16
+packages/harness/src/subpath/commands.ts
+  66e13c83ee5aadb5 1-8
+packages/harness/src/subpath/skills.ts
+  66e13c83ee5aadb5 2
+packages/harness/src/index.ts
+  66e13c83ee5aadb5 100-103
+packages/harness/src/checkpoint-history.ts
+  66e13c83ee5aadb5 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "78f0b4af7d353924a1eb79cc59f155c30992c998",
+  "prompts": {
+    "4251c075ee0d985c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-8bad95d5-7749-47ca-bd4e-a2522d1390de",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 1,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "66e13c83ee5aadb5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-e3e38e21-44d9-4f82-ad83-9d0e89421ccc",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 121,
+      "total_deletions": 118,
+      "accepted_lines": 121,
+      "overriden_lines": 0
+    }
+  }
+}
