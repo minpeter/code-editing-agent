@@ -1,0 +1,108 @@
+packages/harness/src/errors.ts
+  7c4a26a6e92d5e26 23-26
+packages/harness/src/snapshot-store.ts
+  1cf1362313aa44e1 1-25,27-30,32-35,37-39
+  372ce1a5f0dd7c9f 26,31,36
+packages/harness/src/errors.test.ts
+  7c4a26a6e92d5e26 2,4-8,11-12,15-16,19-20
+packages/harness/src/history-snapshot.ts
+  50227da77bd5e266 1-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "f47ecc169c4def6c485627a2734598404bbebdce",
+  "prompts": {
+    "1cf1362313aa44e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_27e230beaffehVpKG5ax7Hm8Op",
+        "model": "minpeter/gpt-mini-latest"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 36,
+      "total_deletions": 0,
+      "accepted_lines": 36,
+      "overriden_lines": 0
+    },
+    "310c55d3ee285d12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-31f74158-8a11-4c15-a421-26162326e736",
+        "model": "unknown"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "372ce1a5f0dd7c9f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27e230beaffehVpKG5ax7Hm8Op-d6879d43-6976-41cd-94af-2590660a7b4d",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "43eb17774250255f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-4cc0a5d7-c9fb-47b1-9d4f-9183f51a9c9f",
+        "model": "unknown"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 7,
+      "overriden_lines": 0
+    },
+    "50227da77bd5e266": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_27e2476d8ffeAv41mkTsugCO2E",
+        "model": "minpeter/gpt-mini-latest"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 67,
+      "total_deletions": 0,
+      "accepted_lines": 67,
+      "overriden_lines": 0
+    },
+    "601af74f3ac7d829": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-38583730-089b-403d-a843-ff80d96f5df0",
+        "model": "unknown"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    },
+    "7c4a26a6e92d5e26": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_27e22cb9dffep94bgAGNsKs4ce",
+        "model": "minpeter/gpt-mini-latest"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 17,
+      "total_deletions": 31,
+      "accepted_lines": 17,
+      "overriden_lines": 0
+    }
+  }
+}
