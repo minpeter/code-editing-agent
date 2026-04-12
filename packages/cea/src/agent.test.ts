@@ -254,6 +254,16 @@ summary`);
 
     expect(config.enabled).toBe(true);
     expect(config.protectRecentTokens).toBe(40_000);
-    expect(config.eagerPruneToolNames).toEqual(["read_file", "grep_files"]);
+    expect(config.eagerPruneToolNames).toEqual([
+      "read_file",
+      "readFile",
+      "grep",
+      "grep_files",
+      "grepFiles",
+      "list_dir",
+      "listDir",
+      "list_files",
+      "listFiles",
+    ]);
   });
 });
