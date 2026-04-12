@@ -1,0 +1,37 @@
+packages/harness/src/index.ts
+  f7bdcc340cca1a97 103
+  04e5917f772aad1b 166-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "112cfd7d2492eae5eff43fffe4ab8fe7f3527713",
+  "prompts": {
+    "04e5917f772aad1b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-d1cec033-7d3a-4ee5-bce9-cd0ca93ea731",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 2,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "f7bdcc340cca1a97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-19ec2324-b2ba-4689-8c06-bf8ae26cf4e9",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
