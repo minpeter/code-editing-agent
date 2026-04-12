@@ -1,0 +1,91 @@
+packages/harness/src/loop.test.ts
+  c05a66a325bd95b0 131-134
+  9670660e4833b581 178-180
+packages/harness/src/loop.ts
+  a8a3673bcf14ff6c 74-75,86-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "fb7c609cd848cf7e1fdf69a5d085997d3ae2a928",
+  "prompts": {
+    "432b215aaa61e333": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-2e5a6d25-8c1a-46bf-a5cb-7e9a73dfc849",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "9670660e4833b581": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-e5fc3ec9-e800-477e-9f0c-ef43be22e868",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 3,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "a8a3673bcf14ff6c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-bc26592a-e98c-4259-aea0-410eae56ce80",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 7,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    },
+    "c05a66a325bd95b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-c70401d7-0c2f-4a87-9390-269c2d705243",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 5,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    },
+    "d477cdad5204d218": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-c4b30780-f40d-44ad-93b2-e6924c056fa4",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    },
+    "fa535570fa36f050": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f4e3bc2ffeI0ec00RwH4iQJV-25482918-8d9f-4d20-901b-61deb4c4c327",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 12,
+      "overriden_lines": 0
+    }
+  }
+}
