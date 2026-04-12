@@ -25,7 +25,7 @@ import {
   INEFFECTIVE_COMPACTION_REASON,
 } from "./compaction-types";
 import { collapseConsecutiveOps } from "./context-collapse";
-import { createContinuationMessage } from "./continuation";
+import { createContinuationMessage, getContinuationText } from "./continuation";
 import { env } from "./env";
 import { microCompactMessages } from "./micro-compact";
 import type { SessionStore } from "./session-store";
@@ -67,27 +67,13 @@ const DEFAULT_PRUNING_CONFIG: Required<PruningConfig> = {
 
 const TRAILING_NEWLINES = /\n+$/;
 
-const COMPACTION_CONTINUATION_TEXTS = {
-  "auto-with-replay":
-    "Previous context was summarized above. The user's latest request follows — respond to it directly and naturally.",
-  auto: "Context has been compacted. I'll continue working on the current task based on the summary.",
-  manual:
-    "The conversation was summarized above. Continue naturally without mentioning the summary or that compaction occurred.",
-  "tool-loop":
-    "Context was compacted mid-task. Resume your work and continue with any pending tool calls or steps.",
-  overflow:
-    "The context was compacted due to overflow. I'll resume the task from where we left off.",
-} as const;
-
-const COMPACTION_CONTINUATION_TEXT_SET: ReadonlySet<string> = new Set(
-  Object.values(COMPACTION_CONTINUATION_TEXTS)
-);
-
-export function getContinuationText(
-  variant: keyof typeof COMPACTION_CONTINUATION_TEXTS
-): string {
-  return COMPACTION_CONTINUATION_TEXTS[variant];
-}
+const COMPACTION_CONTINUATION_TEXT_SET: ReadonlySet<string> = new Set([
+  getContinuationText("auto-with-replay"),
+  getContinuationText("auto"),
+  getContinuationText("manual"),
+  getContinuationText("tool-loop"),
+  getContinuationText("overflow"),
+]);
 
 function computeSavingsRatio(
   savedTokens: number,
@@ -97,6 +83,17 @@ function computeSavingsRatio(
     return savedTokens / tokensBefore;
   }
   return savedTokens > 0 ? 1 : 0;
+}
+
+function validateCompactionConfig(config: NormalizedCompactionConfig): void {
+  if (config.enabled && !config.summarizeFn) {
+    console.warn(
+      "compaction enabled without summarizeFn — will use naive truncation"
+    );
+  }
+  if (config.contextLimit === 0 && config.enabled) {
+    console.warn("contextLimit is 0, compaction may not work correctly");
+  }
 }
 
 type CompactionDirection = "keep-recent" | "keep-prefix";
@@ -135,24 +132,7 @@ export interface OverflowRecoveryResult {
   tokensBefore: number;
 }
 
-export function isContextOverflowError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const msg = error.message.toLowerCase();
-  return (
-    msg.includes("context_length_exceeded") ||
-    msg.includes("context length exceeded") ||
-    msg.includes("context window") ||
-    msg.includes("maximum context") ||
-    msg.includes("too many tokens") ||
-    msg.includes("input is too long") ||
-    msg.includes("prompt is too long") ||
-    msg.includes("tokens exceeds") ||
-    msg.includes("token limit")
-  );
-}
+export { isContextOverflowError } from "./overflow-detection";
 
 function hasToolCalls(message: ModelMessage): boolean {
   if (message.role !== "assistant" || !Array.isArray(message.content)) {
@@ -326,6 +306,7 @@ export class CheckpointHistory {
       ...DEFAULT_COMPACTION_CONFIG,
       ...options?.compaction,
     };
+    validateCompactionConfig(this.compactionConfig);
     this.contextLimit = this.compactionConfig.contextLimit ?? 0;
     this.pruningConfig = {
       ...DEFAULT_PRUNING_CONFIG,
@@ -884,7 +865,7 @@ export class CheckpointHistory {
       isSummaryMessage: false,
       message: {
         role: "assistant",
-        content: COMPACTION_CONTINUATION_TEXTS[continuationVariant],
+        content: getContinuationText(continuationVariant),
       },
     };
     const replayMessageCopy = this.createReplayMessageCopy(

@@ -11,12 +11,46 @@
         "packages/tui/src/index.ts",
         "packages/headless/src/index.ts",
         "packages/cea/src/context/skill-command-prefix.ts",
-        "packages/cea/src/commands/index.ts"
+        "packages/cea/src/commands/index.ts",
+        "packages/harness/src/checkpoint-history.ts"
       ],
       "linter": {
         "rules": {
           "performance": {
             "noBarrelFile": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/harness/src/errors.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noEnum": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/harness/src/loop.ts",
+        "packages/headless/src/runner.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/harness/src/mcp-types.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNamespace": "off"
           }
         }
       }

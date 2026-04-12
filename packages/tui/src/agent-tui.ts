@@ -10,17 +10,18 @@ import {
   computeContextBudget,
   estimateTokens,
   executeCommand,
-  getContextPressureLevel,
   harnessEnv,
   isCommand,
   isContextOverflowError,
   isSkillCommandResult,
   type ModelMessage,
+  normalizeUsageMeasurement,
   type OverflowRecoveryResult,
   parseCommand,
   type RunnableAgent,
   type SkillInfo,
   shouldContinueManualToolLoop,
+  type UsageMeasurement,
 } from "@ai-sdk-tool/harness";
 import {
   Container,
@@ -67,6 +68,37 @@ const ANSI_BRIGHT_YELLOW = "\x1b[93m";
 const ANSI_RED = "\x1b[31m";
 const CTRL_C_ETX = "\u0003";
 const CTRL_C_EXIT_WINDOW_MS = 500;
+
+const getConfiguredContextPressureLevel = (
+  usedTokens: number,
+  budget: ReturnType<typeof computeContextBudget>,
+  thresholds: {
+    critical: number;
+    elevated: number;
+    warning: number;
+  }
+): "critical" | "elevated" | "normal" | "warning" => {
+  const hardLimit = Math.max(budget.hardLimitAt, 1);
+  const ratio = usedTokens / hardLimit;
+
+  if (ratio >= thresholds.critical) {
+    return "critical";
+  }
+  if (ratio >= thresholds.warning) {
+    return "warning";
+  }
+  if (ratio >= thresholds.elevated) {
+    return "elevated";
+  }
+
+  return "normal";
+};
+
+interface ContextPressureThresholds {
+  critical: number;
+  elevated: number;
+  warning: number;
+}
 
 const style = (prefix: string, text: string): string => {
   return `${prefix}${text}${ANSI_RESET}`;
@@ -375,12 +407,16 @@ const addNewSessionMessage = (chatContainer: Container): void => {
   );
 };
 
-export interface PreprocessResult {
-  contentForModel: string;
-  error?: string;
-  originalContent?: string;
-  translatedDisplay?: string;
-}
+export type PreprocessResult =
+  | {
+      success: true;
+      message: string;
+      translatedDisplay?: string;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 export interface PreprocessHooks {
   clearStatus: () => void;
@@ -401,16 +437,25 @@ export interface CommandPreprocessHooks {
   updateHeader: () => void;
 }
 
-export interface AgentTUIMessageHistory {
+export interface MessageReadable {
+  getAll(): CheckpointMessage[];
+  getMessagesForLLM(): ModelMessage[];
+  toModelMessages(): ModelMessage[];
+}
+
+export interface MessageWritable {
   addModelMessages(messages: ModelMessage[]): unknown;
   addUserMessage(content: string, originalContent?: string): unknown;
   clear(): void;
+  reset?(): void;
+}
+
+export interface ContextAware {
   compact(options?: {
     aggressive?: boolean;
     auto?: boolean;
   }): Promise<boolean | CompactionResult>;
   getActualUsage(): { inputTokens?: number; totalTokens?: number } | null;
-  getAll(): CheckpointMessage[];
   getCompactionConfig(): {
     contextLimit?: number;
     enabled?: boolean;
@@ -420,6 +465,7 @@ export interface AgentTUIMessageHistory {
     speculativeStartRatio?: number;
     thresholdRatio?: number;
   };
+  getContextLimit(): number;
   getContextUsage(): {
     limit: number;
     percentage: number;
@@ -428,7 +474,6 @@ export interface AgentTUIMessageHistory {
     used: number;
   } | null;
   getEstimatedTokens(): number;
-  getMessagesForLLM(): ModelMessage[];
   getRecommendedMaxOutputTokens(
     messagesForLLM?: ModelMessage[]
   ): number | undefined;
@@ -446,11 +491,22 @@ export interface AgentTUIMessageHistory {
   }): void;
 }
 
-interface UsageMeasurement {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-}
+export interface AgentTUIMessageHistory
+  extends MessageReadable,
+    MessageWritable,
+    ContextAware {}
+
+const getMessageHistoryContextLimit = (
+  history: Pick<AgentTUIMessageHistory, "getCompactionConfig"> & {
+    getContextLimit?: () => number;
+  }
+): number => {
+  if (typeof history.getContextLimit === "function") {
+    return history.getContextLimit();
+  }
+
+  return history.getCompactionConfig().contextLimit ?? 0;
+};
 
 export function shouldDisplayBackgroundCompactionStatus(params: {
   blockingCompactionActive: boolean;
@@ -474,7 +530,10 @@ export async function retryStreamTurnOnContextOverflow<T>(params: {
   retry: () => Promise<T>;
   runBlockingCompaction: () => Promise<boolean>;
 }): Promise<{ handled: false } | { handled: true; result: T }> {
-  if (params.overflowRetried || !isContextOverflowError(params.error)) {
+  if (
+    params.overflowRetried ||
+    !isContextOverflowError(params.error).detected
+  ) {
     return { handled: false };
   }
 
@@ -517,6 +576,11 @@ export interface AgentTUIConfig {
   circuitBreaker?: CompactionCircuitBreaker;
   commands?: Command[];
   compactionCallbacks?: CompactionOrchestratorCallbacks;
+  contextPressureThresholds?: {
+    critical?: number;
+    elevated?: number;
+    warning?: number;
+  };
   footer?: { text?: string };
   header?: { title: string; subtitle?: string };
   measureUsage?: (messages: ModelMessage[]) => Promise<UsageMeasurement | null>;
@@ -622,6 +686,11 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
   let blockingCompactionActive = false;
   let commandInputListenerActive = false;
+  const contextPressureThresholds: ContextPressureThresholds = {
+    elevated: config.contextPressureThresholds?.elevated ?? 0.7,
+    warning: config.contextPressureThresholds?.warning ?? 0.85,
+    critical: config.contextPressureThresholds?.critical ?? 0.95,
+  };
 
   const resolveContextPressure = ():
     | "critical"
@@ -630,68 +699,24 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     | "warning"
     | null => {
     const usage = config.messageHistory.getContextUsage();
-    if (!usage || usage.limit <= 0) {
+    const contextLimit = getMessageHistoryContextLimit(config.messageHistory);
+    if (!usage || contextLimit <= 0) {
       return null;
     }
 
     const compactionConfig = config.messageHistory.getCompactionConfig();
     const budget = computeContextBudget({
-      contextLimit: usage.limit,
+      contextLimit,
       maxOutputTokens: compactionConfig.maxTokens,
       reserveTokens: compactionConfig.reserveTokens,
       thresholdRatio: compactionConfig.thresholdRatio,
     });
 
-    return getContextPressureLevel(usage.used, budget);
-  };
-
-  const getUsageNumber = (
-    usage: Record<string, unknown>,
-    ...keys: string[]
-  ): number | undefined => {
-    for (const key of keys) {
-      const value = usage[key];
-      if (typeof value === "number" && Number.isFinite(value)) {
-        return value;
-      }
-    }
-
-    return undefined;
-  };
-
-  const normalizeUsageMeasurement = (
-    usage: UsageMeasurement | null | undefined
-  ): UsageMeasurement | null => {
-    if (!usage) {
-      return null;
-    }
-
-    const usageRecord = usage as Record<string, unknown>;
-    const inputTokens = getUsageNumber(
-      usageRecord,
-      "inputTokens",
-      "promptTokens"
+    return getConfiguredContextPressureLevel(
+      usage.used,
+      budget,
+      contextPressureThresholds
     );
-    const outputTokens = getUsageNumber(
-      usageRecord,
-      "outputTokens",
-      "completionTokens"
-    );
-    const totalTokens = getUsageNumber(usageRecord, "totalTokens");
-
-    if (
-      inputTokens === undefined &&
-      outputTokens === undefined &&
-      totalTokens === undefined
-    ) {
-      return null;
-    }
-
-    return {
-      inputTokens,
-      outputTokens,
-      totalTokens,
-    };
   };
 
   const createStatusSpinner = (message: string): StatusSpinner => {
@@ -954,6 +979,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     streamInterruptRequested = true;
+    addSystemMessage(chatContainer, "⚡ Interrupted");
     activeStreamController.abort("User requested stream interruption");
     return true;
   };
@@ -1507,7 +1533,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     compactionOrchestrator.discardAll();
-    config.messageHistory.clear();
+    config.messageHistory.reset?.() ?? config.messageHistory.clear();
     chatContainer.clear();
     addNewSessionMessage(chatContainer);
     await config.onCommandAction?.(commandResult.action);
@@ -1609,7 +1635,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   const processUserInputMessage = async (trimmed: string): Promise<void> => {
     let contentForModel = trimmed;
-    let originalContent: string | undefined;
 
     if (config.preprocessUserInput) {
       addUserMessage(chatContainer, markdownTheme, trimmed);
@@ -1621,18 +1646,17 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       });
 
       if (result) {
-        contentForModel = result.contentForModel;
-        originalContent = result.originalContent;
+        if (result.success) {
+          contentForModel = result.message;
 
-        if (result.translatedDisplay) {
-          addTranslatedMessage(
-            chatContainer,
-            markdownTheme,
-            result.translatedDisplay
-          );
-        }
-
-        if (result.error) {
+          if (result.translatedDisplay) {
+            addTranslatedMessage(
+              chatContainer,
+              markdownTheme,
+              result.translatedDisplay
+            );
+          }
+        } else {
           addSystemMessage(chatContainer, result.error);
         }
       }
@@ -1641,7 +1665,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     await blockOnlyIfAtHardContextLimit(contentForModel);
-    config.messageHistory.addUserMessage(contentForModel, originalContent);
+    config.messageHistory.addUserMessage(contentForModel);
     compactionOrchestrator.notifyNewUserTurn();
     tui.requestRender();
     const responseState = await processAgentResponse();
@@ -1653,6 +1677,8 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const processInput = async (input: string): Promise<boolean> => {
     const trimmed = input.trim();
     if (trimmed.length === 0) {
+      addSystemMessage(chatContainer, "메시지를 입력해주세요");
+      tui.requestRender();
       return true;
     }
 

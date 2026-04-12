@@ -2,7 +2,11 @@ import { appendFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { encodeSessionId, SessionStore } from "./session-store";
+import {
+  decodeSessionId,
+  encodeSessionId,
+  SessionStore,
+} from "./session-store";
 
 describe("SessionStore", () => {
   let tmpDir: string;
@@ -187,6 +191,19 @@ describe("SessionStore", () => {
     expect(encodeSessionId("a:b")).toBe("a_003ab");
     expect(encodeSessionId("foo/bar")).toBe("foo_002fbar");
     expect(encodeSessionId("a.b.c")).toBe("a_002eb_002ec");
+  });
+
+  it("encodeSessionId/decodeSessionId round-trips", () => {
+    const cases = [
+      "user@example.com",
+      "session/123",
+      "a:b:c",
+      "normal-id",
+      "space here",
+    ];
+    for (const id of cases) {
+      expect(decodeSessionId(encodeSessionId(id))).toBe(id);
+    }
   });
 
   it("encodeSessionId rejects empty string", () => {

@@ -1,48 +1,53 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgent } from "./agent";
+import { AgentError, AgentErrorCode } from "./errors";
 import { clearMCPCache } from "./mcp-init";
 import type { AgentConfig } from "./types";
 
-const { resolveMCPOptionMock, streamTextMock } = vi.hoisted(() => {
-  const mock = vi.fn(() => {
-    const fullStream: AsyncIterable<{ finishReason: string; type: string }> = {
-      [Symbol.asyncIterator]() {
-        let done = false;
-        return {
-          next: () => {
-            if (done) {
-              return Promise.resolve({ done: true, value: undefined });
-            }
-            done = true;
-            return Promise.resolve({
-              done: false,
-              value: { type: "finish-step", finishReason: "stop" },
-            });
+const { streamTextMock, resolveMCPOptionMock, stepCountIsMock } = vi.hoisted(
+  () => {
+    const streamTextMock = vi.fn(() => {
+      const fullStream: AsyncIterable<{ finishReason: string; type: string }> =
+        {
+          [Symbol.asyncIterator]() {
+            let done = false;
+            return {
+              next: () => {
+                if (done) {
+                  return Promise.resolve({ done: true, value: undefined });
+                }
+                done = true;
+                return Promise.resolve({
+                  done: false,
+                  value: { type: "finish-step", finishReason: "stop" },
+                });
+              },
+            };
           },
         };
-      },
-    };
-    return {
-      finishReason: Promise.resolve("stop"),
-      fullStream,
-      response: Promise.resolve({ messages: [] }),
-      totalUsage: Promise.resolve(undefined),
-      usage: Promise.resolve(undefined),
-    };
-  });
+      return {
+        finishReason: Promise.resolve("stop"),
+        fullStream,
+        response: Promise.resolve({ messages: [] }),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
+      };
+    });
 
-  return {
-    resolveMCPOptionMock: vi.fn().mockResolvedValue({
+    const resolveMCPOptionMock = vi.fn().mockResolvedValue({
       close: vi.fn().mockResolvedValue(undefined),
       tools: { mcp_tool: {} },
-    }),
-    streamTextMock: mock,
-  };
-});
+    });
+
+    const stepCountIsMock = vi.fn(() => undefined);
+
+    return { streamTextMock, resolveMCPOptionMock, stepCountIsMock };
+  }
+);
 
 vi.mock("ai", () => {
   return {
-    stepCountIs: vi.fn(() => undefined),
+    stepCountIs: stepCountIsMock,
     streamText: streamTextMock,
   };
 });
@@ -56,11 +61,35 @@ function createMockModel(): AgentConfig["model"] {
   return {} as AgentConfig["model"];
 }
 
+function getLastStreamTextCall() {
+  const calls = streamTextMock.mock.calls as unknown as Array<
+    Array<{ stopWhen?: unknown }>
+  >;
+  if (calls.length === 0) {
+    throw new Error("Expected streamText to be called");
+  }
+  const lastCall = calls.at(-1);
+  return lastCall ? lastCall[0] : undefined;
+}
+
+function getStopWhen() {
+  const lastCall = getLastStreamTextCall();
+  if (!lastCall) {
+    throw new Error("Expected streamText call arguments");
+  }
+  const stopWhen = lastCall.stopWhen;
+  if (!stopWhen) {
+    throw new Error("Expected stopWhen to be defined");
+  }
+  return stopWhen;
+}
+
 describe("createAgent", () => {
   beforeEach(() => {
     clearMCPCache();
     resolveMCPOptionMock.mockClear();
     streamTextMock.mockClear();
+    stepCountIsMock.mockClear();
   });
 
   it("returns an agent with config, stream method, and close method", async () => {
@@ -93,6 +122,132 @@ describe("createAgent", () => {
     const agent = await createAgent({ model: createMockModel() });
 
     expect(agent.config.maxStepsPerTurn).toBeUndefined();
+  });
+
+  it("uses text-response stop condition when maxStepsPerTurn is omitted and guardrails are not set", async () => {
+    const agent = await createAgent({ model: createMockModel() });
+
+    agent.stream({ messages: [] });
+
+    expect(stepCountIsMock).not.toHaveBeenCalled();
+    expect(streamTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stopWhen: expect.any(Array),
+      })
+    );
+
+    const stopWhen = getStopWhen();
+    expect(stopWhen).toHaveLength(1);
+    expect(
+      stopWhen[0]({
+        steps: [
+          { toolCalls: [{ input: { city: "Seoul" }, toolName: "weather" }] },
+        ],
+      })
+    ).toBe(false);
+    expect(
+      stopWhen[0]({
+        steps: [{ toolCalls: [] }],
+      })
+    ).toBe(true);
+  });
+
+  it("throws MAX_TOOL_CALLS when unlimited-mode guardrail is exceeded", async () => {
+    const agent = await createAgent({
+      guardrails: { maxToolCallsPerTurn: 2 },
+      model: createMockModel(),
+    });
+
+    agent.stream({ messages: [] });
+
+    const stopWhen = getStopWhen();
+
+    expect(() =>
+      stopWhen[0]({
+        steps: [
+          { toolCalls: [{ input: { q: 1 }, toolName: "search" }] },
+          { toolCalls: [{ input: { q: 2 }, toolName: "search" }] },
+        ],
+      })
+    ).toThrowError(
+      expect.objectContaining({
+        code: AgentErrorCode.MAX_TOOL_CALLS,
+        message: "Exceeded maxToolCallsPerTurn (2)",
+      })
+    );
+  });
+
+  it("throws REPEATED_TOOL_CALL when same tool and args repeat in a row", async () => {
+    const agent = await createAgent({
+      guardrails: { repeatedToolCallThreshold: 3 },
+      model: createMockModel(),
+    });
+
+    agent.stream({ messages: [] });
+
+    const stopWhen = getStopWhen();
+
+    expect(() =>
+      stopWhen[0]({
+        steps: [
+          { toolCalls: [{ input: { query: "pizza" }, toolName: "search" }] },
+          { toolCalls: [{ input: { query: "pizza" }, toolName: "search" }] },
+          { toolCalls: [{ input: { query: "pizza" }, toolName: "search" }] },
+        ],
+      })
+    ).toThrowError(AgentError);
+
+    try {
+      stopWhen[0]({
+        steps: [
+          { toolCalls: [{ input: { query: "pizza" }, toolName: "search" }] },
+          { toolCalls: [{ input: { query: "pizza" }, toolName: "search" }] },
+          { toolCalls: [{ input: { query: "pizza" }, toolName: "search" }] },
+        ],
+      });
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: AgentErrorCode.REPEATED_TOOL_CALL,
+        message: "Detected repeated tool call 3 times in a row: search",
+      });
+    }
+  });
+
+  it("completes normally when tool calls are followed by text response", async () => {
+    const agent = await createAgent({
+      guardrails: { maxToolCallsPerTurn: 5, repeatedToolCallThreshold: 3 },
+      model: createMockModel(),
+    });
+
+    agent.stream({ messages: [] });
+
+    const stopWhen = getStopWhen();
+
+    expect(
+      stopWhen[0]({
+        steps: [
+          { toolCalls: [{ input: { query: "pizza" }, toolName: "search" }] },
+          { toolCalls: [] },
+        ],
+      })
+    ).toBe(true);
+  });
+
+  it("does not apply guardrails when maxStepsPerTurn is explicitly set", async () => {
+    const agent = await createAgent({
+      guardrails: { maxToolCallsPerTurn: 1, repeatedToolCallThreshold: 1 },
+      maxStepsPerTurn: 4,
+      model: createMockModel(),
+    });
+
+    agent.stream({ messages: [] });
+
+    expect(stepCountIsMock).toHaveBeenCalledWith(4);
+    expect(streamTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stopWhen: undefined,
+      })
+    );
   });
 
   it("passes temperature and seed through to streamText", async () => {

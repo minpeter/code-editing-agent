@@ -1,22 +1,21 @@
 import type {
   CheckpointHistory,
-  CheckpointMessage,
   CompactionAppliedDetail,
-  CompactionCircuitBreaker,
   CompactionOrchestratorCallbacks,
   ModelMessage,
-  RunnableAgent,
 } from "@ai-sdk-tool/harness";
 import {
+  AgentErrorCode,
   CompactionOrchestrator,
   harnessEnv,
   isContextOverflowError,
+  normalizeUsageMeasurement,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
 import { emitEvent as defaultEmitEvent } from "./emit";
 import { processStream } from "./stream-processor";
 import { TrajectoryCollector } from "./trajectory-collector";
-import type { TrajectoryEvent } from "./types";
+import type { HeadlessRunnerConfig, TrajectoryEvent } from "./types";
 
 export interface InitialUserMessage {
   content: string;
@@ -34,13 +33,26 @@ type MaxOutputAwareMessageHistory = HeadlessMessageHistory & {
   getRecommendedMaxOutputTokens: CheckpointHistory["getRecommendedMaxOutputTokens"];
 };
 
-interface UsageMeasurement {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-}
-
 type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
+
+interface HeadlessCompactionController {
+  applyReady(history: HeadlessMessageHistory): {
+    applied: boolean;
+    stale?: boolean;
+  };
+  blockAtHardLimit(
+    history: HeadlessMessageHistory,
+    additionalTokens: number,
+    phase: "new-turn" | "intermediate-step"
+  ): Promise<boolean>;
+  blockIfNeeded(
+    history: HeadlessMessageHistory,
+    content: string
+  ): Promise<boolean>;
+  checkAndCompact(): Promise<boolean>;
+  notifyNewUserTurn(): void;
+  startSpeculative(history: HeadlessMessageHistory): void;
+}
 
 const MAX_NO_OUTPUT_RETRIES = 3;
 
@@ -52,55 +64,6 @@ function isNoOutputGeneratedError(error: unknown): boolean {
   return (
     error instanceof Error && error.message.includes("No output generated")
   );
-}
-
-function getUsageNumber(
-  usage: Record<string, unknown>,
-  ...keys: string[]
-): number | undefined {
-  for (const key of keys) {
-    const value = usage[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function normalizeUsageMeasurement(
-  usage: UsageMeasurement | null | undefined
-): UsageMeasurement | null {
-  if (!usage) {
-    return null;
-  }
-
-  const usageRecord = usage as Record<string, unknown>;
-  const inputTokens = getUsageNumber(
-    usageRecord,
-    "inputTokens",
-    "promptTokens"
-  );
-  const outputTokens = getUsageNumber(
-    usageRecord,
-    "outputTokens",
-    "completionTokens"
-  );
-  const totalTokens = getUsageNumber(usageRecord, "totalTokens");
-
-  if (
-    inputTokens === undefined &&
-    outputTokens === undefined &&
-    totalTokens === undefined
-  ) {
-    return null;
-  }
-
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens,
-  };
 }
 
 function hasUsageTracking(
@@ -195,25 +158,61 @@ function createEmitAndCollect(
   };
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Aborted by caller";
+}
+
+function isStreamTimeoutError(
+  error: unknown,
+  streamTimeoutMs: number
+): boolean {
+  return (
+    error instanceof Error &&
+    error.message === `Stream response timeout after ${streamTimeoutMs}ms`
+  );
+}
+
+function createNoopCompactionController(): HeadlessCompactionController {
+  return {
+    applyReady: () => ({ applied: false, stale: false }),
+    blockAtHardLimit() {
+      return Promise.resolve(false);
+    },
+    blockIfNeeded() {
+      return Promise.resolve(false);
+    },
+    checkAndCompact() {
+      return Promise.resolve(false);
+    },
+    notifyNewUserTurn() {
+      return;
+    },
+    startSpeculative() {
+      return;
+    },
+  };
+}
+
 async function runTodoReminderLoop(params: {
   emitAndCollect: (event: TrajectoryEvent) => void;
   enqueueUserMessage: (message: { content: string }) => Promise<void>;
+  maxTodoReminders: number;
   onTodoReminder: () => Promise<{
     hasReminder: boolean;
     message: string | null;
   }>;
   processAgentResponse: () => Promise<ProcessAgentResponseResult>;
 }): Promise<void> {
-  const MAX_TODO_REMINDER_ITERATIONS = 20;
   let todoReminderCount = 0;
 
   while (true) {
     todoReminderCount += 1;
-    if (todoReminderCount > MAX_TODO_REMINDER_ITERATIONS) {
+    if (todoReminderCount > params.maxTodoReminders) {
       params.emitAndCollect({
         timestamp: new Date().toISOString(),
         type: "error",
-        error: `Todo continuation safety cap reached (${MAX_TODO_REMINDER_ITERATIONS} reminders).`,
+        code: AgentErrorCode.MAX_ITERATIONS,
+        error: `Todo continuation safety cap reached (${params.maxTodoReminders} reminders).`,
       });
       break;
     }
@@ -236,31 +235,6 @@ async function runTodoReminderLoop(params: {
   }
 }
 
-export interface HeadlessRunnerConfig {
-  agent: RunnableAgent;
-  atifOutputPath?: string;
-  circuitBreaker?: CompactionCircuitBreaker;
-  compactionCallbacks?: CompactionOrchestratorCallbacks;
-  emitEvent?: (event: TrajectoryEvent) => void;
-  initialUserMessage?: InitialUserMessage;
-  maxIterations?: number;
-  measureUsage?: (messages: ModelMessage[]) => Promise<UsageMeasurement | null>;
-  messageHistory: HeadlessMessageHistory;
-  modelId: string;
-  onTodoReminder?: () => Promise<{
-    hasReminder: boolean;
-    message: string | null;
-  }>;
-  onTurnComplete?: (
-    messages: CheckpointMessage[],
-    usage?: {
-      inputTokens?: number;
-      outputTokens?: number;
-    }
-  ) => Promise<void> | void;
-  sessionId: string;
-}
-
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const emitEventSink = config.emitEvent ?? defaultEmitEvent;
   const trajectoryCollector = config.atifOutputPath
@@ -280,9 +254,11 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         );
       }
     : undefined;
+  const streamTimeoutMs = config.streamTimeoutMs ?? 30_000;
+  const maxTodoReminders = config.maxTodoReminders ?? 20;
   let totalIterationCount = 0;
   type StreamTurnResult = Awaited<ReturnType<typeof processStream>>;
-  type StreamUsage = StreamTurnResult["usage"];
+  type StreamUsage = StreamTurnResult["usage"] | undefined;
   const measureUsageIfAvailable = async (
     messages: ModelMessage[]
   ): Promise<boolean> => {
@@ -382,7 +358,11 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         tokensBefore: config.messageHistory.getContextUsage().used,
       });
     },
-    onCompactionComplete: (result) => {
+    onCompactionComplete: (
+      result: Parameters<
+        NonNullable<CompactionOrchestratorCallbacks["onCompactionComplete"]>
+      >[0]
+    ) => {
       emitMetric?.({
         event: "compaction_complete",
         turn: turnNumber,
@@ -409,7 +389,11 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
         error: String(error),
       });
     },
-    onBlockingChange: (event) => {
+    onBlockingChange: (
+      event: Parameters<
+        NonNullable<CompactionOrchestratorCallbacks["onBlockingChange"]>
+      >[0]
+    ) => {
       let durationMs: number | undefined;
       if (!event.blocking && blockingStartTime != null) {
         durationMs = Date.now() - blockingStartTime;
@@ -456,45 +440,46 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       });
     },
   };
-  const compactionOrchestrator = new CompactionOrchestrator(
-    config.messageHistory,
-    {
-      circuitBreaker: config.circuitBreaker,
-      callbacks: {
-        ...baseCompactionCallbacks,
-        ...metricsCompactionCallbacks,
-        onBlockingChange: (event) => {
-          metricsCompactionCallbacks.onBlockingChange?.(event);
-          userCompactionCallbacks?.onBlockingChange?.(event);
-        },
-        onCompactionComplete: (result) => {
-          metricsCompactionCallbacks.onCompactionComplete?.(result);
-          userCompactionCallbacks?.onCompactionComplete?.(result);
-        },
-        onCompactionError: (error) => {
-          metricsCompactionCallbacks.onCompactionError?.(error);
-          userCompactionCallbacks?.onCompactionError?.(error);
-        },
-        onCompactionStart: () => {
-          metricsCompactionCallbacks.onCompactionStart?.();
-          userCompactionCallbacks?.onCompactionStart?.();
-        },
-        onJobStatus: (id, message, state) => {
-          metricsCompactionCallbacks.onJobStatus?.(id, message, state);
-          userCompactionCallbacks?.onJobStatus?.(id, message, state);
-        },
-        onSpeculativeReady: () => {
-          const result = compactionOrchestrator.applyReady(
-            config.messageHistory
-          );
-          if (result.applied) {
-            measureUsageAfterCompaction().catch(Boolean);
-          }
-          userCompactionCallbacks?.onSpeculativeReady?.();
-        },
-      },
-    }
-  );
+  const compactionOrchestrator = config.disableCompaction
+    ? createNoopCompactionController()
+    : ((() => {
+        const orchestrator = new CompactionOrchestrator(config.messageHistory, {
+          circuitBreaker: config.circuitBreaker,
+          callbacks: {
+            ...baseCompactionCallbacks,
+            ...metricsCompactionCallbacks,
+            onBlockingChange: (event) => {
+              metricsCompactionCallbacks.onBlockingChange?.(event);
+              userCompactionCallbacks?.onBlockingChange?.(event);
+            },
+            onCompactionComplete: (result) => {
+              metricsCompactionCallbacks.onCompactionComplete?.(result);
+              userCompactionCallbacks?.onCompactionComplete?.(result);
+            },
+            onCompactionError: (error) => {
+              metricsCompactionCallbacks.onCompactionError?.(error);
+              userCompactionCallbacks?.onCompactionError?.(error);
+            },
+            onCompactionStart: () => {
+              metricsCompactionCallbacks.onCompactionStart?.();
+              userCompactionCallbacks?.onCompactionStart?.();
+            },
+            onJobStatus: (id, message, state) => {
+              metricsCompactionCallbacks.onJobStatus?.(id, message, state);
+              userCompactionCallbacks?.onJobStatus?.(id, message, state);
+            },
+            onSpeculativeReady: () => {
+              const result = orchestrator.applyReady(config.messageHistory);
+              if (result.applied) {
+                measureUsageAfterCompaction().catch(Boolean);
+              }
+              userCompactionCallbacks?.onSpeculativeReady?.();
+            },
+          },
+        });
+
+        return orchestrator;
+      })() satisfies HeadlessCompactionController);
 
   let stepId = 0;
 
@@ -511,6 +496,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     emitAndCollect({
       timestamp: new Date().toISOString(),
       type: "error",
+      code: AgentErrorCode.MAX_ITERATIONS,
       error: `Max iterations (${config.maxIterations}) reached`,
     });
     return true;
@@ -602,13 +588,56 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       streamMessages: ModelMessage[],
       streamMaxOutputTokens: number | undefined
     ) => {
-      try {
-        const stream = await config.agent.stream({
-          messages: streamMessages,
-          ...(streamMaxOutputTokens !== undefined
-            ? { maxOutputTokens: streamMaxOutputTokens }
-            : {}),
+      if (config.abortSignal?.aborted) {
+        emitAndCollect({
+          timestamp: new Date().toISOString(),
+          type: "error",
+          code: AgentErrorCode.TIMEOUT,
+          error: "Aborted by caller",
         });
+        return {
+          pendingMessages,
+          shouldContinue: false,
+          usage: undefined,
+        };
+      }
+
+      try {
+        const streamPromise = Promise.resolve(
+          config.agent.stream({
+            messages: streamMessages,
+            ...(streamMaxOutputTokens !== undefined
+              ? { maxOutputTokens: streamMaxOutputTokens }
+              : {}),
+            ...(config.abortSignal ? { abortSignal: config.abortSignal } : {}),
+          })
+        );
+        let raceTimeoutId: ReturnType<typeof setTimeout> | undefined;
+        const stream = await Promise.race([
+          streamPromise.finally(() => {
+            if (raceTimeoutId !== undefined) {
+              clearTimeout(raceTimeoutId);
+            }
+          }),
+          new Promise<never>((_, reject) => {
+            raceTimeoutId = setTimeout(() => {
+              reject(
+                new Error(`Stream response timeout after ${streamTimeoutMs}ms`)
+              );
+            }, streamTimeoutMs);
+
+            config.abortSignal?.addEventListener(
+              "abort",
+              () => {
+                if (raceTimeoutId !== undefined) {
+                  clearTimeout(raceTimeoutId);
+                }
+                reject(new Error("Aborted by caller"));
+              },
+              { once: true }
+            );
+          }),
+        ]);
         const nextStepId = stepId + 1;
         const processStreamResult = await processStream({
           emitEvent: emitAndCollect,
@@ -627,7 +656,36 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           usage: processStreamResult.usage,
         };
       } catch (error) {
-        if (!overflowRetried && isContextOverflowError(error)) {
+        if (isAbortError(error)) {
+          emitAndCollect({
+            timestamp: new Date().toISOString(),
+            type: "error",
+            code: AgentErrorCode.TIMEOUT,
+            error: "Aborted by caller",
+          });
+          return {
+            pendingMessages,
+            shouldContinue: false,
+            usage: undefined,
+          };
+        }
+
+        if (isStreamTimeoutError(error, streamTimeoutMs)) {
+          const timeoutError = error as Error;
+          emitAndCollect({
+            timestamp: new Date().toISOString(),
+            type: "error",
+            code: AgentErrorCode.TIMEOUT,
+            error: timeoutError.message,
+          });
+          return {
+            pendingMessages,
+            shouldContinue: false,
+            usage: undefined,
+          };
+        }
+
+        if (!overflowRetried && isContextOverflowError(error).detected) {
           overflowRetried = true;
           await blockAtHardContextLimit(0, phase);
           const retryMessages = await getMessagesForLLM(config.messageHistory);
@@ -779,6 +837,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     await runTodoReminderLoop({
       emitAndCollect,
       enqueueUserMessage,
+      maxTodoReminders,
       onTodoReminder: config.onTodoReminder,
       processAgentResponse,
     });

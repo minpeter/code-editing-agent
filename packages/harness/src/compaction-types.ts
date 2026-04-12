@@ -233,7 +233,12 @@ export interface PruningConfig {
 
 // --- Continuation ---
 
-export type ContinuationVariant = "manual" | "auto-with-replay" | "tool-loop";
+export type ContinuationVariant =
+  | "manual"
+  | "auto"
+  | "auto-with-replay"
+  | "tool-loop"
+  | "overflow";
 
 // --- Compaction Results ---
 

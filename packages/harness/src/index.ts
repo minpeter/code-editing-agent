@@ -81,6 +81,7 @@ export {
   DEFAULT_COMPACTION_USER_PROMPT,
 } from "./compaction-prompts";
 export type * from "./compaction-types";
+export type { CheckpointMessage } from "./compaction-types";
 export {
   DEFAULT_MIN_SAVINGS_RATIO,
   INEFFECTIVE_COMPACTION_REASON,
@@ -99,6 +100,7 @@ export { formatContextUsage, formatTokens } from "./context-usage-format";
 export type { ContinuationMessageData } from "./continuation";
 export { createContinuationMessage, getContinuationText } from "./continuation";
 export { env as harnessEnv } from "./env";
+export { AgentError, AgentErrorCode } from "./errors";
 export { runAgentLoop } from "./loop";
 export { isRemoteConfig, isStdioConfig, loadMCPConfig } from "./mcp-config";
 // MCP integration
@@ -114,6 +116,7 @@ export type {
   MCPStdioServerConfig,
   MCPToolMergeResult,
 } from "./mcp-types";
+export { MCPLoader } from "./mcp-types";
 export { CHAT_MEMORY_PRESET, CODE_MEMORY_PRESET } from "./memory-presets";
 export type { MemoryStore } from "./memory-store";
 export { FileMemoryStore, InMemoryStore } from "./memory-store";
@@ -128,8 +131,6 @@ export type {
   MicroCompactResult,
 } from "./micro-compact";
 export { microCompactMessages } from "./micro-compact";
-export type { MiddlewareConfig } from "./middleware";
-export { buildMiddlewareChain } from "./middleware";
 export {
   isContextOverflowError,
   isUsageSilentOverflow,
@@ -141,11 +142,25 @@ export type {
   RestorationItem,
 } from "./post-compact-restoration";
 export { PostCompactRestorer } from "./post-compact-restoration";
+export type {
+  MemoryAgentConfig,
+  PlatformAgentConfig,
+  SessionAgentConfig,
+} from "./presets";
+export {
+  createMemoryAgent,
+  createPlatformAgent,
+  createSessionAgent,
+} from "./presets";
 export { SessionManager } from "./session";
 export type { MemoryFact, SessionMemoryConfig } from "./session-memory";
 export { SessionMemoryTracker } from "./session-memory";
 export type { SessionData } from "./session-store";
-export { encodeSessionId, SessionStore } from "./session-store";
+export {
+  decodeSessionId,
+  encodeSessionId,
+  SessionStore,
+} from "./session-store";
 export {
   PROMPTS_COMMAND_PREFIX,
   parsePromptsCommandName,
@@ -171,5 +186,20 @@ export type {
   PruneResult,
   PruningConfig,
 } from "./tool-pruning";
-export { progressivePrune, pruneToolOutputs } from "./tool-pruning";
+export {
+  createChatbotPruningConfig,
+  createDefaultPruningConfig,
+  progressivePrune,
+  pruneToolOutputs,
+} from "./tool-pruning";
+export type { ToolDefinition, ToolSource } from "./tool-source";
 export type * from "./types";
+export type {
+  AgentConfig,
+  AgentGuardrails,
+  AgentStreamOptions,
+  AgentStreamResult,
+  RunnableAgent,
+} from "./types";
+export type { UsageMeasurement } from "./usage";
+export { normalizeUsageMeasurement } from "./usage";

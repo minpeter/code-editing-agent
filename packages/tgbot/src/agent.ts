@@ -3,10 +3,12 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   CheckpointHistory,
   createAgent,
+  createDefaultPruningConfig,
   createModelSummarizer,
   getLastMessageText,
   type RunAgentLoopResult,
   runAgentLoop,
+  SessionMemoryTracker,
   SessionStore,
 } from "@ai-sdk-tool/harness";
 import { env } from "./env";
@@ -20,17 +22,37 @@ const provider = createOpenAICompatible({
 const model = provider.chatModel(env.AI_MODEL_ID);
 
 const summarize = createModelSummarizer(model);
+const threadTrackers = new Map<string, SessionMemoryTracker>();
+
+function getTracker(threadId: string): SessionMemoryTracker {
+  let t = threadTrackers.get(threadId);
+  if (!t) {
+    t = new SessionMemoryTracker();
+    threadTrackers.set(threadId, t);
+  }
+  return t;
+}
 
 mkdirSync(env.SESSION_DIR, { recursive: true });
 const sessionStore = new SessionStore(env.SESSION_DIR);
 
-const compactionOptions = {
-  compaction: {
-    enabled: true,
-    speculativeStartRatio: 0.8,
-    summarizeFn: summarize,
-  },
-} as const;
+function buildCompactionOptions(threadId: string) {
+  const t = getTracker(threadId);
+  return {
+    compaction: {
+      enabled: true,
+      contextLimit: 100_000,
+      keepRecentTokens: 30_000,
+      reserveTokens: 20_000,
+      maxTokens: 50_000,
+      thresholdRatio: 0.65,
+      speculativeStartRatio: 0.8,
+      getStructuredState: t.getStructuredState.bind(t),
+      summarizeFn: summarize,
+    },
+    pruning: createDefaultPruningConfig(),
+  } as const;
+}
 
 const agent = await createAgent({
   model,
@@ -65,6 +87,7 @@ function evictOldest(): void {
   const oldest = chatHistories.keys().next().value;
   if (oldest !== undefined) {
     chatHistories.delete(oldest);
+    threadTrackers.delete(oldest);
   }
 }
 
@@ -78,7 +101,7 @@ function getHistory(threadId: string): Promise<CheckpointHistory> {
   promise = CheckpointHistory.fromSession(
     sessionStore,
     threadId,
-    compactionOptions
+    buildCompactionOptions(threadId)
   );
   promise.catch(() => {
     if (chatHistories.get(threadId) === promise) {
@@ -95,6 +118,7 @@ export async function recordMessage(
   userText: string
 ): Promise<void> {
   const history = await getHistory(threadId);
+  getTracker(threadId).extractFactsFromUserMessage(userText);
   history.addUserMessage(userText);
 }
 
@@ -133,6 +157,7 @@ export async function handleMessage(threadId: string): Promise<string> {
 
 export function clearHistory(threadId: string): void {
   chatHistories.delete(threadId);
+  threadTrackers.delete(threadId);
   sessionStore.deleteSession(threadId).catch((error) => {
     console.warn("[tgbot] Failed to delete session:", threadId, error);
   });

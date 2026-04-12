@@ -8,17 +8,17 @@ describe("isContextOverflowError", () => {
   describe("Anthropic patterns", () => {
     it("detects 'prompt is too long'", () => {
       const error = new Error("prompt is too long");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'context_length_exceeded'", () => {
       const error = new Error("context_length_exceeded");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'too many tokens'", () => {
       const error = new Error("too many tokens in request");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
   });
 
@@ -27,106 +27,106 @@ describe("isContextOverflowError", () => {
       const error = new Error(
         "This model's maximum context length is 128000 tokens"
       );
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'context length exceeded'", () => {
       const error = new Error("Request context length exceeded maximum");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'token limit exceeded'", () => {
       const error = new Error("token limit exceeded");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'tokens exceeds the context window'", () => {
       const error = new Error("tokens exceeds the context window");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
   });
 
   describe("Google / Gemini patterns", () => {
     it("detects 'exceeds the context window'", () => {
       const error = new Error("Request exceeds the context window limit");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'context window'", () => {
       const error = new Error("Prompt exceeds maximum context window size");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'input too long'", () => {
       const error = new Error("input too long");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
   });
 
   describe("Generic / shared patterns", () => {
     it("detects 'input is too long'", () => {
       const error = new Error("input is too long");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects 'token limit'", () => {
       const error = new Error("token limit reached");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
   });
 
   describe("Case insensitivity", () => {
     it("detects patterns with mixed case", () => {
       const error = new Error("PROMPT IS TOO LONG");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
 
     it("detects patterns with partial case mismatch", () => {
       const error = new Error("Context_Length_Exceeded");
-      expect(isContextOverflowError(error)).toBe(true);
+      expect(isContextOverflowError(error).detected).toBe(true);
     });
   });
 
   describe("False negatives (non-overflow errors)", () => {
     it("returns false for unrelated errors", () => {
       const error = new Error("Model not found");
-      expect(isContextOverflowError(error)).toBe(false);
+      expect(isContextOverflowError(error).detected).toBe(false);
     });
 
     it("returns false for network errors", () => {
       const error = new Error("Connection timeout");
-      expect(isContextOverflowError(error)).toBe(false);
+      expect(isContextOverflowError(error).detected).toBe(false);
     });
 
     it("returns false for authentication errors", () => {
       const error = new Error("Invalid API key");
-      expect(isContextOverflowError(error)).toBe(false);
+      expect(isContextOverflowError(error).detected).toBe(false);
     });
 
     it("returns false for rate limit errors", () => {
       const error = new Error("Rate limit exceeded");
-      expect(isContextOverflowError(error)).toBe(false);
+      expect(isContextOverflowError(error).detected).toBe(false);
     });
 
     it("returns false for generic parsing errors", () => {
       const error = new Error("Failed to parse response");
-      expect(isContextOverflowError(error)).toBe(false);
+      expect(isContextOverflowError(error).detected).toBe(false);
     });
   });
 
   describe("Type safety", () => {
     it("returns false for non-Error objects", () => {
-      expect(isContextOverflowError(null)).toBe(false);
-      expect(isContextOverflowError(undefined)).toBe(false);
-      expect(isContextOverflowError("prompt is too long")).toBe(false);
-      expect(isContextOverflowError({ message: "prompt is too long" })).toBe(
-        false
-      );
+      expect(isContextOverflowError(null).detected).toBe(false);
+      expect(isContextOverflowError(undefined).detected).toBe(false);
+      expect(isContextOverflowError("prompt is too long").detected).toBe(false);
+      expect(
+        isContextOverflowError({ message: "prompt is too long" }).detected
+      ).toBe(false);
     });
 
     it("returns false for objects without message", () => {
       const error = new Error("unknown error");
-      expect(isContextOverflowError(error)).toBe(false);
+      expect(isContextOverflowError(error).detected).toBe(false);
     });
   });
 });

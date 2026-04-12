@@ -33,6 +33,10 @@ export class MCPManager {
     this.options = options;
   }
 
+  get isInitialized(): boolean {
+    return this.initialized;
+  }
+
   init(): Promise<void> {
     if (this.initialized) {
       return Promise.resolve();
@@ -201,7 +205,9 @@ export class MCPManager {
 
   tools(): ToolSet {
     if (!this.initialized) {
-      throw new Error("MCPManager not initialized. Call init() first.");
+      throw new Error(
+        "MCPManager not initialized. Did you forget 'await manager.init()'?"
+      );
     }
 
     return this.mergedTools;
