@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runAgentLoop } from "./loop";
+import { AgentError, AgentErrorCode } from "./errors";
 import type { Agent, AgentStreamResult } from "./types";
 
 /**
@@ -88,7 +89,7 @@ describe("runAgentLoop", () => {
     expect(result.finishReason).toBe("stop");
   });
 
-  it("respects maxIterations limit", async () => {
+  it("throws AgentError when maxIterations limit is exceeded", async () => {
     // Agent would loop forever with 'tool-calls'
     const agent = createMockAgent([
       "tool-calls",
@@ -98,13 +99,21 @@ describe("runAgentLoop", () => {
       "tool-calls",
     ]);
 
-    const result = await runAgentLoop({
-      agent,
-      messages: [{ role: "user", content: "Hello" }],
-      maxIterations: 3,
-    });
+    await expect(
+      runAgentLoop({
+        agent,
+        messages: [{ role: "user", content: "Hello" }],
+        maxIterations: 3,
+      })
+    ).rejects.toBeInstanceOf(AgentError);
 
-    expect(result.iterations).toBe(3);
+    await expect(
+      runAgentLoop({
+        agent: createMockAgent(["tool-calls", "tool-calls"]),
+        messages: [{ role: "user", content: "Hello" }],
+        maxIterations: 1,
+      })
+    ).rejects.toMatchObject({ code: AgentErrorCode.MAX_ITERATIONS });
   });
 
   it("default maxIterations is Infinity (loops until stop condition)", async () => {

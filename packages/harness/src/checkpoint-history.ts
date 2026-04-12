@@ -27,6 +27,11 @@ import {
 import { collapseConsecutiveOps } from "./context-collapse";
 import { createContinuationMessage, getContinuationText } from "./continuation";
 import { env } from "./env";
+import {
+  type HistorySnapshot,
+  deserializeMessage,
+  serializeMessage,
+} from "./history-snapshot";
 import { microCompactMessages } from "./micro-compact";
 import type { SessionStore } from "./session-store";
 import {
@@ -426,8 +431,108 @@ export class CheckpointHistory {
     return this.revision;
   }
 
+  snapshot(): HistorySnapshot {
+    const actualUsage = this.getActualUsage();
+
+    return {
+      messages: this.getAll().map(serializeMessage),
+      revision: this.revision,
+      contextLimit: this.contextLimit,
+      systemPromptTokens: this.systemPromptTokens,
+      toolSchemasTokens: this.toolSchemasTokens,
+      compactionState: {
+        summaryMessageId: this.getSummaryMessageId(),
+      },
+      compactionConfig: {
+        enabled: this.compactionConfig.enabled,
+        contextLimit: this.compactionConfig.contextLimit,
+        keepRecentTokens: this.compactionConfig.keepRecentTokens,
+        reserveTokens: this.compactionConfig.reserveTokens,
+        maxTokens: this.compactionConfig.maxTokens,
+        thresholdRatio: this.compactionConfig.thresholdRatio,
+        speculativeStartRatio: this.compactionConfig.speculativeStartRatio,
+      },
+      pruningConfig: {
+        enabled: this.pruningConfig.enabled,
+        eagerPruneToolNames: [...this.pruningConfig.eagerPruneToolNames],
+      },
+      ...(actualUsage
+        ? {
+            actualUsage: {
+              inputTokens: actualUsage.inputTokens,
+              outputTokens: actualUsage.outputTokens,
+              totalTokens: actualUsage.totalTokens,
+            },
+          }
+        : {}),
+    };
+  }
+
   getMessageRevision(): number {
     return this.messageRevision;
+  }
+
+  restoreFromSnapshot(snapshot: HistorySnapshot): void {
+    this.skipPersist = true;
+
+    try {
+      this.messages = [];
+      this.summaryMessageId = null;
+      this.actualUsage = null;
+      this.revision = 0;
+      this.messageRevision = 0;
+
+      if (snapshot.compactionConfig) {
+        this.updateCompaction(snapshot.compactionConfig);
+      }
+
+      if (snapshot.pruningConfig) {
+        this.updatePruning(snapshot.pruningConfig);
+      }
+
+      this.hydrateMessages(
+        snapshot.messages.map((serializedMessage) => {
+          const message = deserializeMessage(serializedMessage);
+
+          return {
+            type: "message" as const,
+            id: message.id,
+            createdAt: message.createdAt,
+            isSummary: message.isSummary,
+            originalContent: message.originalContent,
+            message: message.message,
+          };
+        })
+      );
+
+      this.setContextLimit(snapshot.contextLimit);
+      this.setSystemPromptTokens(snapshot.systemPromptTokens);
+      this.setToolSchemasTokens(snapshot.toolSchemasTokens);
+
+      const summaryMessageId =
+        snapshot.compactionState?.summaryMessageId ?? null;
+      this.summaryMessageId =
+        summaryMessageId &&
+        this.messages.some((message) => message.id === summaryMessageId)
+          ? summaryMessageId
+          : null;
+
+      if (snapshot.actualUsage?.inputTokens !== undefined) {
+        const outputTokens = snapshot.actualUsage.outputTokens ?? 0;
+        this.actualUsage = {
+          inputTokens: snapshot.actualUsage.inputTokens,
+          outputTokens,
+          totalTokens:
+            snapshot.actualUsage.totalTokens ??
+            snapshot.actualUsage.inputTokens + outputTokens,
+          updatedAt: new Date(),
+        };
+      }
+
+      this.revision = snapshot.revision;
+    } finally {
+      this.skipPersist = false;
+    }
   }
 
   clear(): void {

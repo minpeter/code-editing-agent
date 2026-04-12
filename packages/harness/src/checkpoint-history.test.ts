@@ -1376,6 +1376,82 @@ describe("CheckpointHistory", () => {
 });
 
 describe("CheckpointHistory context limit methods", () => {
+  describe("snapshot() and restoreFromSnapshot()", () => {
+    it("round-trips messages through snapshot/restore", () => {
+      const history = new CheckpointHistory({ compaction: { enabled: false } });
+      history.addUserMessage("Hello");
+      history.addModelMessages([{ role: "assistant", content: "Hi!" }]);
+
+      const snap = history.snapshot();
+      const restored = new CheckpointHistory({
+        compaction: { enabled: false },
+      });
+      restored.restoreFromSnapshot(snap);
+
+      expect(restored.getMessagesForLLM()).toEqual(history.getMessagesForLLM());
+    });
+
+    it("round-trips token accounting state", () => {
+      const history = new CheckpointHistory({ compaction: { enabled: false } });
+      history.setContextLimit(50_000);
+      history.setSystemPromptTokens(500);
+      history.setToolSchemasTokens(200);
+
+      const snap = history.snapshot();
+      const restored = new CheckpointHistory({
+        compaction: { enabled: false },
+      });
+      restored.restoreFromSnapshot(snap);
+
+      expect(restored.getContextLimit()).toBe(50_000);
+      expect(restored.getSystemPromptTokens()).toBe(500);
+      expect(restored.getToolSchemasTokens()).toBe(200);
+    });
+
+    it("round-trips compaction state (summaryMessageId)", () => {
+      const history = new CheckpointHistory({ compaction: { enabled: false } });
+      history.addUserMessage("test");
+      const snap = history.snapshot();
+      expect(snap.compactionState?.summaryMessageId).toBeNull();
+
+      const restored = new CheckpointHistory({
+        compaction: { enabled: false },
+      });
+      restored.restoreFromSnapshot(snap);
+      expect(restored.getSummaryMessageId()).toBeNull();
+    });
+
+    it("does not trigger SessionStore persistence during restore", () => {
+      const calls: string[] = [];
+      const mockStore = {
+        appendMessage: () => {
+          calls.push("append");
+          return Promise.resolve();
+        },
+        updateCheckpoint: () => {
+          calls.push("checkpoint");
+          return Promise.resolve();
+        },
+        loadSession: () => Promise.resolve(null),
+        deleteSession: () => Promise.resolve(),
+      };
+
+      const history = new CheckpointHistory({
+        compaction: { enabled: false },
+      });
+      history.addUserMessage("Hello");
+      const snap = history.snapshot();
+
+      const restored = new CheckpointHistory({
+        compaction: { enabled: false },
+        sessionStore: mockStore as unknown as SessionStore,
+      });
+      restored.restoreFromSnapshot(snap);
+
+      expect(calls).toEqual([]);
+    });
+  });
+
   it("setContextLimit / getContextLimit round-trip", () => {
     const h = new CheckpointHistory();
     expect(h.getContextLimit()).toBe(0);

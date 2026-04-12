@@ -4,6 +4,7 @@
  */
 
 import { shouldContinueManualToolLoop } from "./tool-loop-control";
+import { AgentError, AgentErrorCode } from "./errors";
 import type {
   AgentFinishReason,
   LoopContinueContext,
@@ -114,6 +115,13 @@ export async function runAgentLoop(
       // Default: re-throw
       throw error;
     }
+  }
+
+  if (iteration >= maxIterations) {
+    throw new AgentError(
+      AgentErrorCode.MAX_ITERATIONS,
+      `Agent loop exceeded maximum iterations: ${maxIterations}`
+    );
   }
 
   return {
