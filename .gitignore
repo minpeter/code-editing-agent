@@ -14,3 +14,6 @@ __pycache__
 *.tsbuildinfo
 .turbo
 work/
+
+# IDE config (may contain tokens)
+*pencode.json
