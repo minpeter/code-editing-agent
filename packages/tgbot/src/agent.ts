@@ -23,6 +23,7 @@ const model = provider.chatModel(env.AI_MODEL_ID);
 
 const summarize = createModelSummarizer(model);
 const threadTrackers = new Map<string, SessionMemoryTracker>();
+const threadSaveChains = new Map<string, Promise<void>>();
 
 function getTracker(threadId: string): SessionMemoryTracker {
   let t = threadTrackers.get(threadId);
@@ -78,9 +79,46 @@ const agent = await createAgent({
 });
 
 const MAX_CACHED_THREADS = 100;
-const chatHistories = new Map<string, Promise<CheckpointHistory>>();
+const chatHistories = new Map<string, CheckpointHistory>();
 
-function evictOldest(): void {
+function enqueueThreadPersistence(
+  threadId: string,
+  operation: () => Promise<void>
+): Promise<void> {
+  const previous = threadSaveChains.get(threadId) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(operation);
+
+  threadSaveChains.set(threadId, next);
+
+  next.catch((error) => {
+    console.warn("[tgbot] Thread persistence failed:", threadId, error);
+  });
+
+  next.finally(() => {
+    if (threadSaveChains.get(threadId) === next) {
+      threadSaveChains.delete(threadId);
+    }
+  });
+
+  return next;
+}
+
+function queueSnapshotSave(
+  threadId: string,
+  history: CheckpointHistory
+): Promise<void> {
+  return enqueueThreadPersistence(threadId, async () => {
+    await snapshotStore.save(threadId, history.snapshot());
+  });
+}
+
+function queueSnapshotDelete(threadId: string): Promise<void> {
+  return enqueueThreadPersistence(threadId, async () => {
+    await snapshotStore.delete(threadId);
+  });
+}
+
+function evictOldest(): Promise<void> | undefined {
   if (chatHistories.size <= MAX_CACHED_THREADS) {
     return;
   }
@@ -88,32 +126,29 @@ function evictOldest(): void {
   if (oldest !== undefined) {
     chatHistories.delete(oldest);
     threadTrackers.delete(oldest);
-    snapshotStore.delete(oldest).catch((error) => {
-      console.warn("[tgbot] Failed to delete snapshot:", oldest, error);
-    });
+    return queueSnapshotDelete(oldest);
   }
 }
 
-function getHistory(threadId: string): Promise<CheckpointHistory> {
-  let promise = chatHistories.get(threadId);
-  if (promise) {
+async function getHistory(threadId: string): Promise<CheckpointHistory> {
+  const existing = chatHistories.get(threadId);
+  if (existing) {
     chatHistories.delete(threadId);
-    chatHistories.set(threadId, promise);
-    return promise;
+    chatHistories.set(threadId, existing);
+    return existing;
   }
-  promise = CheckpointHistory.fromSnapshot(
+
+  const history = await CheckpointHistory.fromSnapshot(
     snapshotStore,
     threadId,
     buildCompactionOptions(threadId)
   );
-  promise.catch(() => {
-    if (chatHistories.get(threadId) === promise) {
-      chatHistories.delete(threadId);
-    }
+
+  chatHistories.set(threadId, history);
+  evictOldest()?.catch(() => {
+    // handled in enqueueThreadPersistence
   });
-  chatHistories.set(threadId, promise);
-  evictOldest();
-  return promise;
+  return history;
 }
 
 export async function recordMessage(
@@ -123,7 +158,7 @@ export async function recordMessage(
   const history = await getHistory(threadId);
   getTracker(threadId).extractFactsFromUserMessage(userText);
   history.addUserMessage(userText);
-  await snapshotStore.save(threadId, history.snapshot());
+  await queueSnapshotSave(threadId, history);
 }
 
 export async function handleMessage(threadId: string): Promise<string> {
@@ -139,14 +174,12 @@ export async function handleMessage(threadId: string): Promise<string> {
         JSON.stringify(call).substring(0, 300)
       );
     },
-    onStepComplete: (step) => {
+    onStepComplete: async (step) => {
       console.log(
         `[tgbot] Step complete: iteration=${step.iteration}, finishReason=${step.finishReason}, messages=${step.response.messages.length}`
       );
       history.addModelMessages(step.response.messages);
-      snapshotStore.save(threadId, history.snapshot()).catch((error) => {
-        console.warn("[tgbot] Failed to save snapshot:", threadId, error);
-      });
+      await queueSnapshotSave(threadId, history);
     },
     onError: (error) => {
       console.error("[tgbot] Loop error:", error);
@@ -165,8 +198,8 @@ export async function handleMessage(threadId: string): Promise<string> {
 export function clearHistory(threadId: string): void {
   chatHistories.delete(threadId);
   threadTrackers.delete(threadId);
-  snapshotStore.delete(threadId).catch((error) => {
-    console.warn("[tgbot] Failed to delete snapshot:", threadId, error);
+  queueSnapshotDelete(threadId).catch(() => {
+    // handled in enqueueThreadPersistence
   });
 }
 

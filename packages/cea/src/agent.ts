@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ProviderOptions as AiProviderOptions } from "@ai-sdk/provider-utils";
 import {
@@ -11,7 +10,7 @@ import {
   createDefaultPruningConfig,
   createModelSummarizer,
   estimateTokens,
-  FileMemoryStore,
+  type FileMemoryStore,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
   type PruningConfig,
@@ -52,11 +51,6 @@ export const DEFAULT_MODEL_ID = DEFAULT_ANTHROPIC_MODEL_ID;
 const OUTPUT_TOKEN_CAP = 64_000;
 const DEFAULT_CONTEXT_LENGTH = 200_000;
 const TRANSLATION_MAX_OUTPUT_TOKENS = 4000;
-const DEFAULT_SESSION_MEMORY_STORE_PATH = join(
-  process.cwd(),
-  ".plugsuits",
-  "session-memory.md"
-);
 type ProviderOptions = AiProviderOptions | undefined;
 
 interface BenchmarkSamplingOverrides {
@@ -439,6 +433,8 @@ export function buildFileTrackingSummarizeFn(
 export class AgentManager {
   _memoryExtractor?: BackgroundMemoryExtractor | null;
   private _memoryExtractorStorePath: string | null = null;
+  private memoryStore: FileMemoryStore | null = null;
+  private memoryStoreKey: string | null = null;
   private modelId: string = DEFAULT_MODEL_ID;
   private modelType: ModelType = "serverless";
   private provider: ProviderType = "anthropic";
@@ -447,7 +443,6 @@ export class AgentManager {
   private toolRegistry: ToolRegistry = defaultToolRegistry;
   private toolFallbackMode: ToolFallbackMode = DEFAULT_TOOL_FALLBACK_MODE;
   private translationEnabled = true;
-  private sessionMemoryStorePath = DEFAULT_SESSION_MEMORY_STORE_PATH;
   private readonly anthropicClient: ReturnType<typeof createAnthropic> | null;
 
   constructor(anthropicClient?: ReturnType<typeof createAnthropic> | null) {
@@ -465,14 +460,16 @@ export class AgentManager {
     this.toolRegistry = defaultToolRegistry;
     this.toolFallbackMode = DEFAULT_TOOL_FALLBACK_MODE;
     this.translationEnabled = true;
-    this.sessionMemoryStorePath = DEFAULT_SESSION_MEMORY_STORE_PATH;
     this._memoryExtractor = null;
     this._memoryExtractorStorePath = null;
+    this.memoryStore = null;
+    this.memoryStoreKey = null;
     this.applyBestReasoningModeForCurrentModel();
   }
 
-  setSessionMemoryStorePath(filePath: string): void {
-    this.sessionMemoryStorePath = filePath;
+  setMemoryStore(store: FileMemoryStore | null, key: string | null): void {
+    this.memoryStore = store;
+    this.memoryStoreKey = key;
   }
 
   private applyBestReasoningModeForCurrentModel(): void {
@@ -566,18 +563,21 @@ export class AgentManager {
     if (bmeDisabled) {
       this._memoryExtractor = null;
       this._memoryExtractorStorePath = null;
+    } else if (!(this.memoryStore && this.memoryStoreKey)) {
+      this._memoryExtractor = null;
+      this._memoryExtractorStorePath = null;
     } else if (
       this._memoryExtractor &&
-      this._memoryExtractorStorePath === this.sessionMemoryStorePath
+      this._memoryExtractorStorePath === this.memoryStoreKey
     ) {
       this._memoryExtractor.updateModel(this.getProviderModel(this.modelId));
     } else {
       this._memoryExtractor = new BackgroundMemoryExtractor({
         model: this.getProviderModel(this.modelId),
-        store: new FileMemoryStore(this.sessionMemoryStorePath),
+        store: this.memoryStore,
         preset: "code",
       });
-      this._memoryExtractorStorePath = this.sessionMemoryStorePath;
+      this._memoryExtractorStorePath = this.memoryStoreKey;
     }
     const memoryExtractor = this._memoryExtractor;
 

@@ -10,6 +10,7 @@ import {
   type CompactionResult,
   estimateTokens,
   estimateToolSchemasTokens,
+  FileMemoryStore,
   FileSnapshotStore,
   formatContextUsage,
   MCPManager,
@@ -175,6 +176,9 @@ mkdirSync(sessionStoreBaseDir, { recursive: true });
 const store = new FileSnapshotStore(sessionStoreBaseDir);
 const resolveSessionMemoryStorePath = (sessionId: string): string => {
   return join(sessionStoreBaseDir, sessionId, "session-memory.md");
+};
+const createSessionMemoryStore = (sessionId: string): FileMemoryStore => {
+  return new FileMemoryStore(resolveSessionMemoryStorePath(sessionId));
 };
 let messageHistory: CheckpointHistory;
 const compactionCircuitBreaker = new CompactionCircuitBreaker();
@@ -490,7 +494,8 @@ const updateCompactionForCurrentModel = async (): Promise<void> => {
 const loadHistoryForSession = async (
   sessionId: string
 ): Promise<CheckpointHistory> => {
-  agentManager.setSessionMemoryStorePath(
+  agentManager.setMemoryStore(
+    createSessionMemoryStore(sessionId),
     resolveSessionMemoryStorePath(sessionId)
   );
   return await CheckpointHistory.fromSnapshot(store, sessionId, {
@@ -499,10 +504,18 @@ const loadHistoryForSession = async (
   });
 };
 
-const applyCurrentSessionToRuntime = async (): Promise<void> => {
-  if (messageHistory) {
-    await store.save(sessionManager.getId(), messageHistory.snapshot());
+const saveCurrentSessionSnapshot = async (
+  sessionId: string = sessionManager.getId()
+): Promise<void> => {
+  if (!messageHistory) {
+    return;
   }
+
+  await store.save(sessionId, messageHistory.snapshot());
+};
+
+const applyCurrentSessionToRuntime = async (): Promise<void> => {
+  await saveCurrentSessionSnapshot();
   messageHistory = await loadHistoryForSession(sessionManager.getId());
   await updateCompactionForCurrentModel();
 };
@@ -744,9 +757,7 @@ const mainCommand = defineCommand({
             agentManager._memoryExtractor
               ?.onTurnComplete(messages, usage)
               .catch(() => undefined);
-            return store
-              .save(sessionManager.getId(), messageHistory.snapshot())
-              .catch(() => undefined);
+            return saveCurrentSessionSnapshot().catch(() => undefined);
           },
           onTodoReminder: async () => {
             const incompleteTodos = await getIncompleteTodos();
@@ -1314,14 +1325,12 @@ const mainCommand = defineCommand({
           agentManager._memoryExtractor
             ?.onTurnComplete(messages, usage)
             .catch(() => undefined);
-          return store
-            .save(sessionManager.getId(), messageHistory.snapshot())
-            .catch(() => undefined);
+          return saveCurrentSessionSnapshot().catch(() => undefined);
         },
         onCommandAction: async (action) => {
           if (action.type === "new-session") {
             const previousSessionId = sessionManager.getId();
-            await store.save(previousSessionId, messageHistory.snapshot());
+            await saveCurrentSessionSnapshot(previousSessionId);
             sessionManager.initialize();
             await applyCurrentSessionToRuntime();
             compactionCircuitBreaker.resetForNewSession();
