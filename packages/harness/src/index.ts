@@ -100,7 +100,7 @@ export { formatContextUsage, formatTokens } from "./context-usage-format";
 export type { ContinuationMessageData } from "./continuation";
 export { createContinuationMessage, getContinuationText } from "./continuation";
 export { env as harnessEnv } from "./env";
-export { AgentError, AgentErrorCode } from "./errors";
+export { AgentError, AgentErrorCode, isAgentError } from "./errors";
 export { FileSnapshotStore } from "./file-snapshot-store";
 export type {
   HistorySnapshot,
@@ -163,6 +163,8 @@ export {
 } from "./skill-command-prefix";
 export type { SkillInfo, SkillsConfig } from "./skills";
 export { SkillsEngine } from "./skills";
+export type { SnapshotStore } from "./snapshot-store";
+export { InMemorySnapshotStore } from "./snapshot-store";
 export type { TodoConfig, TodoItem } from "./todo-continuation";
 export { TodoContinuation } from "./todo-continuation";
 export {
