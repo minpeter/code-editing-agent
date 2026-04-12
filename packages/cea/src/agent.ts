@@ -13,6 +13,7 @@ import {
   createDefaultPruningConfig,
   createModelSummarizer,
   estimateTokens,
+  estimateToolSchemasTokens,
   FileMemoryStore,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
@@ -855,7 +856,7 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
     const instructions = await this.getInstructions();
     messageHistory.setSystemPromptTokens(estimateTokens(instructions));
     messageHistory.setToolSchemasTokens(
-      estimateTokens(JSON.stringify(Object.keys(this.toolRegistry)))
+      estimateToolSchemasTokens(this.toolRegistry)
     );
 
     if (messages.length > 0) {
@@ -886,7 +887,7 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
       ...getBenchmarkSamplingOverrides(),
     });
 
-    void Promise.resolve(result.response).then(
+    Promise.resolve(result.response).then(
       (response: Awaited<typeof result.response>) => {
         messageHistory.addModelMessages(response.messages);
       },

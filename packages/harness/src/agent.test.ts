@@ -4,39 +4,46 @@ import { AgentError, AgentErrorCode } from "./errors";
 import { clearMCPCache } from "./mcp-init";
 import type { AgentConfig } from "./types";
 
-const streamTextMock = vi.fn(() => {
-  const fullStream: AsyncIterable<{ finishReason: string; type: string }> = {
-    [Symbol.asyncIterator]() {
-      let done = false;
+const { streamTextMock, resolveMCPOptionMock, stepCountIsMock } = vi.hoisted(
+  () => {
+    const streamTextMock = vi.fn(() => {
+      const fullStream: AsyncIterable<{ finishReason: string; type: string }> =
+        {
+          [Symbol.asyncIterator]() {
+            let done = false;
+            return {
+              next: () => {
+                if (done) {
+                  return Promise.resolve({ done: true, value: undefined });
+                }
+                done = true;
+                return Promise.resolve({
+                  done: false,
+                  value: { type: "finish-step", finishReason: "stop" },
+                });
+              },
+            };
+          },
+        };
       return {
-        next: () => {
-          if (done) {
-            return Promise.resolve({ done: true, value: undefined });
-          }
-          done = true;
-          return Promise.resolve({
-            done: false,
-            value: { type: "finish-step", finishReason: "stop" },
-          });
-        },
+        finishReason: Promise.resolve("stop"),
+        fullStream,
+        response: Promise.resolve({ messages: [] }),
+        totalUsage: Promise.resolve(undefined),
+        usage: Promise.resolve(undefined),
       };
-    },
-  };
-  return {
-    finishReason: Promise.resolve("stop"),
-    fullStream,
-    response: Promise.resolve({ messages: [] }),
-    totalUsage: Promise.resolve(undefined),
-    usage: Promise.resolve(undefined),
-  };
-});
+    });
 
-const resolveMCPOptionMock = vi.fn().mockResolvedValue({
-  close: vi.fn().mockResolvedValue(undefined),
-  tools: { mcp_tool: {} },
-});
+    const resolveMCPOptionMock = vi.fn().mockResolvedValue({
+      close: vi.fn().mockResolvedValue(undefined),
+      tools: { mcp_tool: {} },
+    });
 
-const stepCountIsMock = vi.fn(() => undefined);
+    const stepCountIsMock = vi.fn(() => undefined);
+
+    return { streamTextMock, resolveMCPOptionMock, stepCountIsMock };
+  }
+);
 
 vi.mock("ai", () => {
   return {

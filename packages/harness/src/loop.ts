@@ -82,16 +82,12 @@ export async function runAgentLoop(
         response,
       });
 
-      iteration += 1;
-
-      if (
-        !shouldContinue(lastFinishReason, {
-          iteration: iteration - 1,
-          messages,
-        })
-      ) {
+      if (!shouldContinue(lastFinishReason, { iteration, messages })) {
+        iteration += 1;
         break;
       }
+
+      iteration += 1;
     } catch (error) {
       const errorResult = await onError?.(error, context);
 

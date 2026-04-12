@@ -215,7 +215,7 @@ export const parseCommand = (
   return { name, args: parts.slice(1) };
 };
 
-export const executeCommand = async (
+export const executeCommand = (
   input: string
 ): Promise<CommandResult | SkillCommandResult | null> => {
   return defaultRegistry.execute(input);

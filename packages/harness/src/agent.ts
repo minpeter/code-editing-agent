@@ -153,8 +153,11 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
     mergedTools = resolved.tools;
     const previousClose = closeFn;
     closeFn = async () => {
-      await resolved.close();
-      await previousClose();
+      try {
+        await resolved.close();
+      } finally {
+        await previousClose();
+      }
     };
   }
 

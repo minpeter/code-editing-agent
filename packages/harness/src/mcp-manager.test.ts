@@ -6,24 +6,39 @@ const originalClearTimeout = globalThis.clearTimeout;
 
 const CLOSED_ERROR_PATTERN = /closed/i;
 
-const createMCPClientMock = vi.fn();
-const stdioTransportMock = vi.fn().mockImplementation((options) => options);
-const loadMCPConfigMock = vi.fn();
-const isStdioConfigMock = vi.fn();
-const mergeMCPToolsMock = vi.fn();
-const timeoutSpy = vi.fn((callback: () => void) => {
-  const handle = { cancelled: false };
-  Promise.resolve().then(() => {
-    if (!handle.cancelled) {
-      callback();
-    }
-  });
-  return handle;
-});
-const clearTimeoutSpy = vi.fn((handle: { cancelled?: boolean }) => {
-  if (handle) {
-    handle.cancelled = true;
-  }
+const {
+  createMCPClientMock,
+  stdioTransportMock,
+  loadMCPConfigMock,
+  isStdioConfigMock,
+  mergeMCPToolsMock,
+  timeoutSpy,
+  clearTimeoutSpy,
+} = vi.hoisted(() => {
+  const _vi = vi;
+  return {
+    createMCPClientMock: _vi.fn(),
+    stdioTransportMock: _vi
+      .fn()
+      .mockImplementation((options: unknown) => options),
+    loadMCPConfigMock: _vi.fn(),
+    isStdioConfigMock: _vi.fn(),
+    mergeMCPToolsMock: _vi.fn(),
+    timeoutSpy: _vi.fn((callback: () => void) => {
+      const handle = { cancelled: false };
+      Promise.resolve().then(() => {
+        if (!handle.cancelled) {
+          callback();
+        }
+      });
+      return handle;
+    }),
+    clearTimeoutSpy: _vi.fn((handle: { cancelled?: boolean }) => {
+      if (handle) {
+        handle.cancelled = true;
+      }
+    }),
+  };
 });
 
 vi.mock("@ai-sdk/mcp", () => ({

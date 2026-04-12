@@ -175,14 +175,14 @@ function isStreamTimeoutError(
 function createNoopCompactionController(): HeadlessCompactionController {
   return {
     applyReady: () => ({ applied: false, stale: false }),
-    async blockAtHardLimit() {
-      return false;
+    blockAtHardLimit() {
+      return Promise.resolve(false);
     },
-    async blockIfNeeded() {
-      return false;
+    blockIfNeeded() {
+      return Promise.resolve(false);
     },
-    async checkAndCompact() {
-      return false;
+    checkAndCompact() {
+      return Promise.resolve(false);
     },
     notifyNewUserTurn() {
       return;
