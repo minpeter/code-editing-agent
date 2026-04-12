@@ -34,6 +34,7 @@ import {
 } from "./history-snapshot";
 import { microCompactMessages } from "./micro-compact";
 import type { SessionStore } from "./session-store";
+import type { SnapshotStore } from "./snapshot-store";
 import {
   estimateMessageTokens,
   estimateTokens,
@@ -349,6 +350,19 @@ export class CheckpointHistory {
       }
     }
 
+    return history;
+  }
+
+  static async fromSnapshot(
+    store: SnapshotStore,
+    sessionId: string,
+    options?: CheckpointHistoryOptions
+  ): Promise<CheckpointHistory> {
+    const history = new CheckpointHistory(options);
+    const snapshot = await store.load(sessionId);
+    if (snapshot) {
+      history.restoreFromSnapshot(snapshot);
+    }
     return history;
   }
 

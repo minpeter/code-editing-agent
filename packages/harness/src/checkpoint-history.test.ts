@@ -8,7 +8,9 @@ import {
   isContextOverflowError,
 } from "./checkpoint-history";
 import { getContinuationText } from "./continuation";
+import type { HistorySnapshot } from "./history-snapshot";
 import { SessionStore } from "./session-store";
+import { InMemorySnapshotStore } from "./snapshot-store";
 import { estimateTokens } from "./token-utils";
 
 describe("CheckpointHistory", () => {
@@ -2262,6 +2264,47 @@ describe("API round split boundary adjustment", () => {
     ).adjustSplitIndexToApiRoundBoundary(history.getAll(), 1);
 
     expect(adjustedSplitIndex).toBe(1);
+  });
+});
+
+describe("CheckpointHistory.fromSnapshot()", () => {
+  it("returns empty history when store has no session", async () => {
+    const store = new InMemorySnapshotStore();
+    const history = await CheckpointHistory.fromSnapshot(store, "sess1");
+    expect(history.getAll()).toHaveLength(0);
+  });
+
+  it("restores messages from stored snapshot", async () => {
+    const store = new InMemorySnapshotStore();
+    const snapshot: HistorySnapshot = {
+      messages: [
+        {
+          id: "m1",
+          message: { role: "user", content: "hello" },
+          isSummary: false,
+          createdAt: Date.now(),
+        },
+      ],
+      revision: 1,
+      contextLimit: 10_000,
+      systemPromptTokens: 100,
+      toolSchemasTokens: 50,
+      compactionState: { summaryMessageId: null },
+    };
+    await store.save("sess1", snapshot);
+
+    const history = await CheckpointHistory.fromSnapshot(store, "sess1");
+    expect(history.getAll()).toHaveLength(1);
+    expect(history.getContextLimit()).toBe(10_000);
+    expect(history.getSystemPromptTokens()).toBe(100);
+  });
+
+  it("does not auto-persist on message add", async () => {
+    const store = new InMemorySnapshotStore();
+    const history = await CheckpointHistory.fromSnapshot(store, "sess1");
+    history.addUserMessage("hello");
+    // Without calling store.save(), the store should still be empty
+    expect(await store.load("sess1")).toBeNull();
   });
 });
 
