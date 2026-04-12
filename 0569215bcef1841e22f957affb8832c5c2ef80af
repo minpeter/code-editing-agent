@@ -1,0 +1,75 @@
+packages/cea/src/agent.test.ts
+  3aa197d018df9fe9 257-267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "0569215bcef1841e22f957affb8832c5c2ef80af",
+  "prompts": {
+    "2214030fe09f8cc4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-369d9622-93e2-4726-8e57-049fde551276",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "310c55d3ee285d12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-31f74158-8a11-4c15-a421-26162326e736",
+        "model": "unknown"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "3aa197d018df9fe9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-bb43bfa4-ff19-4a36-a536-d6add5fc4059",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 1,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    },
+    "43eb17774250255f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-4cc0a5d7-c9fb-47b1-9d4f-9183f51a9c9f",
+        "model": "unknown"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 7,
+      "overriden_lines": 0
+    },
+    "601af74f3ac7d829": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_27f5b2661ffekS5VAMAEa8Ln19-38583730-089b-403d-a843-ff80d96f5df0",
+        "model": "unknown"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
