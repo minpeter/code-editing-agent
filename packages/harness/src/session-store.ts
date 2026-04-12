@@ -35,6 +35,10 @@ export function decodeSessionId(encodedSessionId: string): string {
   });
 }
 
+/**
+ * @deprecated Use {@link FileSnapshotStore} instead for a cleaner persistence abstraction.
+ * SessionStore will be removed in the next major release.
+ */
 export class SessionStore {
   private readonly baseDir: string;
 

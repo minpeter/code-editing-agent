@@ -9,6 +9,34 @@
       "@ai-sdk-tool/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./compaction": {
+      "import": "./dist/subpath/compaction.js",
+      "types": "./dist/subpath/compaction.d.ts"
+    },
+    "./sessions": {
+      "import": "./dist/subpath/sessions.js",
+      "types": "./dist/subpath/sessions.d.ts"
+    },
+    "./memory": {
+      "import": "./dist/subpath/memory.js",
+      "types": "./dist/subpath/memory.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/subpath/mcp.js",
+      "types": "./dist/subpath/mcp.d.ts"
+    },
+    "./commands": {
+      "import": "./dist/subpath/commands.js",
+      "types": "./dist/subpath/commands.d.ts"
+    },
+    "./skills": {
+      "import": "./dist/subpath/skills.js",
+      "types": "./dist/subpath/skills.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/subpath/utils.js",
+      "types": "./dist/subpath/utils.d.ts"
     }
   },
   "files": [
