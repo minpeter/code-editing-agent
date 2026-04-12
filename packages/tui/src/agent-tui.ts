@@ -12,8 +12,7 @@ import {
   executeCommand,
   harnessEnv,
   isCommand,
-  AgentErrorCode,
-  AgentError,
+  isContextOverflowError,
   isSkillCommandResult,
   type ModelMessage,
   normalizeUsageMeasurement,
@@ -531,15 +530,9 @@ export async function retryStreamTurnOnContextOverflow<T>(params: {
   retry: () => Promise<T>;
   runBlockingCompaction: () => Promise<boolean>;
 }): Promise<{ handled: false } | { handled: true; result: T }> {
-  if (
-    params.overflowRetried ||
-    !(
-      params.error instanceof AgentError &&
-      params.error.code === AgentErrorCode.CONTEXT_OVERFLOW
-    )
-  ) {
-    return { handled: false };
-  }
+    if (params.overflowRetried || !isContextOverflowError(params.error).detected) {
+      return { handled: false };
+    }
 
   const didCompact = await params.runBlockingCompaction();
   if (!didCompact) {

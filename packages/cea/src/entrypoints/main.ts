@@ -10,6 +10,7 @@ import {
   type CompactionResult,
   estimateTokens,
   estimateToolSchemasTokens,
+  FileSnapshotStore,
   formatContextUsage,
   MCPManager,
   mergeMCPTools,
@@ -17,7 +18,6 @@ import {
   parseCommand,
   type RunnableAgent,
   SessionManager,
-  SessionStore,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
@@ -106,18 +106,6 @@ const style = (prefix: string, text: string): string => {
   return `${prefix}${text}${ANSI_RESET}`;
 };
 
-const createSessionScopedCheckpointHistory = (
-  sessionBaseDir: string,
-  initialSessionId: string
-): CheckpointHistory => {
-  mkdirSync(sessionBaseDir, { recursive: true });
-  const sessionStore = new SessionStore(sessionBaseDir);
-  return new CheckpointHistory({
-    sessionId: initialSessionId,
-    sessionStore,
-  });
-};
-
 const buildCurrentIndicatorLabel = (
   label: string,
   isCurrent: boolean
@@ -183,13 +171,12 @@ if (!sessionManagerScope.__ceaSessionManager) {
 }
 const sessionManager = sessionManagerScope.__ceaSessionManager;
 const sessionStoreBaseDir = join(process.cwd(), ".plugsuits", "sessions");
+mkdirSync(sessionStoreBaseDir, { recursive: true });
+const store = new FileSnapshotStore(sessionStoreBaseDir);
 const resolveSessionMemoryStorePath = (sessionId: string): string => {
   return join(sessionStoreBaseDir, sessionId, "session-memory.md");
 };
-const messageHistory = createSessionScopedCheckpointHistory(
-  sessionStoreBaseDir,
-  "session-bootstrap"
-);
+let messageHistory: CheckpointHistory;
 const compactionCircuitBreaker = new CompactionCircuitBreaker();
 const postCompactRestorer = new PostCompactRestorer();
 const unregisterSkillLoadListener = registerSkillLoadListener((skill) => {
@@ -369,7 +356,9 @@ registerCommand(createClearCommand());
 registerCommand(createReasoningModeCommand());
 registerCommand(createToolFallbackCommand());
 registerCommand(createTranslateCommand());
-registerCommand(createCompactCommand({ messageHistory }));
+registerCommand(
+  createCompactCommand({ getMessageHistory: () => messageHistory })
+);
 
 const createTranslationPreprocessor = () => {
   return async (
@@ -498,13 +487,24 @@ const updateCompactionForCurrentModel = async (): Promise<void> => {
   );
 };
 
-const applyCurrentSessionToRuntime = (): void => {
-  const sessionId = sessionManager.getId();
-  messageHistory.resetForSession(sessionId);
+const loadHistoryForSession = async (
+  sessionId: string
+): Promise<CheckpointHistory> => {
   agentManager.setSessionMemoryStorePath(
     resolveSessionMemoryStorePath(sessionId)
   );
-  agentManager.setActiveSessionId(sessionId);
+  return await CheckpointHistory.fromSnapshot(store, sessionId, {
+    compaction: agentManager.buildCompactionConfig(),
+    pruning: agentManager.buildPruningConfig(),
+  });
+};
+
+const applyCurrentSessionToRuntime = async (): Promise<void> => {
+  if (messageHistory) {
+    await store.save(sessionManager.getId(), messageHistory.snapshot());
+  }
+  messageHistory = await loadHistoryForSession(sessionManager.getId());
+  await updateCompactionForCurrentModel();
 };
 
 const wrapCommand = (
@@ -669,7 +669,7 @@ const mainCommand = defineCommand({
     await initializeMCPTools();
     setSpinnerOutputEnabled(false);
     sessionManager.initialize();
-    applyCurrentSessionToRuntime();
+    messageHistory = await loadHistoryForSession(sessionManager.getId());
 
     const config = resolveSharedConfig(args as SharedArgs);
     if (config.provider) {
@@ -743,6 +743,9 @@ const mainCommand = defineCommand({
             trackReadFileRestorationItems(messages);
             agentManager._memoryExtractor
               ?.onTurnComplete(messages, usage)
+              .catch(() => undefined);
+            return store
+              .save(sessionManager.getId(), messageHistory.snapshot())
               .catch(() => undefined);
           },
           onTodoReminder: async () => {
@@ -1311,15 +1314,19 @@ const mainCommand = defineCommand({
           agentManager._memoryExtractor
             ?.onTurnComplete(messages, usage)
             .catch(() => undefined);
+          return store
+            .save(sessionManager.getId(), messageHistory.snapshot())
+            .catch(() => undefined);
         },
         onCommandAction: async (action) => {
           if (action.type === "new-session") {
+            const previousSessionId = sessionManager.getId();
+            await store.save(previousSessionId, messageHistory.snapshot());
             sessionManager.initialize();
-            applyCurrentSessionToRuntime();
+            await applyCurrentSessionToRuntime();
             compactionCircuitBreaker.resetForNewSession();
             postCompactRestorer.clear();
             trackedReadToolResultIds.clear();
-            await updateCompactionForCurrentModel();
             resetMissingLinesFailures();
           }
         },
