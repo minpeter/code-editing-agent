@@ -28,8 +28,8 @@ import { collapseConsecutiveOps } from "./context-collapse";
 import { createContinuationMessage, getContinuationText } from "./continuation";
 import { env } from "./env";
 import {
-  type HistorySnapshot,
   deserializeMessage,
+  type HistorySnapshot,
   serializeMessage,
 } from "./history-snapshot";
 import { microCompactMessages } from "./micro-compact";

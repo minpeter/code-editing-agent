@@ -1,3 +1,11 @@
+export type {
+  Command,
+  CommandAction,
+  CommandContext,
+  CommandRegistryConfig,
+  CommandResult,
+  SkillCommandResult,
+} from "../commands";
 export {
   configureCommandRegistry,
   createHelpCommand,
@@ -8,14 +16,6 @@ export {
   parseCommand,
   registerCommand,
   resolveRegisteredCommandName,
-} from "../commands";
-export type {
-  Command,
-  CommandAction,
-  CommandContext,
-  CommandRegistryConfig,
-  CommandResult,
-  SkillCommandResult,
 } from "../commands";
 export {
   PROMPTS_COMMAND_PREFIX,

@@ -10,12 +10,12 @@ import type { HistorySnapshot } from "./history-snapshot";
  * full replace.
  */
 export interface SnapshotStore {
+  /** Remove the stored snapshot for this session. No-op if not found. */
+  delete(sessionId: string): Promise<void>;
   /** Load the last saved snapshot for the given session. Returns null if not found. */
   load(sessionId: string): Promise<HistorySnapshot | null>;
   /** Persist the snapshot. Replaces any previously saved state for this session. */
   save(sessionId: string, snapshot: HistorySnapshot): Promise<void>;
-  /** Remove the stored snapshot for this session. No-op if not found. */
-  delete(sessionId: string): Promise<void>;
 }
 
 /** In-memory implementation for testing and ephemeral use. */

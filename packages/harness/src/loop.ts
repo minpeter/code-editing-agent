@@ -3,8 +3,8 @@
  * Agent execution loop for the harness package.
  */
 
-import { shouldContinueManualToolLoop } from "./tool-loop-control";
 import { AgentError, AgentErrorCode } from "./errors";
+import { shouldContinueManualToolLoop } from "./tool-loop-control";
 import type {
   AgentFinishReason,
   LoopContinueContext,

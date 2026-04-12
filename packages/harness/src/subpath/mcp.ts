@@ -1,5 +1,7 @@
+export { isRemoteConfig, isStdioConfig, loadMCPConfig } from "../mcp-config";
 export { MCPManager } from "../mcp-manager";
-export { MCPLoader } from "../mcp-types";
+export type { MergeOptions, ToolConflict } from "../mcp-tool-merger";
+export { mergeMCPTools, sanitizeServerName } from "../mcp-tool-merger";
 export type {
   MCPConfigFile,
   MCPManagerOptions,
@@ -9,6 +11,4 @@ export type {
   MCPStdioServerConfig,
   MCPToolMergeResult,
 } from "../mcp-types";
-export { isRemoteConfig, isStdioConfig, loadMCPConfig } from "../mcp-config";
-export { mergeMCPTools, sanitizeServerName } from "../mcp-tool-merger";
-export type { MergeOptions, ToolConflict } from "../mcp-tool-merger";
+export { MCPLoader } from "../mcp-types";

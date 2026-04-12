@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { runAgentLoop } from "./loop";
 import { AgentError, AgentErrorCode } from "./errors";
+import { runAgentLoop } from "./loop";
 import type { Agent, AgentStreamResult } from "./types";
 
 /**

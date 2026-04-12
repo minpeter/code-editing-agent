@@ -12,7 +12,8 @@
         "packages/headless/src/index.ts",
         "packages/cea/src/context/skill-command-prefix.ts",
         "packages/cea/src/commands/index.ts",
-        "packages/harness/src/checkpoint-history.ts"
+        "packages/harness/src/checkpoint-history.ts",
+        "packages/harness/src/subpath/*.ts"
       ],
       "linter": {
         "rules": {

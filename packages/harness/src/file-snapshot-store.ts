@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 import {
   deserializeMessage,
-  serializeMessage,
   type HistorySnapshot,
+  serializeMessage,
 } from "./history-snapshot";
 import { SessionStore } from "./session-store";
 import type { SnapshotStore } from "./snapshot-store";

@@ -97,15 +97,15 @@ export { collapseConsecutiveOps } from "./context-collapse";
 export type { ContextSuggestion } from "./context-suggestions";
 export { generateContextSuggestions } from "./context-suggestions";
 export { formatContextUsage, formatTokens } from "./context-usage-format";
+export type { ContinuationMessageData } from "./continuation";
+export { createContinuationMessage, getContinuationText } from "./continuation";
+export { env as harnessEnv } from "./env";
+export { AgentError, AgentErrorCode } from "./errors";
 export { FileSnapshotStore } from "./file-snapshot-store";
 export type {
   HistorySnapshot,
   SerializedMessage,
 } from "./history-snapshot";
-export type { ContinuationMessageData } from "./continuation";
-export { createContinuationMessage, getContinuationText } from "./continuation";
-export { env as harnessEnv } from "./env";
-export { AgentError, AgentErrorCode } from "./errors";
 export { runAgentLoop } from "./loop";
 export { isRemoteConfig, isStdioConfig, loadMCPConfig } from "./mcp-config";
 // MCP integration

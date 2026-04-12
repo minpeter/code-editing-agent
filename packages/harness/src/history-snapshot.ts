@@ -2,22 +2,19 @@ import type { ModelMessage } from "ai";
 import type { CheckpointMessage } from "./compaction-types";
 
 export interface SerializedMessage {
-  id: string;
-  message: ModelMessage;
-  tokenCount?: number;
   createdAt?: number;
+  id: string;
   isSummary?: boolean;
+  message: ModelMessage;
   originalContent?: string;
+  tokenCount?: number;
 }
 
 export interface HistorySnapshot {
-  messages: SerializedMessage[];
-  revision: number;
-  contextLimit: number;
-  systemPromptTokens: number;
-  toolSchemasTokens: number;
-  compactionState?: {
-    summaryMessageId: string | null;
+  actualUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
   };
   compactionConfig?: {
     enabled?: boolean;
@@ -28,16 +25,19 @@ export interface HistorySnapshot {
     thresholdRatio?: number;
     speculativeStartRatio?: number;
   };
+  compactionState?: {
+    summaryMessageId: string | null;
+  };
+  contextLimit: number;
+  messages: SerializedMessage[];
   pruningConfig?: {
     enabled?: boolean;
     eagerPruneToolNames?: string[];
     maxToolOutputTokens?: number;
   };
-  actualUsage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  };
+  revision: number;
+  systemPromptTokens: number;
+  toolSchemasTokens: number;
 }
 
 export function serializeMessage(

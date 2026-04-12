@@ -530,9 +530,12 @@ export async function retryStreamTurnOnContextOverflow<T>(params: {
   retry: () => Promise<T>;
   runBlockingCompaction: () => Promise<boolean>;
 }): Promise<{ handled: false } | { handled: true; result: T }> {
-    if (params.overflowRetried || !isContextOverflowError(params.error).detected) {
-      return { handled: false };
-    }
+  if (
+    params.overflowRetried ||
+    !isContextOverflowError(params.error).detected
+  ) {
+    return { handled: false };
+  }
 
   const didCompact = await params.runBlockingCompaction();
   if (!didCompact) {
