@@ -1,0 +1,37 @@
+packages/minimal-agent/index.ts
+  4bfe4a3fdc9809a9 144
+  6ba0a35c4327362a 166-181,268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "e16d4017ae8a8b3882f4d3b2c827c4284dd29c11",
+  "prompts": {
+    "4bfe4a3fdc9809a9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_279b34d6dffeWskUa5zpaiLMcw-a52435da-c537-4480-a591-7c01630e8e98",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "6ba0a35c4327362a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_279b34d6dffeWskUa5zpaiLMcw-c35e44ed-051f-4a34-9b8b-632f08854e00",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 17,
+      "total_deletions": 11,
+      "accepted_lines": 17,
+      "overriden_lines": 0
+    }
+  }
+}
