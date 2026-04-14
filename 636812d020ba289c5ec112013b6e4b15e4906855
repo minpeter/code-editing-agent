@@ -1,0 +1,23 @@
+packages/cea/src/entrypoints/main.ts
+  6a8b5f13ab3ccbe9 525-530,1352-1354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "636812d020ba289c5ec112013b6e4b15e4906855",
+  "prompts": {
+    "6a8b5f13ab3ccbe9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "opencode-transcript-ses_279b34d6dffeWskUa5zpaiLMcw-b3952702-c06a-4d04-b773-17f7b6c83c80",
+        "model": "unknown"
+      },
+      "human_author": "minpeter",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 3,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    }
+  }
+}
