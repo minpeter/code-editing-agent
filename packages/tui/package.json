@@ -9,6 +9,11 @@
       "@ai-sdk-tool/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./session": {
+      "@ai-sdk-tool/source": "./src/session-tui.ts",
+      "types": "./dist/session-tui.d.ts",
+      "import": "./dist/session-tui.js"
     }
   },
   "files": [
