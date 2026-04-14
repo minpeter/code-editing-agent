@@ -148,6 +148,9 @@ async function getHistory(threadId: string): Promise<CheckpointHistory> {
     threadId,
     buildCompactionOptions(threadId)
   ).then((history) => {
+    if (pendingHistoryLoads.get(threadId) !== loadPromise) {
+      return history;
+    }
     chatHistories.set(threadId, history);
     evictOldest();
     return history;
