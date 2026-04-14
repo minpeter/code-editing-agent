@@ -504,6 +504,14 @@ const loadHistoryForSession = async (
   });
 };
 
+const replaceCurrentSessionHistory = async (
+  sessionId: string
+): Promise<void> => {
+  const restored = await loadHistoryForSession(sessionId);
+  messageHistory.resetForSession(sessionId);
+  messageHistory.restoreFromSnapshot(restored.snapshot());
+};
+
 const saveCurrentSessionSnapshot = async (
   sessionId: string = sessionManager.getId()
 ): Promise<void> => {
@@ -516,7 +524,7 @@ const saveCurrentSessionSnapshot = async (
 
 const applyCurrentSessionToRuntime = async (): Promise<void> => {
   await saveCurrentSessionSnapshot();
-  messageHistory = await loadHistoryForSession(sessionManager.getId());
+  await replaceCurrentSessionHistory(sessionManager.getId());
   await updateCompactionForCurrentModel();
 };
 
@@ -682,7 +690,12 @@ const mainCommand = defineCommand({
     await initializeMCPTools();
     setSpinnerOutputEnabled(false);
     sessionManager.initialize();
-    messageHistory = await loadHistoryForSession(sessionManager.getId());
+    messageHistory = new CheckpointHistory({
+      sessionId: sessionManager.getId(),
+      compaction: agentManager.buildCompactionConfig(),
+      pruning: agentManager.buildPruningConfig(),
+    });
+    await replaceCurrentSessionHistory(sessionManager.getId());
 
     const config = resolveSharedConfig(args as SharedArgs);
     if (config.provider) {

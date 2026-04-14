@@ -118,7 +118,7 @@ function queueSnapshotDelete(threadId: string): Promise<void> {
   });
 }
 
-function evictOldest(): Promise<void> | undefined {
+function evictOldest(): void {
   if (chatHistories.size <= MAX_CACHED_THREADS) {
     return;
   }
@@ -126,7 +126,6 @@ function evictOldest(): Promise<void> | undefined {
   if (oldest !== undefined) {
     chatHistories.delete(oldest);
     threadTrackers.delete(oldest);
-    return queueSnapshotDelete(oldest);
   }
 }
 
@@ -145,9 +144,7 @@ async function getHistory(threadId: string): Promise<CheckpointHistory> {
   );
 
   chatHistories.set(threadId, history);
-  evictOldest()?.catch(() => {
-    // handled in enqueueThreadPersistence
-  });
+  evictOldest();
   return history;
 }
 
