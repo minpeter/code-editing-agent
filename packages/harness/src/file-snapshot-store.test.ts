@@ -22,7 +22,7 @@ describe("FileSnapshotStore", () => {
     expect(await store.load("unknown")).toBeNull();
   });
 
-  it("save → load round-trip preserves messages", async () => {
+  it("save → load round-trip preserves the full snapshot", async () => {
     const snapshot: HistorySnapshot = {
       messages: [
         {
@@ -30,36 +30,41 @@ describe("FileSnapshotStore", () => {
           message: { role: "user", content: "hello" },
           createdAt: 123,
           isSummary: false,
+          originalContent: "hello",
+          tokenCount: 7,
         },
       ],
       revision: 7,
       contextLimit: 1024,
       systemPromptTokens: 11,
       toolSchemasTokens: 13,
+      actualUsage: {
+        inputTokens: 21,
+        outputTokens: 8,
+        totalTokens: 29,
+      },
+      compactionConfig: {
+        enabled: true,
+        contextLimit: 1024,
+        keepRecentTokens: 128,
+        reserveTokens: 64,
+        maxTokens: 512,
+        thresholdRatio: 0.75,
+        speculativeStartRatio: 0.8,
+      },
       compactionState: { summaryMessageId: null },
+      pruningConfig: {
+        enabled: true,
+        eagerPruneToolNames: ["read_file"],
+        maxToolOutputTokens: 256,
+      },
     };
 
     await store.save("session1", snapshot);
     const loaded = await store.load("session1");
 
     expect(loaded).not.toBeNull();
-    expect(loaded).toEqual({
-      messages: [
-        {
-          id: "msg1",
-          message: { role: "user", content: "hello" },
-          createdAt: 123,
-          isSummary: false,
-          originalContent: undefined,
-          tokenCount: undefined,
-        },
-      ],
-      revision: 0,
-      contextLimit: 0,
-      systemPromptTokens: 0,
-      toolSchemasTokens: 0,
-      compactionState: { summaryMessageId: null },
-    });
+    expect(loaded).toEqual(snapshot);
   });
 
   it("delete removes session", async () => {
@@ -189,5 +194,43 @@ describe("FileSnapshotStore", () => {
       toolSchemasTokens: 0,
       compactionState: { summaryMessageId: "legacy-msg" },
     });
+  });
+
+  it("writes snapshot atomically over existing content", async () => {
+    await store.save("session", {
+      messages: [
+        {
+          id: "first",
+          message: { role: "user", content: "first" },
+          createdAt: 1,
+          isSummary: false,
+        },
+      ],
+      revision: 1,
+      contextLimit: 32,
+      systemPromptTokens: 2,
+      toolSchemasTokens: 3,
+      compactionState: { summaryMessageId: null },
+    });
+
+    const replacement: HistorySnapshot = {
+      messages: [
+        {
+          id: "second",
+          message: { role: "assistant", content: "second" },
+          createdAt: 2,
+          isSummary: true,
+        },
+      ],
+      revision: 2,
+      contextLimit: 64,
+      systemPromptTokens: 4,
+      toolSchemasTokens: 5,
+      compactionState: { summaryMessageId: "second" },
+    };
+
+    await store.save("session", replacement);
+
+    await expect(store.load("session")).resolves.toEqual(replacement);
   });
 });

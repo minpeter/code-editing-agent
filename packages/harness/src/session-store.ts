@@ -1,8 +1,18 @@
-import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { MessageLine, SessionFileLine } from "./compaction-types";
+import type { HistorySnapshot } from "./history-snapshot";
 
 export interface SessionData {
+  historySnapshot?: HistorySnapshot;
   messages: MessageLine[];
   sessionId: string;
   summaryMessageId: string | null;
@@ -97,6 +107,54 @@ export class SessionStore {
     return Promise.resolve();
   }
 
+  replaceSessionSnapshot(
+    sessionId: string,
+    snapshot: HistorySnapshot
+  ): Promise<void> {
+    const filePath = this.getFilePath(sessionId);
+    const tempFilePath = `${filePath}.${randomUUID()}.tmp`;
+    const lines: SessionFileLine[] = [
+      {
+        type: "header",
+        sessionId,
+        createdAt: Date.now(),
+        version: 1,
+      },
+      {
+        type: "snapshot",
+        snapshot,
+        updatedAt: Date.now(),
+      },
+      ...snapshot.messages.map(
+        (message): SessionFileLine => ({
+          type: "message",
+          id: message.id,
+          message: message.message,
+          createdAt: message.createdAt ?? Date.now(),
+          isSummary: message.isSummary ?? false,
+          originalContent: message.originalContent,
+        })
+      ),
+    ];
+
+    const summaryMessageId = snapshot.compactionState?.summaryMessageId;
+    if (summaryMessageId) {
+      lines.push({
+        type: "checkpoint",
+        summaryMessageId,
+        updatedAt: Date.now(),
+      });
+    }
+
+    writeFileSync(
+      tempFilePath,
+      `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+      "utf8"
+    );
+    renameSync(tempFilePath, filePath);
+    return Promise.resolve();
+  }
+
   loadSession(sessionId: string): Promise<SessionData | null> {
     const filePath = this.getFilePath(sessionId);
 
@@ -107,6 +165,7 @@ export class SessionStore {
     const content = readFileSync(filePath, "utf8");
     const rawLines = content.split("\n");
     const messages: MessageLine[] = [];
+    let historySnapshot: HistorySnapshot | undefined;
     let summaryMessageId: string | null = null;
 
     for (const rawLine of rawLines) {
@@ -124,6 +183,11 @@ export class SessionStore {
 
         if (line.type === "checkpoint") {
           summaryMessageId = line.summaryMessageId;
+          continue;
+        }
+
+        if (line.type === "snapshot") {
+          historySnapshot = line.snapshot;
         }
       } catch {
         // skip malformed JSONL lines
@@ -133,6 +197,7 @@ export class SessionStore {
     return Promise.resolve({
       sessionId,
       summaryMessageId,
+      historySnapshot,
       messages,
     });
   }

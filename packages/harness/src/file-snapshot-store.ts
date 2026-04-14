@@ -18,6 +18,10 @@ export class FileSnapshotStore implements SnapshotStore {
       return null;
     }
 
+    if (session.historySnapshot) {
+      return session.historySnapshot;
+    }
+
     return {
       messages: session.messages.map((messageLine) => ({
         id: messageLine.id,
@@ -37,24 +41,7 @@ export class FileSnapshotStore implements SnapshotStore {
   }
 
   async save(sessionId: string, snapshot: HistorySnapshot): Promise<void> {
-    await this.sessionStore.deleteSession(sessionId);
-
-    for (const msg of snapshot.messages) {
-      await this.sessionStore.appendMessage(sessionId, {
-        type: "message",
-        id: msg.id,
-        message: msg.message,
-        createdAt: msg.createdAt ?? Date.now(),
-        isSummary: msg.isSummary ?? false,
-        originalContent: msg.originalContent,
-      });
-    }
-
-    const summaryMessageId = snapshot.compactionState?.summaryMessageId;
-
-    if (summaryMessageId) {
-      await this.sessionStore.updateCheckpoint(sessionId, summaryMessageId);
-    }
+    await this.sessionStore.replaceSessionSnapshot(sessionId, snapshot);
   }
 
   async delete(sessionId: string): Promise<void> {

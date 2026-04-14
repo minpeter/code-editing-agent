@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai";
+import type { HistorySnapshot } from "./history-snapshot";
 import type { MicroCompactOptions } from "./micro-compact";
 
 // Forward declaration types for messages that reference Message
@@ -369,7 +370,17 @@ export interface CheckpointLine {
   updatedAt: number;
 }
 
-export type SessionFileLine = SessionHeaderLine | MessageLine | CheckpointLine;
+export interface SnapshotLine {
+  snapshot: HistorySnapshot;
+  type: "snapshot";
+  updatedAt: number;
+}
+
+export type SessionFileLine =
+  | SessionHeaderLine
+  | MessageLine
+  | CheckpointLine
+  | SnapshotLine;
 
 // --- Compaction Summary and Segments ---
 
