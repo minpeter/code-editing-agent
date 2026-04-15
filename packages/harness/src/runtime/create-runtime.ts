@@ -1,5 +1,6 @@
 import { createAgent } from "../agent";
 import { CheckpointHistory } from "../checkpoint-history";
+import { createModelSummarizer } from "../compaction-prompts";
 import { SessionManager } from "../session";
 import { SkillsEngine } from "../skills";
 import type { Agent } from "../types";
@@ -93,13 +94,25 @@ export async function createAgentRuntime<
       agentName
     );
     const historyOptions = definition.history;
+    const compaction = historyOptions?.compaction;
+    const needsSummarizer = compaction?.enabled && !compaction.summarizeFn;
+    const resolvedHistoryOptions =
+      needsSummarizer && compaction
+        ? {
+            ...historyOptions,
+            compaction: {
+              ...compaction,
+              summarizeFn: createModelSummarizer(runtimeAgent.config.model),
+            },
+          }
+        : historyOptions;
     const history = snapshotStore
       ? await CheckpointHistory.fromSnapshot(
           snapshotStore,
           sessionId,
-          historyOptions
+          resolvedHistoryOptions
         )
-      : new CheckpointHistory(historyOptions);
+      : new CheckpointHistory(resolvedHistoryOptions);
     const skills = definition.skills
       ? await new SkillsEngine(definition.skills).loadAllSkills()
       : [];

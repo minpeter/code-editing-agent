@@ -85,6 +85,63 @@ describe("createAgentRuntime", () => {
     vi.clearAllMocks();
   });
 
+  it("auto-injects summarizeFn when compaction is enabled without one", async () => {
+    const def = defineAgent({
+      name: "bot",
+      agent: { model: mockModel, instructions: "hi" },
+      history: {
+        compaction: { enabled: true, contextLimit: 10_000 },
+      },
+    });
+    const runtime = await createAgentRuntime({
+      name: "test",
+      agents: [def] as const,
+    });
+    const session = await runtime.openSession();
+    const config = session.history.getCompactionConfig();
+    expect(config.enabled).toBe(true);
+    expect(config.summarizeFn).toBeTypeOf("function");
+  });
+
+  it("preserves user-provided summarizeFn when compaction is enabled", async () => {
+    const customFn = vi.fn().mockResolvedValue("summary");
+    const def = defineAgent({
+      name: "bot",
+      agent: { model: mockModel, instructions: "hi" },
+      history: {
+        compaction: {
+          enabled: true,
+          contextLimit: 10_000,
+          summarizeFn: customFn,
+        },
+      },
+    });
+    const runtime = await createAgentRuntime({
+      name: "test",
+      agents: [def] as const,
+    });
+    const session = await runtime.openSession();
+    const config = session.history.getCompactionConfig();
+    expect(config.summarizeFn).toBe(customFn);
+  });
+
+  it("does not inject summarizeFn when compaction is disabled", async () => {
+    const def = defineAgent({
+      name: "bot",
+      agent: { model: mockModel, instructions: "hi" },
+      history: {
+        compaction: { enabled: false },
+      },
+    });
+    const runtime = await createAgentRuntime({
+      name: "test",
+      agents: [def] as const,
+    });
+    const session = await runtime.openSession();
+    const config = session.history.getCompactionConfig();
+    expect(config.summarizeFn).toBeUndefined();
+  });
+
   it("openSession creates session with correct agentName and non-empty sessionId", async () => {
     const def = defineAgent({
       name: "bot",
