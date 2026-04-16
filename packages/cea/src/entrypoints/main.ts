@@ -122,7 +122,7 @@ const buildModelSelectorLabel = (
 };
 
 const buildModelSelectorDescription = (model: ModelInfo): string => {
-  const providerLabel = "Anthropic";
+  const providerLabel = "OpenAI-compatible";
 
   if (model.name?.trim()) {
     return `${model.name} • ${providerLabel}`;
@@ -707,9 +707,6 @@ const mainCommand = defineCommand({
     await replaceCurrentSessionHistory(sessionManager.getId());
 
     const config = resolveSharedConfig(args as SharedArgs);
-    if (config.provider) {
-      agentManager.setProvider(config.provider);
-    }
     if (config.model) {
       agentManager.setModelId(config.model);
     }
@@ -1066,7 +1063,6 @@ const mainCommand = defineCommand({
     const showModelSelector = async (
       models: ModelInfo[],
       currentModelId: string,
-      currentProvider: ModelInfo["provider"],
       hooks: CommandPreprocessHooks,
       initialFilter = ""
     ): Promise<ModelInfo | null> => {
@@ -1078,8 +1074,7 @@ const mainCommand = defineCommand({
       searchInput.setValue(initialFilter);
 
       const items: SelectItem[] = models.map((model, index) => {
-        const isCurrent =
-          model.id === currentModelId && model.provider === currentProvider;
+        const isCurrent = model.id === currentModelId;
         return {
           value: String(index),
           label: buildModelSelectorLabel(model, isCurrent),
@@ -1114,9 +1109,7 @@ const mainCommand = defineCommand({
       if (!initialFilter) {
         const currentIndex = items.findIndex((_item, i) => {
           const model = models[i];
-          return (
-            model.id === currentModelId && model.provider === currentProvider
-          );
+          return model.id === currentModelId;
         });
         if (currentIndex >= 0) {
           selectList.setSelectedIndex(currentIndex);
@@ -1193,7 +1186,6 @@ const mainCommand = defineCommand({
       const selectedModel = await showModelSelector(
         models,
         agentManager.getModelId(),
-        agentManager.getProvider(),
         hooks,
         searchTerm
       );
@@ -1335,8 +1327,7 @@ const mainCommand = defineCommand({
         header: {
           title: "Code Editing Agent",
           get subtitle() {
-            const modelInfo = `${agentManager.getProvider()}/${agentManager.getModelId()}`;
-            return `${modelInfo}\nSession: ${sessionManager.getId()}`;
+            return `${agentManager.getModelId()}\nSession: ${sessionManager.getId()}`;
           },
         },
         theme: {

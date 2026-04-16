@@ -1,25 +1,15 @@
 import type { Command, CommandResult } from "@ai-sdk-tool/harness";
-import type { ProviderType } from "../agent";
-import { ANTHROPIC_MODELS, agentManager } from "../agent";
+import { agentManager } from "../agent";
 import { colorize } from "../interaction/colors";
 
 export interface ModelInfo {
   id: string;
   name?: string;
-  provider: ProviderType;
   type?: "serverless" | "dedicated";
 }
 
-function getAnthropicModels(): ModelInfo[] {
-  return ANTHROPIC_MODELS.map((m) => ({
-    id: m.id,
-    name: m.name,
-    provider: "anthropic" as const,
-  }));
-}
-
 export function getAvailableModels(): ModelInfo[] {
-  return getAnthropicModels();
+  return [];
 }
 
 export function findModelBySelection(
@@ -36,95 +26,52 @@ export function findModelBySelection(
     return models[selectedIndex];
   }
 
-  return models.find((m) => m.id === selection);
+  return models.find((model) => model.id === selection);
 }
 
-const getProviderLabel = (provider: ProviderType): string => {
-  return provider === "anthropic" ? "Anthropic" : provider;
-};
-
 export const applyModelSelection = (
-  selectedModel: ModelInfo
+  selectedModel: ModelInfo | string
 ): CommandResult => {
-  const currentModelId = agentManager.getModelId();
-  const currentProvider = agentManager.getProvider();
+  const nextModelId =
+    typeof selectedModel === "string" ? selectedModel : selectedModel.id;
 
-  if (
-    selectedModel.id === currentModelId &&
-    selectedModel.provider === currentProvider
-  ) {
+  if (nextModelId === agentManager.getModelId()) {
     return {
       success: true,
-      message: `Already using model: ${selectedModel.id}`,
+      message: `Already using model: ${nextModelId}`,
     };
   }
 
-  if (selectedModel.provider !== currentProvider) {
-    agentManager.setProvider(selectedModel.provider);
-  }
-
-  agentManager.setModelId(selectedModel.id);
-  if (selectedModel.type) {
+  agentManager.setModelId(nextModelId);
+  if (typeof selectedModel !== "string" && selectedModel.type) {
     agentManager.setModelType(selectedModel.type);
   }
 
-  const providerLabel = getProviderLabel(selectedModel.provider);
   return {
     success: true,
-    message: colorize(
-      "green",
-      `Model changed to: ${selectedModel.id} (${providerLabel})`
-    ),
+    message: colorize("green", `Model changed to: ${nextModelId}`),
   };
 };
 
-function formatModelList(
-  models: ModelInfo[],
-  currentModelId: string,
-  currentProvider: ProviderType
-): string {
-  const lines = models.map((model, index) => {
-    const isCurrent =
-      model.id === currentModelId && model.provider === currentProvider;
-    const marker = isCurrent ? colorize("green", " (current)") : "";
-    const providerLabel = colorize("magenta", " [Anthropic]");
-    const nameLabel = model.name ? ` - ${model.name}` : "";
-    return `  ${index + 1}. ${model.id}${nameLabel}${providerLabel}${marker}`;
-  });
-
-  return `Available models:\n${lines.join("\n")}\n\nUsage: /model <number> to select`;
-}
-
 export const createModelCommand = (): Command => ({
   name: "model",
-  description: "List or change the AI model",
+  description: "Show or change the AI model",
   execute: ({ args }): CommandResult => {
-    const models = getAvailableModels();
-
-    if (models.length === 0) {
-      return { success: false, message: "No models available." };
-    }
-
-    const currentModelId = agentManager.getModelId();
-    const currentProvider = agentManager.getProvider();
-
     if (args.length === 0) {
       return {
         success: true,
-        message: formatModelList(models, currentModelId, currentProvider),
+        message: `Current model: ${agentManager.getModelId()}\nUsage: /model <model-id>`,
       };
     }
 
-    const selection = args[0];
-    const selectedModel = findModelBySelection(selection, models);
-
-    if (!selectedModel) {
+    const selection = args.join(" ").trim();
+    if (!selection) {
       return {
         success: false,
-        message: `Invalid selection: ${selection}`,
+        message: "Usage: /model <model-id>",
       };
     }
 
-    return applyModelSelection(selectedModel);
+    return applyModelSelection(selection);
   },
 });

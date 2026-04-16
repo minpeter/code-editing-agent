@@ -18,7 +18,7 @@ const provider = createOpenAICompatible({
   baseURL: env.AI_BASE_URL,
   apiKey: env.AI_API_KEY,
 });
-const model = provider.chatModel(env.AI_MODEL_ID);
+const model = provider.chatModel(env.AI_MODEL);
 const snapshotStore = new FileSnapshotStore(env.SESSION_DIR);
 const summarize = createModelSummarizer(model);
 const threadTrackers = new Map<string, SessionMemoryTracker>();
@@ -56,10 +56,19 @@ function historyConfig(threadId: string) {
   return {
     compaction: {
       enabled: true,
-      contextLimit: 100_000,
-      keepRecentTokens: 30_000,
-      reserveTokens: 20_000,
-      maxTokens: 50_000,
+      contextLimit: env.AI_CONTEXT_LIMIT,
+      keepRecentTokens: Math.min(
+        30_000,
+        Math.max(4096, Math.floor(env.AI_CONTEXT_LIMIT * 0.3))
+      ),
+      reserveTokens: Math.min(
+        20_000,
+        Math.max(2048, Math.floor(env.AI_CONTEXT_LIMIT * 0.2))
+      ),
+      maxTokens: Math.min(
+        50_000,
+        Math.max(8192, Math.floor(env.AI_CONTEXT_LIMIT * 0.5))
+      ),
       thresholdRatio: 0.65,
       speculativeStartRatio: 0.8,
       getStructuredState: tracker.getStructuredState.bind(tracker),

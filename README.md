@@ -40,12 +40,16 @@ No framework overhead. No abstraction tax. Just the interface between model and 
 
 - Node.js >= 22
 - pnpm >= 10
-- An [Anthropic](https://www.anthropic.com/) API key
+- An API key for your chosen AI gateway/provider
 
 ### Run directly
 
 ```bash
-export ANTHROPIC_API_KEY=your_api_key_here
+export AI_API_KEY=your_api_key_here
+# Optional shared overrides
+export AI_BASE_URL=https://your-openai-compatible-endpoint.example/v1
+export AI_MODEL=your-model-id
+export AI_CONTEXT_LIMIT=128000
 pnpm dlx plugsuits
 ```
 
@@ -57,6 +61,19 @@ cd plugsuits
 pnpm install
 pnpm dev
 ```
+
+### Shared AI configuration
+
+`packages/cea` and `packages/tgbot` now use the same minimal-agent-style AI
+configuration surface:
+
+- `AI_API_KEY` — required credential for the configured model gateway/provider
+- `AI_BASE_URL` — optional OpenAI-compatible base URL override
+- `AI_MODEL` — optional model ID override
+- `AI_CONTEXT_LIMIT` — optional context window override for compaction-aware runtimes
+
+`packages/tgbot` still requires its Telegram- and Redis-specific settings in
+addition to the shared `AI_*` variables above.
 
 ## Usage
 
@@ -105,15 +122,18 @@ plugsuits/
 │   ├── headless/             @ai-sdk-tool/headless
 │   │   └── src/              ATIF JSONL runner and trajectory persistence
 │   │
-│   └── cea/                  @ai-sdk-tool/cea
-│       ├── src/
-│       │   ├── entrypoints/  CLI/bootstrap wiring for interactive + headless runs
-│       │   ├── tools/
-│       │   │   ├── modify/   edit_file (hashline engine), write_file, delete_file
-│       │   │   ├── explore/  read_file, grep, glob
-│       │   │   └── execute/  shell_execute, shell_interact
-│       │   └── interaction/  CEA-specific interaction/rendering adapters
-│       └── benchmark/        Harbor terminal-bench adapter
+│   ├── cea/                  @ai-sdk-tool/cea
+│   │   ├── src/
+│   │   │   ├── entrypoints/  CLI/bootstrap wiring for interactive + headless runs
+│   │   │   ├── tools/
+│   │   │   │   ├── modify/   edit_file (hashline engine), write_file, delete_file
+│   │   │   │   ├── explore/  read_file, grep, glob
+│   │   │   │   └── execute/  shell_execute, shell_interact
+│   │   │   └── interaction/  CEA-specific interaction/rendering adapters
+│   │   └── benchmark/        Harbor terminal-bench adapter
+│   │
+│   └── tgbot/                @plugsuits/tgbot
+│       └── src/              Telegram bot runtime sharing the AI_* config surface
 │
 └── scripts/                  Benchmark and test automation
 ```
@@ -125,7 +145,8 @@ plugsuits/
 | [`@ai-sdk-tool/harness`](./packages/harness) | Reusable agent harness — model-agnostic loop, tool management, message history |
 | [`@ai-sdk-tool/tui`](./packages/tui) | Interactive terminal UI runtime and stream rendering primitives |
 | [`@ai-sdk-tool/headless`](./packages/headless) | ATIF JSONL runner and persisted trajectory generation for automation |
-| [`@ai-sdk-tool/cea`](./packages/cea) | Code editing agent — full implementation with TUI, tools, and Anthropic integration |
+| [`@ai-sdk-tool/cea`](./packages/cea) | Code editing agent — full implementation with TUI, tools, and shared AI_* configuration |
+| [`@plugsuits/tgbot`](./packages/tgbot) | Telegram bot runtime sharing the same minimal-agent-style AI_* configuration surface |
 
 ## Development
 
@@ -163,7 +184,7 @@ Both the TUI footer and the compaction engine will reflect the overridden limit.
 ## Built With
 
 - [Vercel AI SDK](https://sdk.vercel.ai) — Model provider abstraction and streaming
-- [Anthropic](https://www.anthropic.com/) — Default model provider
+- OpenAI-compatible gateways/providers via shared `AI_*` runtime configuration
 - [pnpm](https://pnpm.io) — Workspace package manager
 - [Turborepo](https://turbo.build/repo) — Task orchestration and caching
 - [TypeScript](https://www.typescriptlang.org) — Strict mode throughout
