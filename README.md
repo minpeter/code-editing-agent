@@ -96,7 +96,6 @@ Available commands:
   /model      Switch AI models
   /reasoning  Toggle reasoning mode
   /translate  Toggle translation mode
-  /render     Render raw prompt
   /quit       Exit
 ```
 
