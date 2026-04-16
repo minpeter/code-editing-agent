@@ -592,6 +592,44 @@ describe("runHeadless", () => {
     );
   });
 
+  it("preserves caller aborts when onBeforeTurn also supplies an abort signal", async () => {
+    const events: TrajectoryEvent[] = [];
+    const controller = new AbortController();
+    const overrideController = new AbortController();
+    let receivedAbortSignal: AbortSignal | undefined;
+
+    await runHeadless({
+      agent: {
+        stream: (options) => {
+          receivedAbortSignal = options.abortSignal;
+          controller.abort();
+          expect(receivedAbortSignal?.aborted).toBe(true);
+
+          throw new Error("Aborted by caller");
+        },
+      },
+      abortSignal: controller.signal,
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: {
+        content: "abort me too",
+      },
+      messageHistory: new CheckpointHistory(),
+      modelId: "mock-model",
+      onBeforeTurn: () => ({
+        abortSignal: overrideController.signal,
+      }),
+      sessionId: "session-abort-merged-signal",
+    });
+
+    expect(events.filter((event) => event.type === "interrupt")).toContainEqual(
+      expect.objectContaining({
+        reason: "caller-abort",
+      })
+    );
+  });
+
   it("uses maxTodoReminders instead of the legacy hardcoded reminder cap", async () => {
     const events: TrajectoryEvent[] = [];
 
@@ -856,5 +894,37 @@ describe("runHeadless", () => {
         messages: [{ role: "system", content: "override" }],
       })
     );
+  });
+
+  it("merges caller and onBeforeTurn abort signals before streaming", async () => {
+    const callerAbortController = new AbortController();
+    const overrideAbortController = new AbortController();
+    let capturedAbortSignal: AbortSignal | undefined;
+
+    await runHeadless({
+      agent: {
+        stream: ({ abortSignal }) => {
+          capturedAbortSignal = abortSignal;
+          return createMockStream([{ role: "assistant", content: "done" }]);
+        },
+      },
+      abortSignal: callerAbortController.signal,
+      initialUserMessage: {
+        content: "initial",
+      },
+      messageHistory: new CheckpointHistory(),
+      modelId: "mock-model",
+      onBeforeTurn: () => ({
+        abortSignal: overrideAbortController.signal,
+      }),
+      sessionId: "session-on-before-turn-abort-signal-merge",
+    });
+
+    expect(capturedAbortSignal).toBeDefined();
+    expect(capturedAbortSignal).not.toBe(callerAbortController.signal);
+    expect(capturedAbortSignal).not.toBe(overrideAbortController.signal);
+
+    callerAbortController.abort();
+    expect(capturedAbortSignal?.aborted).toBe(true);
   });
 });

@@ -66,8 +66,8 @@ interface ScenarioResult {
   exitCode: number | null;
   maxTokensUsed: number;
   metricsPath: string;
-  timedOut: boolean;
   outputLogPath: string;
+  timedOut: boolean;
 }
 
 interface SpawnResult {

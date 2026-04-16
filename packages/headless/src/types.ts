@@ -157,11 +157,11 @@ export interface HeadlessRunnerConfig {
   onBeforeTurn?: (
     phase: "new-turn" | "intermediate-step"
   ) => BeforeTurnResult | Promise<BeforeTurnResult | undefined> | undefined;
+  onInterrupt?: (event: InterruptEvent) => Promise<void> | void;
   onTodoReminder?: () => Promise<{
     hasReminder: boolean;
     message: string | null;
   }>;
-  onInterrupt?: (event: InterruptEvent) => Promise<void> | void;
   onTurnComplete?: (
     messages: import("@ai-sdk-tool/harness").CheckpointMessage[],
     usage?: {

@@ -525,15 +525,20 @@ export function mergeAgentStreamOptions(params: {
       temperature?: BeforeTurnResult["temperature"];
     } {
   const { abortSignal, maxOutputTokens, messages, turnOverrides } = params;
+  const {
+    abortSignal: overrideAbortSignal,
+    messages: overrideMessages,
+    ...restTurnOverrides
+  } = turnOverrides ?? {};
 
   return {
-    messages: turnOverrides?.messages ?? messages,
-    abortSignal:
-      abortSignal && turnOverrides?.abortSignal
-        ? AbortSignal.any([abortSignal, turnOverrides.abortSignal])
-        : (turnOverrides?.abortSignal ?? abortSignal),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-    ...turnOverrides,
+    ...restTurnOverrides,
+    messages: overrideMessages ?? messages,
+    abortSignal:
+      abortSignal && overrideAbortSignal
+        ? AbortSignal.any([abortSignal, overrideAbortSignal])
+        : (overrideAbortSignal ?? abortSignal),
   };
 }
 

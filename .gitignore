@@ -17,3 +17,4 @@ work/
 
 # IDE config (may contain tokens)
 *pencode.json
+.omx/

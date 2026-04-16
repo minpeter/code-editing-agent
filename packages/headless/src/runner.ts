@@ -70,12 +70,17 @@ function buildTurnStreamOptions(params: {
   turnOverrides?: HeadlessTurnOverrides;
 }) {
   const { abortSignal, maxOutputTokens, messages, turnOverrides } = params;
+  const {
+    abortSignal: overrideAbortSignal,
+    messages: overrideMessages,
+    ...restTurnOverrides
+  } = turnOverrides ?? {};
 
   return {
-    messages: turnOverrides?.messages ?? messages,
-    abortSignal: mergeAbortSignals(abortSignal, turnOverrides?.abortSignal),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-    ...turnOverrides,
+    ...restTurnOverrides,
+    messages: overrideMessages ?? messages,
+    abortSignal: mergeAbortSignals(abortSignal, overrideAbortSignal),
   };
 }
 
@@ -647,15 +652,26 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
 
       try {
         const turnOverrides = await config.onBeforeTurn?.(phase);
+        const streamOptions = buildTurnStreamOptions({
+          abortSignal: config.abortSignal,
+          maxOutputTokens: streamMaxOutputTokens,
+          messages: streamMessages,
+          turnOverrides,
+        });
+
+        if (streamOptions.abortSignal?.aborted) {
+          const interruptEvent = createInterruptEvent();
+          emitAndCollect(interruptEvent);
+          await config.onInterrupt?.(interruptEvent);
+          return {
+            pendingMessages,
+            shouldContinue: false,
+            usage: undefined,
+          };
+        }
+
         const streamPromise = Promise.resolve(
-          config.agent.stream(
-            buildTurnStreamOptions({
-              abortSignal: config.abortSignal,
-              maxOutputTokens: streamMaxOutputTokens,
-              messages: streamMessages,
-              turnOverrides,
-            })
-          )
+          config.agent.stream(streamOptions)
         );
         let raceTimeoutId: ReturnType<typeof setTimeout> | undefined;
         const stream = await Promise.race([
@@ -671,7 +687,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
               );
             }, streamTimeoutMs);
 
-            config.abortSignal?.addEventListener(
+            streamOptions.abortSignal?.addEventListener(
               "abort",
               () => {
                 if (raceTimeoutId !== undefined) {

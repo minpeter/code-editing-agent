@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { TrajectoryCollector } from "../trajectory-collector";
 import type {
-  ApprovalEvent,
   AgentStepEvent,
+  ApprovalEvent,
   CompactionEvent,
   ErrorEvent,
   InterruptEvent,

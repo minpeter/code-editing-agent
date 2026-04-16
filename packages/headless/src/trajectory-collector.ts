@@ -136,6 +136,11 @@ export class TrajectoryCollector {
   }
 
   private toAtifStep(event: StepEvent): AtifStep {
+    if (event.source !== "agent") {
+      const { type: _type, ...rest } = event;
+      return rest;
+    }
+
     const { type: _type, metrics, ...rest } = event;
     const hasMetrics =
       metrics !== undefined &&

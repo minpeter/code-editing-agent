@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { CheckpointHistory } from "../checkpoint-history";
-import { runAgentLoop } from "../loop";
 import type { Command } from "../commands";
+import { runAgentLoop } from "../loop";
+import type { SessionManager } from "../session";
 import type { SkillInfo } from "../skills";
 import type { SnapshotStore } from "../snapshot-store";
-import type { SessionManager } from "../session";
-import type { AgentConfig, Agent, RunnableAgent } from "../types";
+import type { Agent, AgentConfig, RunnableAgent } from "../types";
 import type {
   AgentHistoryConfig,
   AgentSession,
@@ -20,20 +20,20 @@ import type {
 
 export interface CreateAgentSessionParams<TAgentName extends string, TContext> {
   agentName: TAgentName;
-  sessionId: string;
-  context: TContext;
-  history: CheckpointHistory;
-  runtimeAgent: RunnableAgent;
-  commands: Command[];
-  skills: SkillInfo[];
-  definition: DefinedAgent<TContext>;
-  snapshotStore?: SnapshotStore;
-  autoSave: boolean;
-  sessionManager?: SessionManager;
-  historyDefaults?: AgentHistoryConfig;
   appName: string;
-  cwd: string;
+  autoSave: boolean;
   buildAgent: (agentConfig: AgentConfig) => Promise<RunnableAgent>;
+  commands: Command[];
+  context: TContext;
+  cwd: string;
+  definition: DefinedAgent<TContext>;
+  history: CheckpointHistory;
+  historyDefaults?: AgentHistoryConfig;
+  runtimeAgent: RunnableAgent;
+  sessionId: string;
+  sessionManager?: SessionManager;
+  skills: SkillInfo[];
+  snapshotStore?: SnapshotStore;
 }
 
 function isAgent(value: RunnableAgent): value is Agent {

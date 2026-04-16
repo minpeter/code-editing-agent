@@ -4,11 +4,11 @@
  */
 
 import { AgentError, AgentErrorCode } from "./errors";
-import { getToolLifecycleState } from "./tool-stream-parts";
 import {
   composeStopPredicates,
   shouldContinueManualToolLoop,
 } from "./tool-loop-control";
+import { getToolLifecycleState } from "./tool-stream-parts";
 import type {
   AgentFinishReason,
   AgentStreamOptions,

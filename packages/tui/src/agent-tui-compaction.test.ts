@@ -367,11 +367,14 @@ describe("agent-tui compaction core", () => {
   });
 
   it("merges full onBeforeTurn stream overrides for TUI turns", () => {
+    const tuiAbortController = new AbortController();
+    const overrideAbortController = new AbortController();
     const merged = mergeAgentStreamOptions({
-      abortSignal: new AbortController().signal,
+      abortSignal: tuiAbortController.signal,
       maxOutputTokens: 128,
       messages: [{ role: "user", content: "base" }],
       turnOverrides: {
+        abortSignal: overrideAbortController.signal,
         experimentalContext: { sessionId: "ses_123" },
         maxOutputTokens: 64,
         messages: [{ role: "system", content: "override" }],
@@ -394,5 +397,30 @@ describe("agent-tui compaction core", () => {
       })
     );
     expect(merged.abortSignal).toBeDefined();
+    expect(merged.abortSignal).not.toBe(tuiAbortController.signal);
+    expect(merged.abortSignal).not.toBe(overrideAbortController.signal);
+
+    overrideAbortController.abort();
+    expect(merged.abortSignal?.aborted).toBe(true);
+  });
+
+  it("preserves the base abort signal when turn overrides also supply one", () => {
+    const tuiAbortController = new AbortController();
+    const overrideAbortController = new AbortController();
+    const merged = mergeAgentStreamOptions({
+      abortSignal: tuiAbortController.signal,
+      messages: [{ role: "user", content: "base" }],
+      turnOverrides: {
+        abortSignal: overrideAbortController.signal,
+        messages: [{ role: "system", content: "override" }],
+      },
+    });
+
+    expect(merged.abortSignal).toBeDefined();
+    expect(merged.abortSignal?.aborted).toBe(false);
+
+    tuiAbortController.abort();
+
+    expect(merged.abortSignal?.aborted).toBe(true);
   });
 });

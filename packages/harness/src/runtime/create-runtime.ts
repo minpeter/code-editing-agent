@@ -9,8 +9,8 @@ import type {
   AgentRuntime,
   AgentRuntimeConfig,
   AgentSession,
-  DefinedAgent,
   DefineAgentContext,
+  DefinedAgent,
 } from "./types";
 
 function assertAgentDefinition<TContext>(

@@ -6,8 +6,8 @@ import {
   getToolInputId as sharedGetToolInputId,
 } from "@ai-sdk-tool/harness";
 import type {
-  ApprovalEvent,
   AgentStepEvent,
+  ApprovalEvent,
   ErrorEvent,
   ObservationResult,
   StepMetrics,

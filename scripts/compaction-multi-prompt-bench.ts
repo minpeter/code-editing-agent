@@ -161,10 +161,10 @@ interface RunResult {
   failureClass: string;
   maxTokensUsed: number;
   metricsPath: string;
+  outputLogPath: string;
   probeMax: number;
   promptId: string;
   timedOut: boolean;
-  outputLogPath: string;
   turnCount: number;
 }
 

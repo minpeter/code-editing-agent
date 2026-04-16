@@ -1,6 +1,6 @@
 import type { AgentSession } from "@ai-sdk-tool/harness/runtime";
 
-import { createAgentTUI, type AgentTUIConfig } from "./agent-tui";
+import { type AgentTUIConfig, createAgentTUI } from "./agent-tui";
 
 export type SessionTUIOptions = Omit<
   AgentTUIConfig,

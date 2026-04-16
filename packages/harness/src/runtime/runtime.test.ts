@@ -1,6 +1,6 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { defineAgent, isDefinedAgent, createAgentRuntime } from "./index";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemorySnapshotStore } from "../snapshot-store";
+import { createAgentRuntime, defineAgent, isDefinedAgent } from "./index";
 
 function* emptyStream() {
   yield* [];

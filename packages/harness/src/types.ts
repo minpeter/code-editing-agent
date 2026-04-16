@@ -169,12 +169,12 @@ export interface LoopHooks {
     context: LoopContinueContext
   ) => BeforeTurnResult | Promise<BeforeTurnResult | undefined> | undefined;
   onStepComplete?: (step: LoopStepInfo) => void | Promise<void>;
-  onToolLifecycle?: (
-    lifecycle: ToolLifecycleState,
-    context: LoopContinueContext
-  ) => void | Promise<void>;
   onToolCall?: (
     call: ToolCallPart,
+    context: LoopContinueContext
+  ) => void | Promise<void>;
+  onToolLifecycle?: (
+    lifecycle: ToolLifecycleState,
     context: LoopContinueContext
   ) => void | Promise<void>;
   shouldContinue?:

@@ -65,6 +65,7 @@ interface ReliabilityRow {
   failureClass: string;
   finalAssistantText: string;
   modelId: string;
+  outputLogPath: string;
   promptHash: string;
   provider: string;
   repoSha: string;
@@ -73,7 +74,6 @@ interface ReliabilityRow {
   scenarioId: ScenarioId;
   timedOut: boolean;
   toolCallCount: number;
-  outputLogPath: string;
 }
 
 interface HarnessConfig {
