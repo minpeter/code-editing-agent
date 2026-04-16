@@ -164,15 +164,15 @@ importers:
       '@ai-sdk-tool/tui':
         specifier: workspace:*
         version: link:../tui
+      '@ai-sdk/openai-compatible':
+        specifier: ^2.0.35
+        version: 2.0.35(zod@4.3.6)
       '@t3-oss/env-core':
         specifier: ^0.13.10
         version: 0.13.10(typescript@5.9.3)(zod@4.3.6)
       ai:
         specifier: ^6.0.116
         version: 6.0.116(zod@4.3.6)
-      citty:
-        specifier: ^0.2.1
-        version: 0.2.1
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -183,6 +183,9 @@ importers:
       '@types/node':
         specifier: ^25.4.0
         version: 25.4.0
+      citty:
+        specifier: ^0.2.1
+        version: 0.2.1
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

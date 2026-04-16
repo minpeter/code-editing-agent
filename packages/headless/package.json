@@ -9,6 +9,11 @@
       "@ai-sdk-tool/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./session": {
+      "@ai-sdk-tool/source": "./src/session-headless.ts",
+      "types": "./dist/session-headless.d.ts",
+      "import": "./dist/session-headless.js"
     }
   },
   "files": [

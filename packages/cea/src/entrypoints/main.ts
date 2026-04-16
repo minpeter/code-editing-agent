@@ -10,6 +10,8 @@ import {
   type CompactionResult,
   estimateTokens,
   estimateToolSchemasTokens,
+  FileMemoryStore,
+  FileSnapshotStore,
   formatContextUsage,
   MCPManager,
   mergeMCPTools,
@@ -17,7 +19,6 @@ import {
   parseCommand,
   type RunnableAgent,
   SessionManager,
-  SessionStore,
   shouldContinueManualToolLoop,
 } from "@ai-sdk-tool/harness";
 import { emitEvent, runHeadless } from "@ai-sdk-tool/headless";
@@ -106,18 +107,6 @@ const style = (prefix: string, text: string): string => {
   return `${prefix}${text}${ANSI_RESET}`;
 };
 
-const createSessionScopedCheckpointHistory = (
-  sessionBaseDir: string,
-  initialSessionId: string
-): CheckpointHistory => {
-  mkdirSync(sessionBaseDir, { recursive: true });
-  const sessionStore = new SessionStore(sessionBaseDir);
-  return new CheckpointHistory({
-    sessionId: initialSessionId,
-    sessionStore,
-  });
-};
-
 const buildCurrentIndicatorLabel = (
   label: string,
   isCurrent: boolean
@@ -183,13 +172,15 @@ if (!sessionManagerScope.__ceaSessionManager) {
 }
 const sessionManager = sessionManagerScope.__ceaSessionManager;
 const sessionStoreBaseDir = join(process.cwd(), ".plugsuits", "sessions");
+mkdirSync(sessionStoreBaseDir, { recursive: true });
+const store = new FileSnapshotStore(sessionStoreBaseDir);
 const resolveSessionMemoryStorePath = (sessionId: string): string => {
   return join(sessionStoreBaseDir, sessionId, "session-memory.md");
 };
-const messageHistory = createSessionScopedCheckpointHistory(
-  sessionStoreBaseDir,
-  "session-bootstrap"
-);
+const createSessionMemoryStore = (sessionId: string): FileMemoryStore => {
+  return new FileMemoryStore(resolveSessionMemoryStorePath(sessionId));
+};
+let messageHistory: CheckpointHistory;
 const compactionCircuitBreaker = new CompactionCircuitBreaker();
 const postCompactRestorer = new PostCompactRestorer();
 const unregisterSkillLoadListener = registerSkillLoadListener((skill) => {
@@ -369,7 +360,9 @@ registerCommand(createClearCommand());
 registerCommand(createReasoningModeCommand());
 registerCommand(createToolFallbackCommand());
 registerCommand(createTranslateCommand());
-registerCommand(createCompactCommand({ messageHistory }));
+registerCommand(
+  createCompactCommand({ getMessageHistory: () => messageHistory })
+);
 
 const createTranslationPreprocessor = () => {
   return async (
@@ -412,7 +405,12 @@ const buildAgentStreamWithTodoContinuation = (): RunnableAgent => {
     stream: async (opts) => {
       const stream = await agentManager.stream(opts.messages, {
         abortSignal: opts.abortSignal,
+        experimentalContext: opts.experimentalContext,
         maxOutputTokens: opts.maxOutputTokens,
+        providerOptions: opts.providerOptions,
+        seed: opts.seed,
+        system: opts.system,
+        temperature: opts.temperature,
       });
 
       const continuationDecision = (async (): Promise<{
@@ -498,13 +496,45 @@ const updateCompactionForCurrentModel = async (): Promise<void> => {
   );
 };
 
-const applyCurrentSessionToRuntime = (): void => {
-  const sessionId = sessionManager.getId();
-  messageHistory.resetForSession(sessionId);
-  agentManager.setSessionMemoryStorePath(
+const loadHistoryForSession = async (
+  sessionId: string
+): Promise<CheckpointHistory> => {
+  agentManager.setMemoryStore(
+    createSessionMemoryStore(sessionId),
     resolveSessionMemoryStorePath(sessionId)
   );
-  agentManager.setActiveSessionId(sessionId);
+  return await CheckpointHistory.fromSnapshot(store, sessionId, {
+    compaction: agentManager.buildCompactionConfig(),
+    pruning: agentManager.buildPruningConfig(),
+  });
+};
+
+const replaceCurrentSessionHistory = async (
+  sessionId: string
+): Promise<void> => {
+  const restored = await loadHistoryForSession(sessionId);
+  messageHistory.resetForSession(sessionId);
+  messageHistory.restoreFromSnapshot(restored.snapshot());
+};
+
+const saveCurrentSessionSnapshot = async (
+  sessionId: string = sessionManager.getId()
+): Promise<void> => {
+  if (!messageHistory) {
+    return;
+  }
+
+  await store.save(sessionId, messageHistory.snapshot());
+};
+
+const applyCurrentSessionToRuntime = async (options?: {
+  persistCurrentHistory?: boolean;
+}): Promise<void> => {
+  if (options?.persistCurrentHistory !== false) {
+    await saveCurrentSessionSnapshot();
+  }
+  await replaceCurrentSessionHistory(sessionManager.getId());
+  await updateCompactionForCurrentModel();
 };
 
 const wrapCommand = (
@@ -669,7 +699,12 @@ const mainCommand = defineCommand({
     await initializeMCPTools();
     setSpinnerOutputEnabled(false);
     sessionManager.initialize();
-    applyCurrentSessionToRuntime();
+    messageHistory = new CheckpointHistory({
+      sessionId: sessionManager.getId(),
+      compaction: agentManager.buildCompactionConfig(),
+      pruning: agentManager.buildPruningConfig(),
+    });
+    await replaceCurrentSessionHistory(sessionManager.getId());
 
     const config = resolveSharedConfig(args as SharedArgs);
     if (config.provider) {
@@ -720,7 +755,12 @@ const mainCommand = defineCommand({
           agent: {
             stream: (opts) =>
               agentManager.stream(opts.messages, {
+                experimentalContext: opts.experimentalContext,
                 maxOutputTokens: opts.maxOutputTokens,
+                providerOptions: opts.providerOptions,
+                seed: opts.seed,
+                system: opts.system,
+                temperature: opts.temperature,
               }),
           },
           circuitBreaker: compactionCircuitBreaker,
@@ -744,6 +784,7 @@ const mainCommand = defineCommand({
             agentManager._memoryExtractor
               ?.onTurnComplete(messages, usage)
               .catch(() => undefined);
+            return saveCurrentSessionSnapshot().catch(() => undefined);
           },
           onTodoReminder: async () => {
             const incompleteTodos = await getIncompleteTodos();
@@ -1311,15 +1352,19 @@ const mainCommand = defineCommand({
           agentManager._memoryExtractor
             ?.onTurnComplete(messages, usage)
             .catch(() => undefined);
+          return saveCurrentSessionSnapshot().catch(() => undefined);
         },
         onCommandAction: async (action) => {
           if (action.type === "new-session") {
+            const previousSessionId = sessionManager.getId();
+            await saveCurrentSessionSnapshot(previousSessionId);
             sessionManager.initialize();
-            applyCurrentSessionToRuntime();
+            await applyCurrentSessionToRuntime({
+              persistCurrentHistory: false,
+            });
             compactionCircuitBreaker.resetForNewSession();
             postCompactRestorer.clear();
             trackedReadToolResultIds.clear();
-            await updateCompactionForCurrentModel();
             resetMissingLinesFailures();
           }
         },

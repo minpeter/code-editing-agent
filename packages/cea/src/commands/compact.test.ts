@@ -5,7 +5,7 @@ describe("compact command", () => {
   it("triggers compaction directly", async () => {
     const compact = vi.fn(async () => undefined);
     const result = await createCompactCommand({
-      messageHistory: { compact } as never,
+      getMessageHistory: () => ({ compact }) as never,
     }).execute({ args: [] });
     expect(result.success).toBe(true);
     expect(compact).toHaveBeenCalledOnce();
@@ -14,7 +14,7 @@ describe("compact command", () => {
 
   it("keeps summarize alias for backward compatibility", () => {
     const command = createCompactCommand({
-      messageHistory: { compact: async () => undefined } as never,
+      getMessageHistory: () => ({ compact: async () => undefined }) as never,
     });
     expect(command.aliases).toContain("summarize");
   });

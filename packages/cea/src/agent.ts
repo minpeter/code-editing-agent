@@ -1,10 +1,9 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ProviderOptions as AiProviderOptions } from "@ai-sdk/provider-utils";
 import {
+  type AgentModelProfile,
+  addEphemeralCacheControlToLastMessage,
   BackgroundMemoryExtractor,
-  CheckpointHistory,
   type CompactionConfig,
   computeAdaptiveThresholdRatio as computeAdaptiveThresholdRatioFromPolicy,
   computeCompactionMaxTokens as computeCompactionMaxTokensFromPolicy,
@@ -13,12 +12,11 @@ import {
   createDefaultPruningConfig,
   createModelSummarizer,
   estimateTokens,
-  estimateToolSchemasTokens,
-  FileMemoryStore,
+  type FileMemoryStore,
   type AgentStreamOptions as HarnessAgentStreamOptions,
   type AgentStreamResult as HarnessAgentStreamResult,
+  mergeAgentModelProfile,
   type PruningConfig,
-  SessionStore,
 } from "@ai-sdk-tool/harness";
 import {
   InvalidToolInputError,
@@ -56,18 +54,6 @@ export const DEFAULT_MODEL_ID = DEFAULT_ANTHROPIC_MODEL_ID;
 const OUTPUT_TOKEN_CAP = 64_000;
 const DEFAULT_CONTEXT_LENGTH = 200_000;
 const TRANSLATION_MAX_OUTPUT_TOKENS = 4000;
-const DEFAULT_SESSION_MEMORY_STORE_PATH = join(
-  process.cwd(),
-  ".plugsuits",
-  "session-memory.md"
-);
-const DEFAULT_SESSION_HISTORY_DIR = join(
-  process.cwd(),
-  ".plugsuits",
-  "session-history"
-);
-const FILE_EXTENSION_REGEX = /\.[^/.]+$/;
-
 type ProviderOptions = AiProviderOptions | undefined;
 
 interface BenchmarkSamplingOverrides {
@@ -77,7 +63,13 @@ interface BenchmarkSamplingOverrides {
 
 export type AgentStreamOptions = Pick<
   HarnessAgentStreamOptions,
-  "abortSignal" | "maxOutputTokens"
+  | "abortSignal"
+  | "experimentalContext"
+  | "maxOutputTokens"
+  | "providerOptions"
+  | "seed"
+  | "system"
+  | "temperature"
 >;
 export type AgentStreamResult = HarnessAgentStreamResult;
 
@@ -111,16 +103,8 @@ const normalizeUsageMeasurement = (usage: unknown): UsageMeasurement | null => {
   }
 
   const usageRecord = usage as Record<string, unknown>;
-  const inputTokens = getUsageNumber(
-    usageRecord,
-    "inputTokens",
-    "promptTokens"
-  );
-  const outputTokens = getUsageNumber(
-    usageRecord,
-    "outputTokens",
-    "completionTokens"
-  );
+  const inputTokens = getUsageNumber(usageRecord, "inputTokens");
+  const outputTokens = getUsageNumber(usageRecord, "outputTokens");
   const totalTokens = getUsageNumber(usageRecord, "totalTokens");
 
   if (
@@ -279,6 +263,67 @@ const getProviderOptions = (
     maxOutputTokens: isAnthropicWithReasoning(modelId, provider, reasoningMode)
       ? effectiveMaxTokens - ANTHROPIC_THINKING_BUDGET_TOKENS
       : effectiveMaxTokens,
+  };
+};
+
+const fallbackAddEphemeralCacheControlToLastMessage = (params: {
+  messages: ModelMessage[];
+  model: ReturnType<AgentManager["buildModel"]>["model"];
+}): ModelMessage[] => {
+  const modelRecord = params.model as Record<string, unknown>;
+  const provider = modelRecord.provider;
+  const modelId = modelRecord.modelId;
+  const isAnthropic = [provider, modelId].some((value) => {
+    return (
+      typeof value === "string" &&
+      (value.includes("anthropic") || value.includes("claude"))
+    );
+  });
+
+  if (!isAnthropic || params.messages.length === 0) {
+    return params.messages;
+  }
+
+  return params.messages.map((message, index) => {
+    if (index !== params.messages.length - 1) {
+      return message;
+    }
+
+    return {
+      ...message,
+      providerOptions: {
+        ...(message.providerOptions ?? {}),
+        anthropic: { cacheControl: { type: "ephemeral" } },
+      },
+    } as ModelMessage;
+  });
+};
+
+const applyLastMessageCacheControl = (params: {
+  messages: ModelMessage[];
+  model: ReturnType<AgentManager["buildModel"]>["model"];
+}): ModelMessage[] => {
+  return typeof addEphemeralCacheControlToLastMessage === "function"
+    ? addEphemeralCacheControlToLastMessage(params)
+    : fallbackAddEphemeralCacheControlToLastMessage(params);
+};
+
+export const buildAgentModelProfile = (params: {
+  model: ReturnType<AgentManager["buildModel"]>["model"];
+  providerOptions: ProviderOptions;
+}): AgentModelProfile => {
+  const profileModel = params.model;
+
+  return {
+    streamDefaults: {
+      providerOptions: params.providerOptions,
+    },
+    prepareStep: ({ messages }) => ({
+      messages: applyLastMessageCacheControl({
+        messages,
+        model: profileModel,
+      }),
+    }),
   };
 };
 
@@ -450,10 +495,8 @@ export function buildFileTrackingSummarizeFn(
 export class AgentManager {
   _memoryExtractor?: BackgroundMemoryExtractor | null;
   private _memoryExtractorStorePath: string | null = null;
-  private readonly sessionHistories = new Map<
-    string,
-    Promise<CheckpointHistory>
-  >();
+  private memoryStore: FileMemoryStore | null = null;
+  private memoryStoreKey: string | null = null;
   private modelId: string = DEFAULT_MODEL_ID;
   private modelType: ModelType = "serverless";
   private provider: ProviderType = "anthropic";
@@ -462,9 +505,6 @@ export class AgentManager {
   private toolRegistry: ToolRegistry = defaultToolRegistry;
   private toolFallbackMode: ToolFallbackMode = DEFAULT_TOOL_FALLBACK_MODE;
   private translationEnabled = true;
-  private sessionMemoryStorePath = DEFAULT_SESSION_MEMORY_STORE_PATH;
-  private sessionHistoryDir = DEFAULT_SESSION_HISTORY_DIR;
-  private activeSessionId = "default";
   private readonly anthropicClient: ReturnType<typeof createAnthropic> | null;
 
   constructor(anthropicClient?: ReturnType<typeof createAnthropic> | null) {
@@ -474,7 +514,6 @@ export class AgentManager {
   }
 
   resetForTesting(): void {
-    this.sessionHistories.clear();
     this.modelId = DEFAULT_MODEL_ID;
     this.modelType = "serverless";
     this.provider = "anthropic";
@@ -483,22 +522,16 @@ export class AgentManager {
     this.toolRegistry = defaultToolRegistry;
     this.toolFallbackMode = DEFAULT_TOOL_FALLBACK_MODE;
     this.translationEnabled = true;
-    this.sessionMemoryStorePath = DEFAULT_SESSION_MEMORY_STORE_PATH;
-    this.sessionHistoryDir = DEFAULT_SESSION_HISTORY_DIR;
-    this.activeSessionId = "default";
     this._memoryExtractor = null;
     this._memoryExtractorStorePath = null;
+    this.memoryStore = null;
+    this.memoryStoreKey = null;
     this.applyBestReasoningModeForCurrentModel();
   }
 
-  setSessionMemoryStorePath(filePath: string): void {
-    this.sessionMemoryStorePath = filePath;
-    const dir = filePath.replace(FILE_EXTENSION_REGEX, "");
-    this.sessionHistoryDir = `${dir}-history`;
-  }
-
-  setActiveSessionId(sessionId: string): void {
-    this.activeSessionId = sessionId;
+  setMemoryStore(store: FileMemoryStore | null, key: string | null): void {
+    this.memoryStore = store;
+    this.memoryStoreKey = key;
   }
 
   private applyBestReasoningModeForCurrentModel(): void {
@@ -592,18 +625,21 @@ export class AgentManager {
     if (bmeDisabled) {
       this._memoryExtractor = null;
       this._memoryExtractorStorePath = null;
+    } else if (!(this.memoryStore && this.memoryStoreKey)) {
+      this._memoryExtractor = null;
+      this._memoryExtractorStorePath = null;
     } else if (
       this._memoryExtractor &&
-      this._memoryExtractorStorePath === this.sessionMemoryStorePath
+      this._memoryExtractorStorePath === this.memoryStoreKey
     ) {
       this._memoryExtractor.updateModel(this.getProviderModel(this.modelId));
     } else {
       this._memoryExtractor = new BackgroundMemoryExtractor({
         model: this.getProviderModel(this.modelId),
-        store: new FileMemoryStore(this.sessionMemoryStorePath),
+        store: this.memoryStore,
         preset: "code",
       });
-      this._memoryExtractorStorePath = this.sessionMemoryStorePath;
+      this._memoryExtractorStorePath = this.memoryStoreKey;
     }
     const memoryExtractor = this._memoryExtractor;
 
@@ -678,32 +714,6 @@ export class AgentManager {
       protectRecentTokens: 40_000,
       ...overrides,
     };
-  }
-
-  private getSessionHistory(sessionId: string): Promise<CheckpointHistory> {
-    const existing = this.sessionHistories.get(sessionId);
-    if (existing) {
-      return existing;
-    }
-
-    mkdirSync(this.sessionHistoryDir, { recursive: true });
-    const historyPromise = CheckpointHistory.fromSession(
-      new SessionStore(this.sessionHistoryDir),
-      sessionId,
-      {
-        compaction: this.buildCompactionConfig(),
-        pruning: this.buildPruningConfig(),
-      }
-    );
-
-    historyPromise.catch(() => {
-      if (this.sessionHistories.get(sessionId) === historyPromise) {
-        this.sessionHistories.delete(sessionId);
-      }
-    });
-
-    this.sessionHistories.set(sessionId, historyPromise);
-    return historyPromise;
   }
 
   getModelId(): string {
@@ -839,6 +849,7 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
       providerOptions,
       maxOutputTokens: providerMaxOutputTokens,
     } = this.buildModel();
+    const modelProfile = buildAgentModelProfile({ model, providerOptions });
 
     // Use the smaller of caller's budget and provider cap.
     // Caller budget comes from harness context-window enforcement;
@@ -848,21 +859,8 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
         ? Math.min(options.maxOutputTokens, providerMaxOutputTokens)
         : providerMaxOutputTokens;
 
-    const messageHistory = await this.getSessionHistory(this.activeSessionId);
-    messageHistory.updateCompaction(this.buildCompactionConfig());
-    messageHistory.updatePruning(this.buildPruningConfig());
-    messageHistory.setContextLimit(this.getModelTokenLimits().contextLength);
-
     const instructions = await this.getInstructions();
-    messageHistory.setSystemPromptTokens(estimateTokens(instructions));
-    messageHistory.setToolSchemasTokens(
-      estimateToolSchemasTokens(this.toolRegistry)
-    );
-
-    const preparedMessages =
-      messages.length > 0 ? messages : messageHistory.getMessagesForLLM();
-
-    if (preparedMessages.length === 0) {
+    if (messages.length === 0) {
       throw new Error(
         "Cannot call the model with an empty message list after context preparation."
       );
@@ -874,24 +872,20 @@ ${buildTodoContinuationPrompt(incompleteTodos)}`;
       instructions,
       maxStepsPerTurn: 1,
       experimental_repairToolCall: repairToolCall,
+      ...mergeAgentModelProfile({ override: modelProfile }),
     });
 
     const result = agent.stream({
-      messages: preparedMessages,
+      messages,
       abortSignal: options.abortSignal,
-      providerOptions,
+      experimentalContext: options.experimentalContext,
       maxOutputTokens: effectiveMaxOutputTokens,
+      providerOptions: options.providerOptions,
+      seed: options.seed,
+      system: options.system,
+      temperature: options.temperature,
       ...getBenchmarkSamplingOverrides(),
     });
-
-    if (messages.length === 0) {
-      Promise.resolve(result.response).then(
-        (response: Awaited<typeof result.response>) => {
-          messageHistory.addModelMessages(response.messages);
-        },
-        () => undefined
-      );
-    }
 
     return result;
   }

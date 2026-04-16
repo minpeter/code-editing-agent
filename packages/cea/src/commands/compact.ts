@@ -5,7 +5,7 @@ import type {
 } from "@ai-sdk-tool/harness";
 
 interface CompactCommandOptions {
-  messageHistory: CheckpointHistory;
+  getMessageHistory: () => CheckpointHistory;
 }
 
 export const createCompactCommand = (
@@ -16,7 +16,7 @@ export const createCompactCommand = (
   aliases: ["summarize"],
   execute: async (): Promise<CommandResult> => {
     try {
-      await options.messageHistory.compact();
+      await options.getMessageHistory().compact();
       return { success: true, message: "Compaction completed." };
     } catch (error) {
       return {

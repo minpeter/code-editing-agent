@@ -17,6 +17,17 @@ import { processStream } from "./stream-processor";
 import { TrajectoryCollector } from "./trajectory-collector";
 import type { HeadlessRunnerConfig, TrajectoryEvent } from "./types";
 
+function createInterruptEvent(): Extract<
+  TrajectoryEvent,
+  { type: "interrupt" }
+> {
+  return {
+    type: "interrupt",
+    reason: "caller-abort",
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export interface InitialUserMessage {
   content: string;
   eventContent?: string;
@@ -34,6 +45,44 @@ type MaxOutputAwareMessageHistory = HeadlessMessageHistory & {
 };
 
 type ProcessAgentResponseResult = "completed" | "max-iterations-reached";
+type HeadlessTurnOverrides =
+  NonNullable<HeadlessRunnerConfig["onBeforeTurn"]> extends (
+    ...args: never[]
+  ) => infer TResult
+    ? Awaited<TResult>
+    : never;
+
+function mergeAbortSignals(
+  primary: AbortSignal | undefined,
+  secondary: AbortSignal | undefined
+): AbortSignal | undefined {
+  if (primary && secondary) {
+    return AbortSignal.any([primary, secondary]);
+  }
+
+  return primary ?? secondary;
+}
+
+function buildTurnStreamOptions(params: {
+  abortSignal?: AbortSignal;
+  maxOutputTokens?: number;
+  messages: ModelMessage[];
+  turnOverrides?: HeadlessTurnOverrides;
+}) {
+  const { abortSignal, maxOutputTokens, messages, turnOverrides } = params;
+  const {
+    abortSignal: overrideAbortSignal,
+    messages: overrideMessages,
+    ...restTurnOverrides
+  } = turnOverrides ?? {};
+
+  return {
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...restTurnOverrides,
+    messages: overrideMessages ?? messages,
+    abortSignal: mergeAbortSignals(abortSignal, overrideAbortSignal),
+  };
+}
 
 interface HeadlessCompactionController {
   applyReady(history: HeadlessMessageHistory): {
@@ -130,12 +179,20 @@ function collectTrajectoryEvent(
   }
 
   switch (event.type) {
+    case "approval": {
+      collector.addApproval(event);
+      return;
+    }
     case "step": {
       collector.addStep(event);
       return;
     }
     case "compaction": {
       collector.addCompaction(event);
+      return;
+    }
+    case "interrupt": {
+      collector.addInterrupt(event);
       return;
     }
     case "metadata": {
@@ -284,7 +341,6 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       event: "usage_probe",
       turn: turnNumber,
       inputTokens: measured.inputTokens ?? null,
-      promptTokens: measured.inputTokens ?? null,
       totalTokens: measured.totalTokens ?? null,
     });
 
@@ -516,14 +572,8 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
 
     updateHistoryUsage(config.messageHistory, usage);
     if (harnessEnv.DEBUG_TOKENS) {
-      const input =
-        usage.inputTokens ??
-        (usage as Record<string, unknown>).promptTokens ??
-        0;
-      const output =
-        usage.outputTokens ??
-        (usage as Record<string, unknown>).completionTokens ??
-        0;
+      const input = usage.inputTokens ?? 0;
+      const output = usage.outputTokens ?? 0;
       const total = usage.totalTokens ?? (input as number) + (output as number);
       console.error(
         `[debug:headless] total_tokens=${total} (input=${input}, output=${output})`
@@ -546,6 +596,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const runSingleTurn = async (
     phase: "new-turn" | "intermediate-step"
   ): Promise<{
+    finishReason?: string;
     pendingMessages: ModelMessage[];
     shouldContinue: boolean;
     usage: StreamUsage;
@@ -589,12 +640,9 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       streamMaxOutputTokens: number | undefined
     ) => {
       if (config.abortSignal?.aborted) {
-        emitAndCollect({
-          timestamp: new Date().toISOString(),
-          type: "error",
-          code: AgentErrorCode.TIMEOUT,
-          error: "Aborted by caller",
-        });
+        const interruptEvent = createInterruptEvent();
+        emitAndCollect(interruptEvent);
+        await config.onInterrupt?.(interruptEvent);
         return {
           pendingMessages,
           shouldContinue: false,
@@ -603,14 +651,27 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       }
 
       try {
+        const turnOverrides = await config.onBeforeTurn?.(phase);
+        const streamOptions = buildTurnStreamOptions({
+          abortSignal: config.abortSignal,
+          maxOutputTokens: streamMaxOutputTokens,
+          messages: streamMessages,
+          turnOverrides,
+        });
+
+        if (streamOptions.abortSignal?.aborted) {
+          const interruptEvent = createInterruptEvent();
+          emitAndCollect(interruptEvent);
+          await config.onInterrupt?.(interruptEvent);
+          return {
+            pendingMessages,
+            shouldContinue: false,
+            usage: undefined,
+          };
+        }
+
         const streamPromise = Promise.resolve(
-          config.agent.stream({
-            messages: streamMessages,
-            ...(streamMaxOutputTokens !== undefined
-              ? { maxOutputTokens: streamMaxOutputTokens }
-              : {}),
-            ...(config.abortSignal ? { abortSignal: config.abortSignal } : {}),
-          })
+          config.agent.stream(streamOptions)
         );
         let raceTimeoutId: ReturnType<typeof setTimeout> | undefined;
         const stream = await Promise.race([
@@ -626,7 +687,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
               );
             }, streamTimeoutMs);
 
-            config.abortSignal?.addEventListener(
+            streamOptions.abortSignal?.addEventListener(
               "abort",
               () => {
                 if (raceTimeoutId !== undefined) {
@@ -646,23 +707,22 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
             pendingMessages = msgs;
           },
           stepId: nextStepId,
-          shouldContinue: shouldContinueManualToolLoop,
+          shouldContinue: config.shouldContinue ?? shouldContinueManualToolLoop,
           stream,
+          streamTimeoutMs,
         });
         stepId = nextStepId;
         return {
+          finishReason: processStreamResult.finishReason,
           pendingMessages,
           shouldContinue: processStreamResult.shouldContinue,
           usage: processStreamResult.usage,
         };
       } catch (error) {
         if (isAbortError(error)) {
-          emitAndCollect({
-            timestamp: new Date().toISOString(),
-            type: "error",
-            code: AgentErrorCode.TIMEOUT,
-            error: "Aborted by caller",
-          });
+          const interruptEvent = createInterruptEvent();
+          emitAndCollect(interruptEvent);
+          await config.onInterrupt?.(interruptEvent);
           return {
             pendingMessages,
             shouldContinue: false,
@@ -790,7 +850,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           return "max-iterations-reached";
         }
 
-        const { pendingMessages, shouldContinue, usage } =
+        const { finishReason, pendingMessages, shouldContinue, usage } =
           await runSingleTurn(phase);
         applyPendingMessages(pendingMessages);
         updateUsage(usage);
@@ -799,7 +859,9 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           .then(() =>
             config.onTurnComplete?.(
               config.messageHistory.getAll(),
-              normalizedUsage
+              normalizedUsage,
+              config.messageHistory.snapshot(),
+              finishReason
             )
           )
           .catch((error) => {

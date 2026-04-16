@@ -1,15 +1,38 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
+  ApprovalEvent,
   CompactionEvent,
+  InterruptEvent,
   MetadataEvent,
+  ObservationData,
   StepEvent,
   StepMetrics,
+  ToolCallData,
 } from "./types";
+
+interface AtifStep {
+  extra?: Record<string, unknown>;
+  is_copied_context?: boolean;
+  message: string;
+  metrics?: StepMetrics;
+  model_name?: string;
+  observation?: ObservationData;
+  reasoning_content?: string;
+  reasoning_effort?: string | number;
+  source: "agent" | "system" | "user";
+  step_id: number;
+  timestamp?: string;
+  tool_calls?: ToolCallData[];
+}
 
 export interface TrajectoryJson {
   agent: { name: string; version: string; model_name: string };
-  extra?: { compaction_events: CompactionEvent[] };
+  extra?: {
+    approval_events?: ApprovalEvent[];
+    compaction_events?: CompactionEvent[];
+    interrupt_events?: InterruptEvent[];
+  };
   final_metrics: {
     total_prompt_tokens: number | null;
     total_completion_tokens: number | null;
@@ -18,7 +41,7 @@ export interface TrajectoryJson {
   };
   schema_version: "ATIF-v1.6";
   session_id: string;
-  steps: StepEvent[];
+  steps: AtifStep[];
 }
 
 interface MetricAccumulator {
@@ -53,9 +76,15 @@ function toMetricTotal(accumulator: MetricAccumulator): number | null {
 }
 
 export class TrajectoryCollector {
+  private approvalEvents: ApprovalEvent[] = [];
   private steps: StepEvent[] = [];
   private compactionEvents: CompactionEvent[] = [];
+  private interruptEvents: InterruptEvent[] = [];
   private metadata: MetadataEvent | null = null;
+
+  addApproval(event: ApprovalEvent): void {
+    this.approvalEvents.push(event);
+  }
 
   addStep(event: StepEvent): void {
     this.steps.push(event);
@@ -67,6 +96,10 @@ export class TrajectoryCollector {
 
   addMetadata(event: MetadataEvent): void {
     this.metadata = event;
+  }
+
+  addInterrupt(event: InterruptEvent): void {
+    this.interruptEvents.push(event);
   }
 
   private collectFinalMetrics(): {
@@ -102,18 +135,43 @@ export class TrajectoryCollector {
     };
   }
 
+  private toAtifStep(event: StepEvent): AtifStep {
+    if (event.source !== "agent") {
+      const { type: _type, ...rest } = event;
+      return rest;
+    }
+
+    const { type: _type, metrics, ...rest } = event;
+    const hasMetrics =
+      metrics !== undefined &&
+      Object.values(metrics).some((v) => v !== undefined);
+    return hasMetrics ? { ...rest, metrics } : { ...rest };
+  }
+
   finalize(): TrajectoryJson {
     const trajectory: TrajectoryJson = {
       schema_version: "ATIF-v1.6",
       session_id: this.metadata?.session_id ?? "unknown",
       agent: this.metadata?.agent ?? { ...DEFAULT_AGENT },
-      steps: [...this.steps],
+      steps: this.steps.map((s) => this.toAtifStep(s)),
       final_metrics: this.collectFinalMetrics(),
     };
 
-    if (this.compactionEvents.length > 0) {
+    if (
+      this.approvalEvents.length > 0 ||
+      this.compactionEvents.length > 0 ||
+      this.interruptEvents.length > 0
+    ) {
       trajectory.extra = {
-        compaction_events: [...this.compactionEvents],
+        ...(this.approvalEvents.length > 0
+          ? { approval_events: [...this.approvalEvents] }
+          : {}),
+        ...(this.compactionEvents.length > 0
+          ? { compaction_events: [...this.compactionEvents] }
+          : {}),
+        ...(this.interruptEvents.length > 0
+          ? { interrupt_events: [...this.interruptEvents] }
+          : {}),
       };
     }
 
@@ -127,8 +185,10 @@ export class TrajectoryCollector {
   }
 
   reset(): void {
+    this.approvalEvents = [];
     this.steps = [];
     this.compactionEvents = [];
+    this.interruptEvents = [];
     this.metadata = null;
   }
 }

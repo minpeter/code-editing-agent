@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai";
+import type { HistorySnapshot } from "./history-snapshot";
 import type { MicroCompactOptions } from "./micro-compact";
 
 // Forward declaration types for messages that reference Message
@@ -315,12 +316,8 @@ export interface ActualTokenUsage {
 }
 
 export interface ActualTokenUsageInput {
-  /** @deprecated Use outputTokens instead. */
-  completionTokens?: number;
   inputTokens?: number;
   outputTokens?: number;
-  /** @deprecated Use inputTokens instead. */
-  promptTokens?: number;
   totalTokens?: number;
   updatedAt?: Date;
 }
@@ -369,7 +366,17 @@ export interface CheckpointLine {
   updatedAt: number;
 }
 
-export type SessionFileLine = SessionHeaderLine | MessageLine | CheckpointLine;
+export interface SnapshotLine {
+  snapshot: HistorySnapshot;
+  type: "snapshot";
+  updatedAt: number;
+}
+
+export type SessionFileLine =
+  | SessionHeaderLine
+  | MessageLine
+  | CheckpointLine
+  | SnapshotLine;
 
 // --- Compaction Summary and Segments ---
 

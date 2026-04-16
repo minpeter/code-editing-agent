@@ -2,6 +2,11 @@ export type { LanguageModelUsage } from "ai";
 export { createAgent } from "./agent";
 export type { BackgroundMemoryExtractorConfig } from "./background-memory-extractor";
 export { BackgroundMemoryExtractor } from "./background-memory-extractor";
+export {
+  ANTHROPIC_EPHEMERAL_CACHE_CONTROL,
+  addEphemeralCacheControlToLastMessage,
+  isAnthropicModel,
+} from "./cache-control";
 export type {
   CheckpointHistoryOptions,
   OverflowRecoveryResult,
@@ -100,7 +105,17 @@ export { formatContextUsage, formatTokens } from "./context-usage-format";
 export type { ContinuationMessageData } from "./continuation";
 export { createContinuationMessage, getContinuationText } from "./continuation";
 export { env as harnessEnv } from "./env";
-export { AgentError, AgentErrorCode } from "./errors";
+export { AgentError, AgentErrorCode, isAgentError } from "./errors";
+export type {
+  AgentExecutionContext,
+  ToolApprovalContext,
+  ToolSourceCallContext,
+} from "./execution-context";
+export { FileSnapshotStore } from "./file-snapshot-store";
+export type {
+  HistorySnapshot,
+  SerializedMessage,
+} from "./history-snapshot";
 export { runAgentLoop } from "./loop";
 export { isRemoteConfig, isStdioConfig, loadMCPConfig } from "./mcp-config";
 // MCP integration
@@ -131,6 +146,8 @@ export type {
   MicroCompactResult,
 } from "./micro-compact";
 export { microCompactMessages } from "./micro-compact";
+export type { AgentModelProfile } from "./model-profile";
+export { mergeAgentModelProfile } from "./model-profile";
 export {
   isContextOverflowError,
   isUsageSilentOverflow,
@@ -142,25 +159,11 @@ export type {
   RestorationItem,
 } from "./post-compact-restoration";
 export { PostCompactRestorer } from "./post-compact-restoration";
-export type {
-  MemoryAgentConfig,
-  PlatformAgentConfig,
-  SessionAgentConfig,
-} from "./presets";
-export {
-  createMemoryAgent,
-  createPlatformAgent,
-  createSessionAgent,
-} from "./presets";
 export { SessionManager } from "./session";
 export type { MemoryFact, SessionMemoryConfig } from "./session-memory";
 export { SessionMemoryTracker } from "./session-memory";
 export type { SessionData } from "./session-store";
-export {
-  decodeSessionId,
-  encodeSessionId,
-  SessionStore,
-} from "./session-store";
+export { decodeSessionId, encodeSessionId } from "./session-store";
 export {
   PROMPTS_COMMAND_PREFIX,
   parsePromptsCommandName,
@@ -168,6 +171,8 @@ export {
 } from "./skill-command-prefix";
 export type { SkillInfo, SkillsConfig } from "./skills";
 export { SkillsEngine } from "./skills";
+export type { SnapshotStore } from "./snapshot-store";
+export { InMemorySnapshotStore } from "./snapshot-store";
 export type { TodoConfig, TodoItem } from "./todo-continuation";
 export { TodoContinuation } from "./todo-continuation";
 export {
@@ -177,6 +182,7 @@ export {
   extractMessageText,
 } from "./token-utils";
 export {
+  composeStopPredicates,
   normalizeFinishReason,
   shouldContinueManualToolLoop,
 } from "./tool-loop-control";
@@ -193,6 +199,17 @@ export {
   pruneToolOutputs,
 } from "./tool-pruning";
 export type { ToolDefinition, ToolSource } from "./tool-source";
+export type {
+  ToolInputDeltaPartLike,
+  ToolInputPartLike,
+  ToolLifecyclePartLike,
+  ToolLifecycleState,
+} from "./tool-stream-parts";
+export {
+  getToolInputChunk,
+  getToolInputId,
+  getToolLifecycleState,
+} from "./tool-stream-parts";
 export type * from "./types";
 export type {
   AgentConfig,
