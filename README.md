@@ -93,7 +93,6 @@ You: /help
 Available commands:
   /help       Show this help message
   /clear      Clear conversation
-  /model      Switch AI models
   /reasoning  Toggle reasoning mode
   /translate  Toggle translation mode
   /quit       Exit
