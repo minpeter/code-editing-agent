@@ -664,6 +664,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const chatContainer = new Container();
   const overlayContainer = new Container();
   const editorContainer = new Container();
+  const statusContainer = new Container();
   const footerContainer = new Container();
   const footerStatusBar = new FooterStatusBar(tui);
 
@@ -712,6 +713,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   tui.addChild(chatContainer);
   tui.addChild(overlayContainer);
   tui.addChild(editorContainer);
+  tui.addChild(statusContainer);
   tui.addChild(footerContainer);
   tui.setFocus(editor);
 
@@ -768,8 +770,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       message
     );
 
-  let foregroundSpinnerSpacer: Spacer | null = null;
-
   const renderFooterStatuses = (): void => {
     footerStatusBar.setEntries([...backgroundStatuses.values()]);
   };
@@ -792,13 +792,9 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   };
 
   const detachForegroundSpinner = (): void => {
-    if (foregroundSpinnerSpacer) {
-      chatContainer.removeChild(foregroundSpinnerSpacer);
-      foregroundSpinnerSpacer = null;
-    }
     if (foregroundStatus) {
       foregroundStatus.stop();
-      chatContainer.removeChild(foregroundStatus);
+      statusContainer.removeChild(foregroundStatus);
       foregroundStatus = null;
     }
     foregroundStatusMessage = null;
@@ -812,10 +808,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const showLoader = (message: string): void => {
     detachForegroundSpinner();
     const spinner = createStatusSpinner(message);
-    const spacer = new Spacer(1);
-    chatContainer.addChild(spacer);
-    chatContainer.addChild(spinner);
-    foregroundSpinnerSpacer = spacer;
+    statusContainer.addChild(spinner);
     foregroundStatus = spinner;
     foregroundStatusMessage = message;
     tui.requestRender();
@@ -1685,9 +1678,9 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
     if (foregroundStatus) {
       foregroundStatus.stop();
+      statusContainer.removeChild(foregroundStatus);
       foregroundStatus = null;
     }
-    foregroundSpinnerSpacer = null;
     foregroundStatusMessage = null;
     chatContainer.clear();
     addNewSessionMessage(chatContainer);
