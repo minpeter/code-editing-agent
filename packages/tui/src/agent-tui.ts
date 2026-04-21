@@ -1275,6 +1275,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         }
 
         if (
+          part.type === "tool-input-start" &&
+          idleStatusPlaceholderMode === "suppressed"
+        ) {
+          idleStatusPlaceholderMode = "normal";
+          renderForegroundStatus();
+        }
+
+        if (
           !firstVisiblePartSeen &&
           isVisibleStreamPart(part as never, flags)
         ) {
