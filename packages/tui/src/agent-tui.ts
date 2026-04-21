@@ -1049,6 +1049,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
     usageProbeGeneration += 1;
     const thisGeneration = usageProbeGeneration;
+    const startingRevision = config.messageHistory.getRevision?.();
 
     const measured = normalizeUsageMeasurement(
       await config.measureUsage(messages)
@@ -1058,6 +1059,12 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     if (thisGeneration !== usageProbeGeneration) {
+      return false;
+    }
+    if (
+      startingRevision !== undefined &&
+      config.messageHistory.getRevision?.() !== startingRevision
+    ) {
       return false;
     }
 
@@ -1534,17 +1541,17 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     overflowRetried = false,
     noOutputRetryCount = 0
   ): Promise<"completed" | "continue" | "interrupted"> => {
-    showLoader("Processing...");
-
-    const preparedTurn = await prepareMessages(phase);
-    let messagesForLLM = preparedTurn.messages;
-    const turnOverrides = preparedTurn.turnOverrides;
-
     const streamAbortController = new AbortController();
     activeStreamController = streamAbortController;
     streamInterruptRequested = false;
 
     try {
+      showLoader("Processing...");
+
+      const preparedTurn = await prepareMessages(phase);
+      let messagesForLLM = preparedTurn.messages;
+      const turnOverrides = preparedTurn.turnOverrides;
+
       const budget = await resolveTurnBudget(phase, messagesForLLM);
       messagesForLLM = budget.messagesForLLM;
 

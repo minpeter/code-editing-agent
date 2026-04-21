@@ -18,9 +18,11 @@ Every event is a JSON object on its own line.
 > [Harbor's ATIF specification](https://www.harborframework.com/docs/agents/trajectory-format).
 > The current ATIF version is **v1.4**. This JSONL protocol is an internal
 > streaming contract used by the runner to drive UI, telemetry, and the
-> trajectory collector; it carries lifecycle annotations
-> (`approval`, `compaction`, `interrupt`, `turn-start`) that have no place
-> in ATIF and are dropped from the persisted trajectory.
+> trajectory collector. Persisted lifecycle annotations (`approval`,
+> `compaction`, `interrupt`) are bundled into ATIF `extra.*` buckets by the
+> collector — they are NOT `steps[*].source` values, but they do survive
+> on disk. Transient annotations (`turn-start`, `error`) stay JSONL-only
+> and are never written to `trajectory.json`.
 
 ### Design Decisions
 - **NO sessionId on individual events**: A single `MetadataEvent` at the start carries the `session_id`.

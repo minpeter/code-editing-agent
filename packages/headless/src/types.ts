@@ -8,12 +8,16 @@ import type { BeforeTurnResult } from "@ai-sdk-tool/harness";
  * (https://www.harborframework.com/docs/agents/trajectory-format). The
  * event union below is the internal stdout JSONL contract that the
  * runner emits during execution; the collector consumes these events
- * and produces the ATIF trajectory as output. Lifecycle annotations
- * (`approval`, `compaction`, `interrupt`, `turn-start`) exist only on
- * this JSONL stream and are not part of ATIF.
+ * and produces the ATIF trajectory as output.
+ *
+ * Lifecycle annotations split into two categories:
+ *   - `approval`, `compaction`, `interrupt` are persisted under
+ *     `trajectory.extra.*` buckets (not as `steps[*].source` values).
+ *   - `turn-start` and `error` stay JSONL-only and are dropped by the
+ *     collector.
  *
  * All emitted step events (UserStepEvent, AgentStepEvent) conform to the ATIF specification.
- * Metadata is emitted once at run start. Compaction and error events are lifecycle annotations.
+ * Metadata is emitted once at run start.
  */
 
 // ============================================================================

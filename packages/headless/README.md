@@ -169,7 +169,7 @@ registerSignalHandlers({
 
 ## JSONL Event Types
 
-The runner streams an internal JSONL event protocol documented in `packages/headless/AGENTS.md`. The persisted `trajectory.json` produced by `TrajectoryCollector` conforms to Harbor's **ATIF-v1.4** schema (<https://www.harborframework.com/docs/agents/trajectory-format>); the JSONL stream carries additional lifecycle annotations that are not part of ATIF and are dropped from the trajectory.
+The runner streams an internal JSONL event protocol documented in `packages/headless/AGENTS.md`. The persisted `trajectory.json` produced by `TrajectoryCollector` conforms to Harbor's **ATIF-v1.4** schema (<https://www.harborframework.com/docs/agents/trajectory-format>). Lifecycle annotations on the JSONL stream split into two categories: `approval`, `compaction`, and `interrupt` are persisted into `trajectory.extra.*` buckets (not as `steps[*].source` values); `turn-start` and `error` are transient and stay JSONL-only.
 
 ### Event overview
 

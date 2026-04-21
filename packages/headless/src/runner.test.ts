@@ -330,6 +330,27 @@ describe("runHeadless", () => {
     expect(serialized).not.toContain("turn-start");
   });
 
+  it("does not write an invalid zero-step trajectory when the stream fails before any step", async () => {
+    const history = new CheckpointHistory();
+    const atifOutputPath = `/tmp/plugsuits-zero-step-${Date.now()}.json`;
+    const { existsSync } = await import("node:fs");
+
+    await runHeadless({
+      agent: {
+        stream: () =>
+          Promise.reject(new Error("provider unreachable")) as never,
+      },
+      atifOutputPath,
+      emitEvent: () => undefined,
+      // Deliberately omit initialUserMessage so no user step precedes the abort.
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-zero-step-guard",
+    }).catch(() => undefined);
+
+    expect(existsSync(atifOutputPath)).toBe(false);
+  });
+
   it("does not emit a synthetic user event when no initial user message is given", async () => {
     const events: TrajectoryEvent[] = [];
 

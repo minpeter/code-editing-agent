@@ -6,12 +6,15 @@ Usage: python3 test_trajectory.py <trajectory.json>
 
 from __future__ import annotations
 import json
+import math
 import sys
 from pathlib import Path
 
 
 def _is_real_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(float(value))
 
 
 def _is_real_int(value: object) -> bool:

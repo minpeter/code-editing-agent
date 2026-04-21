@@ -12,15 +12,19 @@
  *
  *   • `schema_version` is the literal string "ATIF-v1.4".
  *   • Every {@link AtifStep.step_id} is a sequential integer starting at 1.
- *   • `steps[*].source` is limited to `"user" | "agent" | "system"`; lifecycle
- *     event types (approval, compaction, interrupt, turn-start, error) are
- *     NEVER persisted as step sources — they live in the JSONL stream only.
- *   • Lifecycle annotations that the spec allows persisting go under
- *     `extra.approval_events`, `extra.compaction_events`, and
- *     `extra.interrupt_events`. New lifecycle types must NOT introduce new
- *     top-level fields.
+ *   • `steps[*].source` is limited to `"user" | "agent" | "system"`; no
+ *     lifecycle event type is ever persisted as a step source.
+ *   • Persisted lifecycle annotations go under `extra.approval_events`,
+ *     `extra.compaction_events`, and `extra.interrupt_events`. New
+ *     lifecycle types must NOT introduce new top-level fields; pick an
+ *     existing `extra.*` bucket or drop the event from persistence.
+ *   • Transient lifecycle events (`turn-start`, `error`) are JSONL-only
+ *     and are dropped by the collector.
  *   • `final_metrics` must include every key defined in ATIF v1.4 even if
  *     the value is `null` (null-when-absent, not omitted).
+ *   • Trajectories with zero steps are NOT persisted — `writeTo` returns
+ *     `false` in that case to avoid producing a file that fails Harbor's
+ *     own validator.
  *   • Metrics are pulled from the SDK `stream.usage`; never estimated.
  *
  * The JSONL event stream emitted to stdout by the runner is a DIFFERENT
@@ -76,7 +80,7 @@ export interface TrajectoryJson {
     approval_events?: ApprovalEvent[];
     compaction_events?: CompactionEvent[];
     interrupt_events?: InterruptEvent[];
-  } & Record<string, unknown>;
+  };
   final_metrics: {
     total_cached_tokens: number | null;
     total_completion_tokens: number | null;
@@ -227,10 +231,24 @@ export class TrajectoryCollector {
     return trajectory;
   }
 
-  writeTo(outputPath: string): void {
+  /**
+   * Persists the trajectory to disk in ATIF v1.4 format.
+   *
+   * Returns `true` when a file was written, `false` when the write was
+   * skipped because the trajectory would violate the ATIF v1.4 shape
+   * contract (currently: no steps emitted). Skipping is preferred over
+   * writing an invalid document — Harbor's own validator rejects
+   * `steps: []`, so a zero-step file is worse than no file for any
+   * downstream consumer.
+   */
+  writeTo(outputPath: string): boolean {
+    if (this.steps.length === 0) {
+      return false;
+    }
     const trajectory = this.finalize();
     mkdirSync(dirname(outputPath), { recursive: true });
     writeFileSync(outputPath, JSON.stringify(trajectory, null, 2), "utf-8");
+    return true;
   }
 
   reset(): void {
