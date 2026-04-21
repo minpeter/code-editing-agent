@@ -6,8 +6,11 @@ import {
   handleToolError,
   handleToolOutputDenied,
   handleToolResult,
+  IGNORE_PART_TYPES,
   isVisibleStreamPart,
+  type PiTuiRenderFlags,
   type PiTuiStreamState,
+  STREAM_HANDLERS,
 } from "./stream-handlers";
 import { BaseToolCallView } from "./tool-call-view";
 
@@ -197,5 +200,216 @@ describe("stream-handlers", () => {
     );
 
     expect(onToolPendingEnd).toHaveBeenCalledTimes(1);
+  });
+});
+
+const FLAGS_ALL_ON: PiTuiRenderFlags = {
+  showFiles: true,
+  showFinishReason: true,
+  showRawToolIo: true,
+  showReasoning: true,
+  showSources: true,
+  showSteps: true,
+  showToolResults: true,
+};
+
+const FLAGS_ALL_OFF: PiTuiRenderFlags = {
+  showFiles: false,
+  showFinishReason: false,
+  showRawToolIo: false,
+  showReasoning: false,
+  showSources: false,
+  showSteps: false,
+  showToolResults: false,
+};
+
+describe("isVisibleStreamPart — reasoning parts must never trigger first-visible", () => {
+  // Regression: if reasoning parts become visible, clearStreamingLoader fires
+  // on reasoning-start and the "Thinking..." spinner label is lost.
+  it.each(["reasoning-start", "reasoning-delta", "reasoning-end"] as const)(
+    "%s is invisible regardless of flags",
+    (type) => {
+      expect(isVisibleStreamPart({ type } as never, FLAGS_ALL_ON)).toBe(false);
+      expect(isVisibleStreamPart({ type } as never, FLAGS_ALL_OFF)).toBe(false);
+    }
+  );
+
+  it("tool-input-end is always invisible", () => {
+    expect(
+      isVisibleStreamPart({ type: "tool-input-end" } as never, FLAGS_ALL_ON)
+    ).toBe(false);
+  });
+
+  it("tool-result visibility follows showToolResults flag", () => {
+    expect(
+      isVisibleStreamPart({ type: "tool-result" } as never, FLAGS_ALL_ON)
+    ).toBe(true);
+    expect(
+      isVisibleStreamPart({ type: "tool-result" } as never, FLAGS_ALL_OFF)
+    ).toBe(false);
+  });
+
+  it("text-start is always visible (triggers spinner clear)", () => {
+    expect(
+      isVisibleStreamPart({ type: "text-start" } as never, FLAGS_ALL_OFF)
+    ).toBe(true);
+  });
+});
+
+describe("STREAM_HANDLERS dispatch table", () => {
+  // Regression: reasoning-end previously lived in IGNORE_PART_TYPES, which
+  // silently dropped onReasoningEnd and left spinner label stuck.
+  it.each([
+    "text-start",
+    "text-delta",
+    "reasoning-start",
+    "reasoning-delta",
+    "reasoning-end",
+    "tool-input-start",
+    "tool-input-delta",
+    "tool-input-end",
+    "tool-call",
+    "tool-result",
+    "tool-error",
+    "tool-output-denied",
+    "tool-approval-request",
+    "finish-step",
+    "finish",
+    "file",
+    "source",
+  ] as const)("%s has a dispatch handler", (type) => {
+    expect(STREAM_HANDLERS[type]).toBeDefined();
+    expect(typeof STREAM_HANDLERS[type]).toBe("function");
+  });
+
+  it("reasoning-end is NOT in the ignore set", () => {
+    expect(IGNORE_PART_TYPES.has("reasoning-end")).toBe(false);
+  });
+
+  it("reasoning-start is NOT in the ignore set", () => {
+    expect(IGNORE_PART_TYPES.has("reasoning-start")).toBe(false);
+  });
+});
+
+describe("Reasoning lifecycle callbacks", () => {
+  const stubAssistantView = () => {
+    const view = { appendText: vi.fn(), appendReasoning: vi.fn() };
+    return view as never;
+  };
+
+  it("handleReasoningStart calls state.onReasoningStart", () => {
+    const onReasoningStart = vi.fn();
+    const onReasoningEnd = vi.fn();
+    const { state } = createState({
+      onReasoningStart,
+      onReasoningEnd,
+      ensureAssistantView: stubAssistantView,
+    });
+
+    STREAM_HANDLERS["reasoning-start"](
+      { type: "reasoning-start" } as never,
+      state
+    );
+
+    expect(onReasoningStart).toHaveBeenCalledTimes(1);
+    expect(onReasoningEnd).not.toHaveBeenCalled();
+  });
+
+  it("handleReasoningEnd calls state.onReasoningEnd", () => {
+    const onReasoningStart = vi.fn();
+    const onReasoningEnd = vi.fn();
+    const { state } = createState({
+      onReasoningStart,
+      onReasoningEnd,
+      ensureAssistantView: stubAssistantView,
+    });
+
+    STREAM_HANDLERS["reasoning-end"](
+      { type: "reasoning-end" } as never,
+      state
+    );
+
+    expect(onReasoningEnd).toHaveBeenCalledTimes(1);
+    expect(onReasoningStart).not.toHaveBeenCalled();
+  });
+
+  it("reasoning-start fires callback even when showReasoning flag is off", () => {
+    const onReasoningStart = vi.fn();
+    const { state } = createState({
+      onReasoningStart,
+      ensureAssistantView: stubAssistantView,
+      flags: { ...FLAGS_ALL_OFF, showReasoning: false },
+    });
+
+    STREAM_HANDLERS["reasoning-start"](
+      { type: "reasoning-start" } as never,
+      state
+    );
+
+    expect(onReasoningStart).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Tool pending counter invariants (parallel tool calls)", () => {
+  // Regression: parallel tool calls must keep the foreground "Executing..."
+  // spinner alive until ALL pending calls resolve (counter floor at 0).
+  it("each tool-call fires exactly one onToolPendingStart", () => {
+    const onToolPendingStart = vi.fn();
+    const { state } = createState({ onToolPendingStart });
+
+    STREAM_HANDLERS["tool-call"](
+      {
+        type: "tool-call",
+        toolCallId: "p1",
+        toolName: "a",
+        input: {},
+      } as never,
+      state
+    );
+    STREAM_HANDLERS["tool-call"](
+      {
+        type: "tool-call",
+        toolCallId: "p2",
+        toolName: "b",
+        input: {},
+      } as never,
+      state
+    );
+
+    expect(onToolPendingStart).toHaveBeenCalledTimes(2);
+  });
+
+  it("each terminal tool part fires exactly one onToolPendingEnd", () => {
+    const onToolPendingEnd = vi.fn();
+    const { state } = createState({ onToolPendingEnd });
+
+    STREAM_HANDLERS["tool-result"](
+      {
+        type: "tool-result",
+        toolCallId: "p1",
+        toolName: "a",
+        output: "ok",
+      } as never,
+      state
+    );
+    STREAM_HANDLERS["tool-error"](
+      {
+        type: "tool-error",
+        toolCallId: "p2",
+        toolName: "b",
+        error: new Error("boom"),
+      } as never,
+      state
+    );
+    STREAM_HANDLERS["tool-output-denied"](
+      {
+        type: "tool-output-denied",
+        toolCallId: "p3",
+        toolName: "c",
+      } as never,
+      state
+    );
+
+    expect(onToolPendingEnd).toHaveBeenCalledTimes(3);
   });
 });

@@ -278,12 +278,6 @@ export class BaseToolCallView extends Container {
 
     this.readBody.setBackgroundEnabled(options?.useBackground ?? true);
     this.readHeader.setText(header);
-
-    if (options?.isPending) {
-      this.readBody.setText("");
-      return;
-    }
-
     this.readBody.setText(body);
   }
 

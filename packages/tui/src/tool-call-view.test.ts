@@ -120,3 +120,93 @@ describe("BaseToolCallView rendering", () => {
     view.dispose();
   });
 });
+
+const collapseBlankLines = (lines: string[]): string[] =>
+  lines.map((line) => (line.trim().length === 0 ? "" : line.trimEnd()));
+
+describe("BaseToolCallView render shape fixtures", () => {
+  // Regression: pretty-block pending used to paint an internal "Executing..."
+  // spinner into readBody, which competed with the foreground spinner.
+  it("pretty-block pending mode renders only the header — no body, no trailing blank, no Executing", () => {
+    const view = new BaseToolCallView(
+      "call_px_pending",
+      "shell_execute",
+      markdownTheme,
+      () => undefined
+    );
+    view.setFinalInput({ command: "ls" });
+    view.setPrettyBlock("**Shell** `ls`", "", {
+      isPending: true,
+      useBackground: false,
+    });
+
+    const lines = collapseBlankLines(view.render(80));
+
+    expect(lines).toMatchInlineSnapshot(`
+      [
+        " Shell ls",
+      ]
+    `);
+    expect(lines.join("\n")).not.toContain("Executing");
+  });
+
+  // Regression: ensurePrettyBlockComponents used to keep a standalone Spacer(1)
+  // between header and body, which emitted [""] even when the body was empty,
+  // producing a ghost blank line above the foreground spinner.
+  it("pretty-block non-pending mode renders [header, blank, body] — no trailing blank", () => {
+    const view = new BaseToolCallView(
+      "call_px_full",
+      "shell_execute",
+      markdownTheme,
+      () => undefined
+    );
+    view.setFinalInput({ command: "ls" });
+    view.setOutput("a\nb\nc");
+    view.setPrettyBlock("**Shell** `ls`", "a\nb\nc", { useBackground: false });
+
+    const lines = collapseBlankLines(view.render(80));
+
+    expect(lines).toMatchInlineSnapshot(`
+      [
+        " Shell ls",
+        "",
+        " a",
+        " b",
+        " c",
+      ]
+    `);
+  });
+
+  // Regression: BaseToolCallView used to render an inline "Executing..." Text
+  // child, which sat inside chatContainer far from the editor and clashed
+  // with the idle placeholder's two blank lines.
+  it("raw fallback path never emits 'Executing' — pending affordance lives in foreground spinner", () => {
+    const view = new BaseToolCallView(
+      "call_raw_pending",
+      "shell_execute",
+      markdownTheme,
+      () => undefined
+    );
+    view.setFinalInput({ command: "ls -la" });
+
+    const output = view.render(120).join("\n");
+    expect(output).not.toContain("Executing");
+    expect(output).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
+  });
+
+  // Regression: raw fallback used to carry a trailing blank line from
+  // Markdown's `space` token, making the next container start with a gap.
+  it("raw fallback path has no trailing blank line", () => {
+    const view = new BaseToolCallView(
+      "call_raw_noblank",
+      "shell_execute",
+      markdownTheme,
+      () => undefined
+    );
+    view.setFinalInput({ command: "ls" });
+
+    const lines = view.render(120);
+    const lastLine = lines.at(-1) ?? "";
+    expect(lastLine.trim().length).toBeGreaterThan(0);
+  });
+});

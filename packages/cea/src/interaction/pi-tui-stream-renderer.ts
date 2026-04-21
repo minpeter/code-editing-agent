@@ -992,9 +992,6 @@ class ToolCallView extends Container {
   private inputBuffer = "";
   private output: unknown;
   private outputDenied = false;
-  private pendingSpinnerTicker: SpinnerTicker | null = null;
-  private pendingTemplate: string | null = null;
-  private lastPendingFrame = "";
   private parsedInput: unknown;
   private readMode = false;
   private toolName: string;
@@ -1023,7 +1020,7 @@ class ToolCallView extends Container {
   }
 
   dispose(): void {
-    this.stopPendingSpinner();
+    return;
   }
 
   private setReadMode(enabled: boolean): void {
@@ -1034,42 +1031,6 @@ class ToolCallView extends Container {
     this.readMode = enabled;
     this.clear();
     this.addChild(enabled ? this.readBlock : this.content);
-  }
-
-  private stopPendingSpinner(): void {
-    this.pendingTemplate = null;
-    if (this.pendingSpinnerTicker) {
-      this.pendingSpinnerTicker.stop();
-      this.pendingSpinnerTicker = null;
-    }
-  }
-
-  private paintPendingFrame(frame: string): void {
-    if (!this.pendingTemplate) {
-      return;
-    }
-
-    this.readBody.setText(
-      this.pendingTemplate.replaceAll(
-        TOOL_PENDING_MARKER,
-        stylePendingIndicator(frame, TOOL_PENDING_MESSAGE)
-      )
-    );
-  }
-
-  private startPendingSpinner(template: string): void {
-    this.pendingTemplate = template;
-
-    if (this.pendingSpinnerTicker) {
-      this.paintPendingFrame(this.lastPendingFrame);
-      return;
-    }
-
-    this.pendingSpinnerTicker = createSpinnerTicker((frame) => {
-      this.lastPendingFrame = frame;
-      this.paintPendingFrame(frame);
-      this.requestRender();
-    });
   }
 
   async appendInputChunk(chunk: string): Promise<void> {
@@ -1164,13 +1125,6 @@ class ToolCallView extends Container {
     this.setReadMode(true);
     this.readBody.setBackgroundEnabled(options?.useBackground ?? true);
     this.readHeader.setText(header);
-
-    if (options?.isPending) {
-      this.startPendingSpinner(body);
-      return;
-    }
-
-    this.stopPendingSpinner();
     this.readBody.setText(body);
   }
 
@@ -1673,8 +1627,6 @@ class ToolCallView extends Container {
     if (!this.showRawToolIo && this.tryRenderPrettyMode()) {
       return;
     }
-
-    this.stopPendingSpinner();
 
     if (this.shouldSuppressRawFallback()) {
       return;
