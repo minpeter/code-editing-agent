@@ -185,6 +185,11 @@ export interface LoopHooks {
    * display a loading indicator during the prompt-processing latency gap.
    *
    * The callback is awaited before iteration starts, so keep it fast.
+   *
+   * Note: only runtimes that drive their turns through `runAgentLoop`
+   * observe this hook. The TUI (`createAgentTUI`) implements its own
+   * stream loop and exposes an independent `AgentTUIConfig.onStreamStart`
+   * with a `phase` argument.
    */
   onStreamStart?: (context: LoopContinueContext) => void | Promise<void>;
   onToolCall?: (

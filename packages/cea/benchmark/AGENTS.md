@@ -51,6 +51,8 @@ headless.ts (Docker)          output.jsonl          harbor_agent.py
      │                            │                       │
      ├─► emit InterruptEvent ───► interrupt ─────────────► lifecycle annotation
      │                            │                       │
+     ├─► emit TurnStartEvent ───► turn-start ────────────► lifecycle annotation (not persisted)
+     │                            │                       │
      └─► emit StepEvent(agent) ─► step (agent) ──────────► Step(source="agent")
                                   │                       │
                                   └───────────────────────► trajectory.json (ATIF-v1.6, written by headless)
@@ -66,13 +68,15 @@ headless.ts (Docker)          output.jsonl          harbor_agent.py
 | `compaction` | `event`, `tokensBefore`, `tokensAfter?`, `durationMs?` | History compaction events |
 | `error` | `error`, `timestamp` | Fatal errors |
 | `interrupt` | `reason`, `timestamp` | Intentional caller interruption |
+| `turn-start` | `phase`, `timestamp` | Lifecycle annotation emitted once per logical turn right after `agent.stream()` dispatch; dropped by `TrajectoryCollector` and absent from `trajectory.json` |
 
 ## Verification
 
 ### 1. Event Type Distribution
 ```bash
 cat jobs/<job_id>/*/agent/output.jsonl | jq -r '.type' | sort | uniq -c
-# Expected output like:   1 metadata   N step   M compaction   K approval   optional interrupt (no unexpected 'error' lines)
+# Expected output like:   1 metadata   N step   N turn-start   M compaction   K approval   optional interrupt (no unexpected 'error' lines)
+# Note: turn-start count should match the number of logical turns (== agent step count for linear conversations).
 ```
 
 ### 2. Step ID Sequence

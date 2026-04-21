@@ -129,6 +129,114 @@ describe("runHeadless", () => {
     expect(history.getAll()[0]?.originalContent).toBe("안녕");
   });
 
+  it("emits a single turn-start event per logical turn in the normal path", async () => {
+    const events: TrajectoryEvent[] = [];
+    const history = new CheckpointHistory();
+
+    await runHeadless({
+      agent: {
+        stream: () =>
+          createMockStream([{ role: "assistant", content: "hello" }]),
+      },
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: { content: "hi" },
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-turn-start-order",
+    });
+
+    const turnStartEvents = events.filter((e) => e.type === "turn-start");
+    expect(turnStartEvents).toHaveLength(1);
+    expect(turnStartEvents[0]).toMatchObject({
+      type: "turn-start",
+      phase: "new-turn",
+    });
+
+    const userIndex = events.findIndex(
+      (e) => e.type === "step" && "source" in e && e.source === "user"
+    );
+    const turnStartIndex = events.findIndex((e) => e.type === "turn-start");
+    const agentIndex = events.findIndex(
+      (e) => e.type === "step" && "source" in e && e.source === "agent"
+    );
+    expect(userIndex).toBeGreaterThanOrEqual(0);
+    expect(turnStartIndex).toBeGreaterThan(userIndex);
+    expect(agentIndex).toBeGreaterThan(turnStartIndex);
+  });
+
+  it("emits an intermediate-step turn-start on tool-continuation turns", async () => {
+    const events: TrajectoryEvent[] = [];
+    const history = new CheckpointHistory();
+    let streamCallCount = 0;
+
+    await runHeadless({
+      agent: {
+        stream: () => {
+          streamCallCount += 1;
+          if (streamCallCount === 1) {
+            return createToolCallStream(
+              [{ role: "assistant", content: "call_1" }],
+              "tool-calls"
+            );
+          }
+          return createMockStream([{ role: "assistant", content: "done" }]);
+        },
+      },
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: { content: "do it" },
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-intermediate-turn-start",
+    });
+
+    expect(streamCallCount).toBe(2);
+    const turnStartPhases = events
+      .filter((e) => e.type === "turn-start")
+      .map((e) => (e as { phase: string }).phase);
+    expect(turnStartPhases).toEqual(["new-turn", "intermediate-step"]);
+  });
+
+  it("excludes turn-start events from the ATIF trajectory JSON", async () => {
+    const events: TrajectoryEvent[] = [];
+    const history = new CheckpointHistory();
+    const atifOutputPath = `/tmp/plugsuits-turn-start-${Date.now()}.json`;
+
+    await runHeadless({
+      agent: {
+        stream: () =>
+          createMockStream([{ role: "assistant", content: "hello" }]),
+      },
+      atifOutputPath,
+      emitEvent: (event) => {
+        events.push(event);
+      },
+      initialUserMessage: { content: "hi" },
+      messageHistory: history,
+      modelId: "mock-model",
+      sessionId: "session-trajectory-persistence-check",
+    });
+
+    expect(events.some((e) => e.type === "turn-start")).toBe(true);
+
+    const { readFileSync, unlinkSync } = await import("node:fs");
+    const persisted = JSON.parse(readFileSync(atifOutputPath, "utf-8")) as {
+      schema_version: string;
+      steps: Array<{ step_id: number; source: string }>;
+      extra?: Record<string, unknown>;
+    };
+    unlinkSync(atifOutputPath);
+
+    expect(persisted.schema_version).toBe("ATIF-v1.6");
+    const stepSources = persisted.steps.map((s) => s.source);
+    expect(stepSources).not.toContain("turn-start");
+    const serialized = JSON.stringify(persisted);
+    expect(serialized).not.toContain("turn-start");
+  });
+
   it("does not emit a synthetic user event when no initial user message is given", async () => {
     const events: TrajectoryEvent[] = [];
 
@@ -482,6 +590,9 @@ describe("runHeadless", () => {
     );
     expect(agentEvents).toHaveLength(1);
     expect(agentEvents[0]).toMatchObject({ message: "ok" });
+    const turnStartEvents = events.filter((e) => e.type === "turn-start");
+    expect(turnStartEvents).toHaveLength(1);
+    expect(turnStartEvents[0]).toMatchObject({ phase: "new-turn" });
   });
 
   it("retries once on no output generated error", async () => {
@@ -521,6 +632,8 @@ describe("runHeadless", () => {
     );
     expect(agentEvents).toHaveLength(1);
     expect(agentEvents[0]).toMatchObject({ message: "ok" });
+    const turnStartEvents = events.filter((e) => e.type === "turn-start");
+    expect(turnStartEvents).toHaveLength(1);
   });
 
   it("retries multiple times on no output generated error before succeeding", async () => {
@@ -559,6 +672,8 @@ describe("runHeadless", () => {
       (e) => e.type === "step" && "source" in e && e.source === "agent"
     );
     expect(agentEvents).toHaveLength(1);
+    const turnStartEvents = events.filter((e) => e.type === "turn-start");
+    expect(turnStartEvents).toHaveLength(1);
   });
 
   it("emits an interrupt event and stops when the caller aborts", async () => {

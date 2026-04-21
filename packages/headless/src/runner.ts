@@ -635,6 +635,7 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
     }
     let overflowRetried = false;
     let noOutputRetryCount = 0;
+    let hasEmittedTurnStart = false;
     const executeStream = async (
       streamMessages: ModelMessage[],
       streamMaxOutputTokens: number | undefined
@@ -670,12 +671,15 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
           };
         }
 
-        emitAndCollect({
-          type: "turn-start",
-          phase,
-          timestamp: new Date().toISOString(),
-        });
-        await config.onStreamStart?.(phase);
+        if (!hasEmittedTurnStart) {
+          hasEmittedTurnStart = true;
+          emitAndCollect({
+            type: "turn-start",
+            phase,
+            timestamp: new Date().toISOString(),
+          });
+          await config.onStreamStart?.(phase);
+        }
 
         const streamPromise = Promise.resolve(
           config.agent.stream(streamOptions)

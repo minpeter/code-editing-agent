@@ -759,6 +759,8 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   let inputResolver: null | ((value: string | null) => void) = null;
   let lastCtrlCPressAt = 0;
   let foregroundStatus: StatusSpinner | null = null;
+  let foregroundStatusMessage: string | null = null;
+  let foregroundStatusBeforeBlocking: string | null = null;
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
   let blockingCompactionActive = false;
   let commandInputListenerActive = false;
@@ -835,6 +837,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   };
 
   const clearStatus = (): void => {
+    foregroundStatusMessage = null;
     if (!foregroundStatus) {
       tui.requestRender();
       return;
@@ -849,6 +852,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       foregroundStatus.stop();
     }
     foregroundStatus = createStatusSpinner(message);
+    foregroundStatusMessage = message;
     renderForegroundStatus();
   };
 
@@ -914,12 +918,20 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
               "Compacting...",
               "running"
             );
+            if (foregroundStatusMessage !== null) {
+              foregroundStatusBeforeBlocking = foregroundStatusMessage;
+              showLoader("Compacting...");
+            }
             userCompactionCallbacks?.onBlockingChange?.(event);
             return;
           }
 
           blockingCompactionActive = false;
           clearBackgroundStatus("blocking-compaction");
+          if (foregroundStatusBeforeBlocking !== null) {
+            showLoader(foregroundStatusBeforeBlocking);
+            foregroundStatusBeforeBlocking = null;
+          }
           updateHeader();
           tui.requestRender();
           userCompactionCallbacks?.onBlockingChange?.(event);
