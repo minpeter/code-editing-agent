@@ -159,6 +159,17 @@ export type {
   RestorationItem,
 } from "./post-compact-restoration";
 export { PostCompactRestorer } from "./post-compact-restoration";
+export type {
+  FilePreferencesStoreOptions,
+  LayeredPreferencesStoreOptions,
+  PreferencesStore,
+} from "./preferences-store";
+export {
+  FilePreferencesStore,
+  InMemoryPreferencesStore,
+  LayeredPreferencesStore,
+  shallowMergePreferences,
+} from "./preferences-store";
 export { SessionManager } from "./session";
 export type { MemoryFact, SessionMemoryConfig } from "./session-memory";
 export { SessionMemoryTracker } from "./session-memory";

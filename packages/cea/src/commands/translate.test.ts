@@ -1,5 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import {
+  InMemoryPreferencesStore,
+  type PreferencesStore,
+} from "@ai-sdk-tool/harness";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { agentManager } from "../agent";
+import type { UserPreferences } from "../user-preferences";
+import {
+  configurePreferencesPersistence,
+  resetPreferencesPersistenceForTesting,
+} from "./preferences-persistence";
 import { createTranslateCommand } from "./translate";
 
 describe("translate command", () => {
@@ -7,6 +16,11 @@ describe("translate command", () => {
 
   beforeEach(() => {
     agentManager.resetForTesting();
+    resetPreferencesPersistenceForTesting();
+  });
+
+  afterEach(() => {
+    resetPreferencesPersistenceForTesting();
   });
 
   it("reports current translation state when called without args", async () => {
@@ -60,5 +74,24 @@ describe("translate command", () => {
     expect(result?.message).toContain("Invalid argument");
     expect(result?.message).toContain("on");
     expect(result?.message).toContain("off");
+  });
+
+  it("persists the new translation state to the workspace store", async () => {
+    const workspaceStore: PreferencesStore<UserPreferences> =
+      new InMemoryPreferencesStore<UserPreferences>();
+    configurePreferencesPersistence({ workspaceStore });
+
+    const offResult = await command.execute({ args: ["off"] });
+    expect(offResult?.success).toBe(true);
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(await workspaceStore.load()).toEqual({ translateEnabled: false });
+  });
+
+  it("does not persist when persistence has not been configured", async () => {
+    const offResult = await command.execute({ args: ["off"] });
+    expect(offResult?.success).toBe(true);
+    expect(agentManager.isTranslationEnabled()).toBe(false);
   });
 });

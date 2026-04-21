@@ -1,13 +1,17 @@
 import type { Command } from "@ai-sdk-tool/harness";
 import { agentManager } from "../agent";
 import { createToggleCommand } from "./factories/create-toggle-command";
+import { persistPreferencePatch } from "./preferences-persistence";
 
 export const createTranslateCommand = (): Command =>
   createToggleCommand({
     name: "translate",
     description: "Toggle auto-translation of non-English prompts",
     getter: () => agentManager.isTranslationEnabled(),
-    setter: (value) => agentManager.setTranslationEnabled(value),
+    setter: (value) => {
+      agentManager.setTranslationEnabled(value);
+      persistPreferencePatch({ translateEnabled: value });
+    },
     featureName: "Translation",
     enabledMessage: "Translation enabled",
     disabledMessage: "Translation disabled",
