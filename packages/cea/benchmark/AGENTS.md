@@ -36,7 +36,7 @@ Control agent behavior via environment variables:
 | `AGENT_ENABLE_THINKING` | `1`, `true`, `yes` | Enable `--think` flag (captures reasoning content) |
 | `AGENT_ENABLE_TOOL_FALLBACK` | `1`, `true`, `yes` | Enable `--tool-fallback` flag (XML-based tool calling for non-native models) |
 
-## Event Flow (ATIF-v1.6)
+## Event Flow
 
 ```
 headless.ts (Docker)          output.jsonl          harbor_agent.py
@@ -55,7 +55,7 @@ headless.ts (Docker)          output.jsonl          harbor_agent.py
      │                            │                       │
      └─► emit StepEvent(agent) ─► step (agent) ──────────► Step(source="agent")
                                   │                       │
-                                  └───────────────────────► trajectory.json (ATIF-v1.6, written by headless)
+                                  └───────────────────────► trajectory.json (ATIF-v1.4, written by headless)
 ```
 
 ## Event Types (output.jsonl)

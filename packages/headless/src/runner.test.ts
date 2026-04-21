@@ -230,7 +230,7 @@ describe("runHeadless", () => {
     };
     unlinkSync(atifOutputPath);
 
-    expect(persisted.schema_version).toBe("ATIF-v1.6");
+    expect(persisted.schema_version).toBe("ATIF-v1.4");
     const stepSources = persisted.steps.map((s) => s.source);
     expect(stepSources).not.toContain("turn-start");
     const serialized = JSON.stringify(persisted);
@@ -482,7 +482,7 @@ describe("runHeadless", () => {
     expect(capturedMessages[1]?.[0]?.role).toBe("user");
   });
 
-  it("emits ATIF-v1.6 step events for user messages and agent tool responses", async () => {
+  it("emits ATIF-v1.4 step events for user messages and agent tool responses", async () => {
     const collectedEvents: TrajectoryEvent[] = [];
 
     await runHeadless({

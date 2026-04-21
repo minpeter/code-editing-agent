@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ATIF-v1.6 trajectory validation test.
+"""ATIF-v1.4 trajectory validation test.
 
 Usage: python3 test_trajectory.py <trajectory.json>
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 def validate_trajectory(path: str) -> list[str]:
-    """Validate trajectory.json against ATIF-v1.6 spec. Returns list of errors."""
+    """Validate trajectory.json against ATIF-v1.4 spec. Returns list of errors."""
     errors = []
 
     try:
@@ -21,9 +21,9 @@ def validate_trajectory(path: str) -> list[str]:
         return [f"Cannot read/parse file: {e}"]
 
     # 1. schema_version
-    if t.get("schema_version") != "ATIF-v1.6":
+    if t.get("schema_version") != "ATIF-v1.4":
         errors.append(
-            f"schema_version: expected 'ATIF-v1.6', got {t.get('schema_version')!r}"
+            f"schema_version: expected 'ATIF-v1.4', got {t.get('schema_version')!r}"
         )
 
     # 2. session_id present

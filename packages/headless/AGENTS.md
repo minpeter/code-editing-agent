@@ -9,9 +9,18 @@ This package provides a non-interactive, JSONL event-streaming runtime for agent
 
 The package depends on `@ai-sdk-tool/harness` for `CheckpointHistory`, `AgentStreamResult`, and `shouldContinueManualToolLoop`. The agent itself is passed in as a config parameter.
 
-## JSONL EVENT PROTOCOL (ATIF-v1.6)
+## JSONL EVENT PROTOCOL
 
-Every event is a JSON object on its own line. Events conform to the ATIF-v1.6 specification for trajectory logging.
+Every event is a JSON object on its own line.
+
+> **This JSONL stream is NOT the ATIF schema.** ATIF is the format of the
+> persisted `trajectory.json` file produced by `TrajectoryCollector` — see
+> [Harbor's ATIF specification](https://www.harborframework.com/docs/agents/trajectory-format).
+> The current ATIF version is **v1.4**. This JSONL protocol is an internal
+> streaming contract used by the runner to drive UI, telemetry, and the
+> trajectory collector; it carries lifecycle annotations
+> (`approval`, `compaction`, `interrupt`, `turn-start`) that have no place
+> in ATIF and are dropped from the persisted trajectory.
 
 ### Design Decisions
 - **NO sessionId on individual events**: A single `MetadataEvent` at the start carries the `session_id`.
@@ -120,7 +129,7 @@ import type {
 | `runner.ts` | `runHeadless` | Main agent loop with JSONL emission |
 | `emit.ts` | `emitEvent` | Default stdout JSONL event sink |
 | `signals.ts` | `registerSignalHandlers` | Process signal lifecycle management |
-| `types.ts` | `TrajectoryEvent`, etc. | ATIF-v1.6 event type definitions |
+| `types.ts` | `TrajectoryEvent`, etc. | JSONL stream event types (internal) + ATIF-v1.4 persisted types |
 
 ## CONVENTIONS
 

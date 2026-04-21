@@ -39,7 +39,7 @@ export interface TrajectoryJson {
     total_cached_tokens: number | null;
     total_steps: number;
   };
-  schema_version: "ATIF-v1.6";
+  schema_version: "ATIF-v1.4";
   session_id: string;
   steps: AtifStep[];
 }
@@ -150,7 +150,7 @@ export class TrajectoryCollector {
 
   finalize(): TrajectoryJson {
     const trajectory: TrajectoryJson = {
-      schema_version: "ATIF-v1.6",
+      schema_version: "ATIF-v1.4",
       session_id: this.metadata?.session_id ?? "unknown",
       agent: this.metadata?.agent ?? { ...DEFAULT_AGENT },
       steps: this.steps.map((s) => this.toAtifStep(s)),

@@ -1,7 +1,16 @@
 import type { BeforeTurnResult } from "@ai-sdk-tool/harness";
 
 /**
- * ATIF-v1.6 native event types for trajectory logging.
+ * JSONL streaming protocol for headless trajectory logging.
+ *
+ * Note: this is NOT the ATIF schema itself. The persisted trajectory
+ * written to disk via {@link TrajectoryCollector} conforms to ATIF-v1.4
+ * (https://www.harborframework.com/docs/agents/trajectory-format). The
+ * event union below is the internal stdout JSONL contract that the
+ * runner emits during execution; the collector consumes these events
+ * and produces the ATIF trajectory as output. Lifecycle annotations
+ * (`approval`, `compaction`, `interrupt`, `turn-start`) exist only on
+ * this JSONL stream and are not part of ATIF.
  *
  * All emitted step events (UserStepEvent, AgentStepEvent) conform to the ATIF specification.
  * Metadata is emitted once at run start. Compaction and error events are lifecycle annotations.
