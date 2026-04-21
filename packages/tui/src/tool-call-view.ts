@@ -14,12 +14,28 @@ const TAB_PATTERN = /\t/g;
 const BACKTICK_FENCE_PATTERN = /`{3,}/g;
 
 const ANSI_RESET = "\x1b[0m";
+const ANSI_DIM = "\x1b[2m";
+const ANSI_CYAN = "\x1b[36m";
 const ANSI_BG_GRAY = "\x1b[100m";
 const ANSI_BG_DARK_RED = "\x1b[48;5;88m";
 
-const PENDING_SPINNER_FRAMES = ["-", "\\", "|", "/"] as const;
-const PENDING_MESSAGE = "Executing..";
+const PENDING_SPINNER_FRAMES = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+] as const;
+const PENDING_MESSAGE = "Executing...";
 const PENDING_MARKER = "__tool_pending_status__";
+
+const stylePendingSpinner = (frame: string, message: string): string =>
+  `${ANSI_CYAN}${frame}${ANSI_RESET} ${ANSI_DIM}${message}${ANSI_RESET}`;
 
 const safeStringify = (value: unknown): string => {
   if (typeof value === "string") {
@@ -357,7 +373,7 @@ export class BaseToolCallView extends Container {
     }
 
     const frame = PENDING_SPINNER_FRAMES[this.pendingSpinnerFrameIndex];
-    const spinnerText = `${frame} ${PENDING_MESSAGE}`;
+    const spinnerText = stylePendingSpinner(frame, PENDING_MESSAGE);
     this.readBody.setText(
       this.pendingTemplate.includes(PENDING_MARKER)
         ? this.pendingTemplate.replaceAll(PENDING_MARKER, spinnerText)

@@ -103,6 +103,8 @@ export interface PiTuiStreamState {
   ensureToolView: (toolCallId: string, toolName: string) => ToolCallView;
   flags: PiTuiRenderFlags;
   getToolView: (toolCallId: string) => ToolCallView | undefined;
+  onReasoningEnd?: () => void;
+  onReasoningStart?: () => void;
   resetAssistantView: (suppressLeadingSpacer?: boolean) => void;
   streamedToolCallIds: Set<string>;
 }
@@ -158,6 +160,7 @@ export const handleReasoningStart: StreamPartHandler = (_part, state) => {
   if (state.flags.showReasoning) {
     state.ensureAssistantView();
   }
+  state.onReasoningStart?.();
 };
 
 export const handleReasoningDelta: StreamPartHandler = (part, state) => {
@@ -170,6 +173,10 @@ export const handleReasoningDelta: StreamPartHandler = (part, state) => {
     { type: "reasoning-delta" }
   >;
   state.ensureAssistantView().appendReasoning(reasoningPart.text);
+};
+
+export const handleReasoningEnd: StreamPartHandler = (_part, state) => {
+  state.onReasoningEnd?.();
 };
 
 export const handleToolInputStart: StreamPartHandler = async (part, state) => {
@@ -386,6 +393,7 @@ export const STREAM_HANDLERS: Record<string, StreamPartHandler> = {
   "text-delta": handleTextDelta,
   "reasoning-start": handleReasoningStart,
   "reasoning-delta": handleReasoningDelta,
+  "reasoning-end": handleReasoningEnd,
   "tool-input-start": handleToolInputStart,
   "tool-input-delta": handleToolInputDelta,
   "tool-input-end": handleToolInputEnd,
@@ -401,12 +409,7 @@ export const STREAM_HANDLERS: Record<string, StreamPartHandler> = {
   finish: handleFinish,
 };
 
-export const IGNORE_PART_TYPES = new Set([
-  "abort",
-  "text-end",
-  "reasoning-end",
-  "start",
-]);
+export const IGNORE_PART_TYPES = new Set(["abort", "text-end", "start"]);
 
 export const isVisibleStreamPart = (
   part: StreamPart,
@@ -415,16 +418,14 @@ export const isVisibleStreamPart = (
   switch (part.type) {
     case "abort":
     case "text-end":
+    case "reasoning-start":
+    case "reasoning-delta":
     case "reasoning-end":
     case "start":
     case "tool-input-end":
       return false;
     case "text-start":
       return true;
-    case "reasoning-start":
-      return flags.showReasoning;
-    case "reasoning-delta":
-      return flags.showReasoning;
     case "tool-result":
       return flags.showToolResults;
     case "start-step":

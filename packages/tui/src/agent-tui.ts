@@ -1192,7 +1192,8 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const renderAgentStream = async (
     stream: AsyncIterable<unknown>,
     flags: PiTuiRenderFlags,
-    onFirstVisiblePart?: () => void
+    onFirstVisiblePart?: () => void,
+    loaderMessage?: string
   ): Promise<void> => {
     const activeToolInputs = new Map<string, ToolInputRenderState>();
     const streamedToolCallIds = new Set<string>();
@@ -1243,6 +1244,8 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       return view;
     };
 
+    const baseLoaderMessage = loaderMessage ?? foregroundStatusMessage;
+
     const state: PiTuiStreamState = {
       flags,
       activeToolInputs,
@@ -1252,6 +1255,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       ensureToolView,
       getToolView: (toolCallId: string) => toolViews.get(toolCallId),
       chatContainer,
+      onReasoningStart: () => {
+        foregroundStatus?.setMessage("Thinking...");
+      },
+      onReasoningEnd: () => {
+        if (baseLoaderMessage) {
+          foregroundStatus?.setMessage(baseLoaderMessage);
+        }
+      },
     };
 
     try {
@@ -1587,7 +1598,8 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
           showSources: false,
           showFiles: false,
         },
-        clearStreamingLoader
+        clearStreamingLoader,
+        "Working..."
       );
 
       clearStreamingLoader();

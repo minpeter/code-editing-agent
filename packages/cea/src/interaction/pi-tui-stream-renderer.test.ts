@@ -10,7 +10,7 @@ import {
 type TestStreamPart = TextStreamPart<ToolSet>;
 
 const LARGE_BLANK_GAP_REGEX = /\n[ \t]*\n[ \t]*\n[ \t]*\n/;
-const EXECUTING_SPINNER_TEXT_REGEX = /[-\\|/] Executing\.\./;
+const EXECUTING_SPINNER_TEXT_REGEX = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏].*Executing\.\.\./;
 const tagGrepLine = (
   path: string,
   lineNumber: number,
@@ -686,7 +686,7 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Read src/streamed.ts");
-    expect(output).toContain("Executing..");
+    expect(output).toContain("Executing...");
     expect(EXECUTING_SPINNER_TEXT_REGEX.test(output)).toBe(true);
     expect(output).not.toContain("\x1b[100m");
     expect(output).not.toContain("Tool read_file");
@@ -712,7 +712,7 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Read src/no-flicker.ts");
-    expect(output).toContain("Executing..");
+    expect(output).toContain("Executing...");
     expect(output).not.toContain("Tool read_file");
     expect(snapshots.some((frame) => frame.includes("{}"))).toBe(false);
   });
@@ -758,7 +758,7 @@ describe("renderFullStreamWithPiTui", () => {
 
     const output = chatContainer.render(120).join("\n");
     expect(output).toContain("Read src/bound-context.ts");
-    expect(output).toContain("Executing..");
+    expect(output).toContain("Executing...");
     expect(renderTracker.renderCalls).toBeGreaterThan(2);
   });
 
@@ -777,7 +777,7 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Shell echo streamed");
-    expect(output).toContain("Executing..");
+    expect(output).toContain("Executing...");
     expect(EXECUTING_SPINNER_TEXT_REGEX.test(output)).toBe(true);
     expect(output).not.toContain("Tool shell_execute");
   });
@@ -797,7 +797,7 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Read src/late-name.ts");
-    expect(output).toContain("Executing..");
+    expect(output).toContain("Executing...");
     expect(output).not.toContain("Tool tool");
   });
 

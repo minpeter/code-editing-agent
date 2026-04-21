@@ -106,9 +106,20 @@ const TAB_PATTERN = /\t/g;
 const MAX_READ_PREVIEW_LINES = 10;
 const MAX_WRITE_FILE_PREVIEW_LINES = 200;
 const MAX_WRITE_FILE_PREVIEW_CHARS = 100_000;
-const TOOL_PENDING_MESSAGE = "Executing..";
+const TOOL_PENDING_MESSAGE = "Executing...";
 const TOOL_PENDING_MARKER = "__tool_pending_status__";
-const TOOL_PENDING_SPINNER_FRAMES = ["-", "\\", "|", "/"] as const;
+const TOOL_PENDING_SPINNER_FRAMES = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+] as const;
 const HASHLINE_TAG_ONLY_PATTERN = /^(.*\d+#[ZPMQVRWSNKTXJBYH]{2})\s*$/;
 const HASHLINE_PIPE_ONLY_PATTERN = /^\|\s*(.*)$/;
 const HASHLINE_TAG_PIPE_ONLY_PATTERN =
@@ -619,18 +630,19 @@ const renderGrepOutput = (output: string): GrepRenderPayload | null => {
 
 const renderPendingOutput = (): string => TOOL_PENDING_MARKER;
 
-const buildPendingSpinnerText = (frame: string): string =>
-  `${frame} ${TOOL_PENDING_MESSAGE}`;
-
-const renderToolOutput = (_toolName: string, output: unknown): string =>
-  renderCodeBlock("text", output);
-
 const ANSI_RESET = "\x1b[0m";
 const ANSI_DIM = "\x1b[2m";
 const ANSI_ITALIC = "\x1b[3m";
+const ANSI_CYAN = "\x1b[36m";
 const ANSI_GRAY = "\x1b[90m";
 const ANSI_BG_GRAY = "\x1b[100m";
 const ANSI_BG_DARK_RED = "\x1b[48;5;88m";
+
+const buildPendingSpinnerText = (frame: string): string =>
+  `${ANSI_CYAN}${frame}${ANSI_RESET} ${ANSI_DIM}${TOOL_PENDING_MESSAGE}${ANSI_RESET}`;
+
+const renderToolOutput = (_toolName: string, output: unknown): string =>
+  renderCodeBlock("text", output);
 const LEADING_NEWLINES = /^\n+/;
 const TRAILING_NEWLINES = /\n+$/;
 
