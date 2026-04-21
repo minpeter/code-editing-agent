@@ -145,31 +145,11 @@ class StatusSpinner extends Text {
     this.updateDisplay();
   }
 
-  render(width: number): string[] {
-    return ["", ...super.render(width)];
-  }
-
   private updateDisplay(): void {
     this.setText(
       `${this.spinnerColorFn(this.currentFrame)} ${this.messageColorFn(this.message)}`
     );
     this.tui.requestRender();
-  }
-}
-
-/**
- * Fixed-height placeholder that occupies the same 2 vertical lines as
- * {@link StatusSpinner} while idle. Keeping the status slot at a constant
- * height prevents layout shift when the spinner is mounted/unmounted, and
- * guarantees a persistent blank buffer directly above the prompt editor.
- */
-class IdleStatusPlaceholder extends Text {
-  constructor() {
-    super("", 1, 0);
-  }
-
-  render(_width: number): string[] {
-    return ["", ""];
   }
 }
 
@@ -431,8 +411,8 @@ export interface CommandPreprocessHooks {
   editorTheme: EditorTheme;
   handleCtrlCPress: () => void;
   isCtrlCInput: (data: string) => boolean;
+  overlayContainer: Container;
   showMessage: (message: string) => void;
-  statusContainer: Container;
   tui: TUI;
   updateHeader: () => void;
 }
@@ -682,7 +662,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   const headerContainer = new Container();
   const chatContainer = new Container();
-  const statusContainer = new Container();
+  const overlayContainer = new Container();
   const editorContainer = new Container();
   const footerContainer = new Container();
   const footerStatusBar = new FooterStatusBar(tui);
@@ -730,7 +710,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
 
   tui.addChild(headerContainer);
   tui.addChild(chatContainer);
-  tui.addChild(statusContainer);
+  tui.addChild(overlayContainer);
   tui.addChild(editorContainer);
   tui.addChild(footerContainer);
   tui.setFocus(editor);
@@ -788,20 +768,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       message
     );
 
-  const idleStatusPlaceholder = new IdleStatusPlaceholder();
-  let idleStatusPlaceholderMode: "normal" | "suppressed" = "normal";
-
-  const renderForegroundStatus = (): void => {
-    statusContainer.clear();
-    if (foregroundStatus) {
-      statusContainer.addChild(foregroundStatus);
-    } else if (idleStatusPlaceholderMode === "normal") {
-      statusContainer.addChild(idleStatusPlaceholder);
-    }
-    tui.requestRender();
-  };
-
-  renderForegroundStatus();
+  let foregroundSpinnerSpacer: Spacer | null = null;
 
   const renderFooterStatuses = (): void => {
     footerStatusBar.setEntries([...backgroundStatuses.values()]);
@@ -824,24 +791,38 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     renderFooterStatuses();
   };
 
+  const detachForegroundSpinner = (): void => {
+    if (foregroundSpinnerSpacer) {
+      chatContainer.removeChild(foregroundSpinnerSpacer);
+      foregroundSpinnerSpacer = null;
+    }
+    if (foregroundStatus) {
+      foregroundStatus.stop();
+      chatContainer.removeChild(foregroundStatus);
+      foregroundStatus = null;
+    }
+  };
+
   const clearStatus = (): void => {
     foregroundStatusMessage = null;
-    if (!foregroundStatus) {
+    if (!(foregroundStatus || foregroundSpinnerSpacer)) {
       tui.requestRender();
       return;
     }
-    foregroundStatus.stop();
-    foregroundStatus = null;
-    renderForegroundStatus();
+    detachForegroundSpinner();
+    tui.requestRender();
   };
 
   const showLoader = (message: string): void => {
-    if (foregroundStatus) {
-      foregroundStatus.stop();
-    }
-    foregroundStatus = createStatusSpinner(message);
+    detachForegroundSpinner();
+    const spinner = createStatusSpinner(message);
+    const spacer = new Spacer(1);
+    chatContainer.addChild(spacer);
+    chatContainer.addChild(spinner);
+    foregroundSpinnerSpacer = spacer;
+    foregroundStatus = spinner;
     foregroundStatusMessage = message;
-    renderForegroundStatus();
+    tui.requestRender();
   };
 
   const clearPromptInput = (): void => {
@@ -1189,7 +1170,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     let assistantView: AssistantStreamView | null = null;
     let suppressAssistantLeadingSpacer = false;
     let firstVisiblePartSeen = false;
-    let firstTextStartSeen = false;
 
     const resetAssistantView = (suppressLeadingSpacer = false): void => {
       if (suppressLeadingSpacer) {
@@ -1268,26 +1248,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         const part = rawPart as {
           type: string;
         };
-
-        if (part.type === "start-step") {
-          firstTextStartSeen = false;
-        }
-
-        if (!firstTextStartSeen && part.type === "text-start") {
-          firstTextStartSeen = true;
-          idleStatusPlaceholderMode = "suppressed";
-          renderForegroundStatus();
-        }
-
-        if (
-          idleStatusPlaceholderMode === "suppressed" &&
-          (part.type === "tool-input-start" ||
-            part.type === "tool-input-delta" ||
-            part.type === "tool-call")
-        ) {
-          idleStatusPlaceholderMode = "normal";
-          renderForegroundStatus();
-        }
 
         if (
           !firstVisiblePartSeen &&
@@ -1373,8 +1333,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         0
       )
     );
-    idleStatusPlaceholderMode = "suppressed";
-    renderForegroundStatus();
+    tui.requestRender();
   };
 
   const addAbnormalFinishReasonMessage = (finishReason: string): void => {
@@ -1515,9 +1474,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
 
     addAbnormalFinishReasonMessage(params.finishReason);
-
-    idleStatusPlaceholderMode = "suppressed";
-    renderForegroundStatus();
 
     return "completed";
   };
@@ -1708,7 +1664,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       },
       clearStatus,
       tui,
-      statusContainer,
+      overlayContainer,
       editorTheme,
       isCtrlCInput,
       handleCtrlCPress,
@@ -1731,6 +1687,12 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     } else {
       config.messageHistory.clear();
     }
+    if (foregroundStatus) {
+      foregroundStatus.stop();
+      foregroundStatus = null;
+    }
+    foregroundSpinnerSpacer = null;
+    foregroundStatusMessage = null;
     chatContainer.clear();
     addNewSessionMessage(chatContainer);
     await config.onCommandAction?.(commandResult.action);
@@ -1877,11 +1839,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       addSystemMessage(chatContainer, "메시지를 입력해주세요");
       tui.requestRender();
       return true;
-    }
-
-    if (idleStatusPlaceholderMode !== "normal") {
-      idleStatusPlaceholderMode = "normal";
-      renderForegroundStatus();
     }
 
     try {
