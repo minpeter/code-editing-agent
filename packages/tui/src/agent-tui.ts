@@ -43,6 +43,7 @@ import {
 } from "@mariozechner/pi-tui";
 import { createAliasAwareAutocompleteProvider } from "./autocomplete";
 import { buildTuiCommandSet } from "./command-set";
+import { createSpinnerTicker, type SpinnerTicker } from "./pending-spinner";
 import {
   addChatComponent,
   createInfoMessage,
@@ -110,12 +111,11 @@ const ignore = (): void => {
 };
 
 class StatusSpinner extends Text {
-  private readonly frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-  private currentFrame = 0;
-  private intervalId: NodeJS.Timeout | null = null;
   private readonly tui: TUI;
   private readonly spinnerColorFn: (text: string) => string;
   private readonly messageColorFn: (text: string) => string;
+  private readonly ticker: SpinnerTicker;
+  private currentFrame = "";
   private message: string;
 
   constructor(
@@ -129,22 +129,14 @@ class StatusSpinner extends Text {
     this.spinnerColorFn = spinnerColorFn;
     this.messageColorFn = messageColorFn;
     this.message = message;
-    this.start();
-  }
-
-  start(): void {
-    this.updateDisplay();
-    this.intervalId = setInterval(() => {
-      this.currentFrame = (this.currentFrame + 1) % this.frames.length;
+    this.ticker = createSpinnerTicker((frame) => {
+      this.currentFrame = frame;
       this.updateDisplay();
-    }, 80);
+    });
   }
 
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+    this.ticker.stop();
   }
 
   setMessage(message: string): void {
@@ -157,9 +149,8 @@ class StatusSpinner extends Text {
   }
 
   private updateDisplay(): void {
-    const frame = this.frames[this.currentFrame];
     this.setText(
-      `${this.spinnerColorFn(frame)} ${this.messageColorFn(this.message)}`
+      `${this.spinnerColorFn(this.currentFrame)} ${this.messageColorFn(this.message)}`
     );
     this.tui.requestRender();
   }
@@ -213,9 +204,8 @@ interface FooterStatusEntry {
 }
 
 class FooterStatusBar extends Text {
-  private readonly frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-  private currentFrame = 0;
-  private intervalId: NodeJS.Timeout | null = null;
+  private readonly ticker: SpinnerTicker;
+  private currentFrame = "";
   private entries: FooterStatusEntry[] = [];
   private rightText: string | undefined;
   private rightTextPressure:
@@ -229,7 +219,11 @@ class FooterStatusBar extends Text {
   constructor(tui: TUI) {
     super("", 1, 0);
     this.tui = tui;
-    this.start();
+    this.ticker = createSpinnerTicker((frame) => {
+      this.currentFrame = frame;
+      this.invalidate();
+      this.tui.requestRender();
+    });
   }
 
   setEntries(entries: FooterStatusEntry[]): void {
@@ -249,10 +243,7 @@ class FooterStatusBar extends Text {
   }
 
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+    this.ticker.stop();
   }
 
   render(width: number): string[] {
@@ -274,8 +265,7 @@ class FooterStatusBar extends Text {
       entry: FooterStatusEntry,
       maxWidth: number
     ): { plain: string; styled: string } => {
-      const prefix =
-        entry.state === "running" ? this.frames[this.currentFrame] : "";
+      const prefix = entry.state === "running" ? this.currentFrame : "";
       const prefixStyle =
         entry.state === "running" ? style(ANSI_CYAN, prefix) : "";
       const messageStylePrefix = this.resolveEntryStylePrefix(entry.level);
@@ -314,14 +304,6 @@ class FooterStatusBar extends Text {
     }
 
     return lines;
-  }
-
-  private start(): void {
-    this.intervalId = setInterval(() => {
-      this.currentFrame = (this.currentFrame + 1) % this.frames.length;
-      this.invalidate();
-      this.tui.requestRender();
-    }, 80);
   }
 
   private resolvePressureStylePrefix(

@@ -1,4 +1,9 @@
 import {
+  createSpinnerTicker,
+  type SpinnerTicker,
+  stylePendingIndicator,
+} from "@ai-sdk-tool/tui";
+import {
   Container,
   Markdown,
   type MarkdownTheme,
@@ -108,18 +113,6 @@ const MAX_WRITE_FILE_PREVIEW_LINES = 200;
 const MAX_WRITE_FILE_PREVIEW_CHARS = 100_000;
 const TOOL_PENDING_MESSAGE = "Executing...";
 const TOOL_PENDING_MARKER = "__tool_pending_status__";
-const TOOL_PENDING_SPINNER_FRAMES = [
-  "⠋",
-  "⠙",
-  "⠹",
-  "⠸",
-  "⠼",
-  "⠴",
-  "⠦",
-  "⠧",
-  "⠇",
-  "⠏",
-] as const;
 const HASHLINE_TAG_ONLY_PATTERN = /^(.*\d+#[ZPMQVRWSNKTXJBYH]{2})\s*$/;
 const HASHLINE_PIPE_ONLY_PATTERN = /^\|\s*(.*)$/;
 const HASHLINE_TAG_PIPE_ONLY_PATTERN =
@@ -633,13 +626,9 @@ const renderPendingOutput = (): string => TOOL_PENDING_MARKER;
 const ANSI_RESET = "\x1b[0m";
 const ANSI_DIM = "\x1b[2m";
 const ANSI_ITALIC = "\x1b[3m";
-const ANSI_CYAN = "\x1b[36m";
 const ANSI_GRAY = "\x1b[90m";
 const ANSI_BG_GRAY = "\x1b[100m";
 const ANSI_BG_DARK_RED = "\x1b[48;5;88m";
-
-const buildPendingSpinnerText = (frame: string): string =>
-  `${ANSI_CYAN}${frame}${ANSI_RESET} ${ANSI_DIM}${TOOL_PENDING_MESSAGE}${ANSI_RESET}`;
 
 const renderToolOutput = (_toolName: string, output: unknown): string =>
   renderCodeBlock("text", output);
@@ -1003,9 +992,9 @@ class ToolCallView extends Container {
   private inputBuffer = "";
   private output: unknown;
   private outputDenied = false;
-  private pendingSpinnerFrameIndex = 0;
-  private pendingSpinnerInterval: ReturnType<typeof setInterval> | null = null;
+  private pendingSpinnerTicker: SpinnerTicker | null = null;
   private pendingTemplate: string | null = null;
+  private lastPendingFrame = "";
   private parsedInput: unknown;
   private readMode = false;
   private toolName: string;
@@ -1049,43 +1038,38 @@ class ToolCallView extends Container {
 
   private stopPendingSpinner(): void {
     this.pendingTemplate = null;
-    if (!this.pendingSpinnerInterval) {
-      return;
+    if (this.pendingSpinnerTicker) {
+      this.pendingSpinnerTicker.stop();
+      this.pendingSpinnerTicker = null;
     }
-    clearInterval(this.pendingSpinnerInterval);
-    this.pendingSpinnerInterval = null;
   }
 
-  private applyPendingSpinnerFrame(): void {
+  private paintPendingFrame(frame: string): void {
     if (!this.pendingTemplate) {
       return;
     }
 
-    const frame = TOOL_PENDING_SPINNER_FRAMES[this.pendingSpinnerFrameIndex];
     this.readBody.setText(
       this.pendingTemplate.replaceAll(
         TOOL_PENDING_MARKER,
-        buildPendingSpinnerText(frame)
+        stylePendingIndicator(frame, TOOL_PENDING_MESSAGE)
       )
     );
   }
 
   private startPendingSpinner(template: string): void {
     this.pendingTemplate = template;
-    this.pendingSpinnerFrameIndex = 0;
-    this.applyPendingSpinnerFrame();
 
-    if (this.pendingSpinnerInterval) {
+    if (this.pendingSpinnerTicker) {
+      this.paintPendingFrame(this.lastPendingFrame);
       return;
     }
 
-    this.pendingSpinnerInterval = setInterval(() => {
-      this.pendingSpinnerFrameIndex =
-        (this.pendingSpinnerFrameIndex + 1) %
-        TOOL_PENDING_SPINNER_FRAMES.length;
-      this.applyPendingSpinnerFrame();
+    this.pendingSpinnerTicker = createSpinnerTicker((frame) => {
+      this.lastPendingFrame = frame;
+      this.paintPendingFrame(frame);
       this.requestRender();
-    }, 80);
+    });
   }
 
   async appendInputChunk(chunk: string): Promise<void> {
