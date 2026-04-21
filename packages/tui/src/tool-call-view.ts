@@ -165,7 +165,7 @@ export interface ToolRendererMap {
 
 export class BaseToolCallView extends Container {
   private readonly callId: string;
-  private readonly content: Markdown;
+  private readonly content: TrimmedMarkdown;
   private readonly markdownTheme: MarkdownTheme;
   private readonly renderers?: ToolRendererMap;
   private readonly requestRender: (() => void) | undefined;
@@ -204,7 +204,7 @@ export class BaseToolCallView extends Container {
     this.requestRender = requestRender;
     this.showRawToolIo = showRawToolIo ?? false;
     this.renderers = renderers;
-    this.content = new Markdown("", 1, 0, markdownTheme);
+    this.content = new TrimmedMarkdown("", 1, 0, markdownTheme);
     this.addChild(this.content);
     this.refresh();
   }

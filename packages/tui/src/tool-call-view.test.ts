@@ -91,4 +91,23 @@ describe("BaseToolCallView fallback pending indicator", () => {
 
     view.dispose();
   });
+
+  it("places the indicator immediately below the tool block with no extra blank gap", () => {
+    const view = new BaseToolCallView(
+      "call_5",
+      "shell_execute",
+      markdownTheme,
+      () => undefined
+    );
+    view.setFinalInput({ command: "ls -la" });
+
+    const lines = view.render(120);
+    const indicatorIdx = lines.findIndex((line) => line.includes("Executing..."));
+    expect(indicatorIdx).toBeGreaterThan(0);
+
+    const lineAbove = lines[indicatorIdx - 1];
+    expect(lineAbove.trim().length).toBeGreaterThan(0);
+
+    view.dispose();
+  });
 });
