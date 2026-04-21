@@ -92,7 +92,7 @@ python -m harbor.utils.trajectory_validator jobs/<job_id>/*/agent/trajectory.jso
 ```
 
 Validator expectations:
-- `steps[*].source` is currently `user` or `agent`
+- `steps[*].source` is `user`, `agent`, or `system` (ATIF v1.4 permits all three; system steps support observations since v1.2)
 - bundled tool observations live in `steps[*].observation.results`
 - persisted lifecycle annotations, when present, live under `extra.approval_events`, `extra.compaction_events`, and `extra.interrupt_events`
 

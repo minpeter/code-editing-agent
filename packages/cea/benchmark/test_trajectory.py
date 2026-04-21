@@ -64,8 +64,9 @@ def validate_trajectory(path: str) -> list[str]:
     if step_ids != expected:
         errors.append(f"step_ids: expected {expected}, got {step_ids}")
 
-    # 6. each step has required fields
-    valid_sources = {"user", "agent"}
+    # 6. each step has required fields. ATIF v1.4 permits "user", "agent",
+    # and "system" as step sources (system steps support observations since v1.2).
+    valid_sources = {"user", "agent", "system"}
     for i, step in enumerate(steps):
         if not isinstance(step, dict):
             continue

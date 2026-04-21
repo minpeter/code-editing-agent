@@ -31,3 +31,7 @@ Surface the "prompt processing" state that previously looked frozen, and fix fol
   - Hardened the Python validator: `_is_real_number` now rejects `NaN`, `Infinity`, and `-Infinity` (all of which `json.loads` will happily produce from non-strict JSON) via an explicit `math.isfinite` check.
   - Corrected documentation drift across `packages/headless/AGENTS.md`, `packages/headless/README.md`, `packages/headless/src/types.ts`, `packages/headless/src/trajectory-collector.ts`, and the root `AGENTS.md`: `approval`/`compaction`/`interrupt` are persisted under `trajectory.extra.*`, not JSONL-only; only `turn-start` and `error` are transient.
   - Regression test added for the `writeTo` zero-step guard: `does not write an invalid zero-step trajectory when the stream fails before any step`.
+- Review cycle 2 follow-ups (Oracle re-audit):
+  - Headless `measureUsageIfAvailable` now carries the same generation + revision guards the TUI already had. A slow background probe that resolves after a compaction or a newer per-turn probe no longer overwrites fresh usage data.
+  - ATIF v1.4 step source contract aligned across code, Python validator, and benchmark docs: `user`, `agent`, and `system` are all permitted (Harbor v1.2+). Previous divergence between `AtifStep.source` and `test_trajectory.py`'s `valid_sources = {user, agent}` is resolved.
+  - Root `README.md` headless event list now includes `turn-start` and points at Harbor's ATIF-v1.4 schema for the persisted trajectory.

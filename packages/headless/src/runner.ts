@@ -327,6 +327,8 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   let totalIterationCount = 0;
   type StreamTurnResult = Awaited<ReturnType<typeof processStream>>;
   type StreamUsage = StreamTurnResult["usage"] | undefined;
+  let usageProbeGeneration = 0;
+
   const measureUsageIfAvailable = async (
     messages: ModelMessage[]
   ): Promise<boolean> => {
@@ -334,10 +336,27 @@ export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
       return false;
     }
 
+    usageProbeGeneration += 1;
+    const thisGeneration = usageProbeGeneration;
+    const historyWithRevision = config.messageHistory as {
+      getRevision?: () => number;
+    };
+    const startingRevision = historyWithRevision.getRevision?.();
+
     const measured = normalizeUsageMeasurement(
       await config.measureUsage(messages)
     );
     if (!measured) {
+      return false;
+    }
+
+    if (thisGeneration !== usageProbeGeneration) {
+      return false;
+    }
+    if (
+      startingRevision !== undefined &&
+      historyWithRevision.getRevision?.() !== startingRevision
+    ) {
       return false;
     }
 
