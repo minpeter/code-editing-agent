@@ -1,10 +1,6 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import {
-  FilePreferencesStore,
-  LayeredPreferencesStore,
+  createLayeredPreferences,
   type PreferencesStore,
-  shallowMergePreferences,
 } from "@ai-sdk-tool/harness";
 import { z } from "zod";
 import { REASONING_MODES, type ReasoningMode } from "./reasoning-mode";
@@ -14,6 +10,7 @@ import {
 } from "./tool-fallback-mode";
 
 const USER_PREFERENCES_SCHEMA_VERSION = 1;
+const USER_PREFERENCES_APP_NAME = "plugsuits";
 
 const userPreferencesSchema = z
   .object({
@@ -47,15 +44,6 @@ export interface UserPreferencesStoreBundle {
   workspaceStore: PreferencesStore<UserPreferences>;
 }
 
-export const DEFAULT_USER_PREFERENCES_FILENAME = "settings.json";
-
-export const getDefaultUserPreferencesPath = (): string =>
-  join(homedir(), ".plugsuits", DEFAULT_USER_PREFERENCES_FILENAME);
-
-export const getDefaultWorkspacePreferencesPath = (
-  cwd = process.cwd()
-): string => join(cwd, ".plugsuits", DEFAULT_USER_PREFERENCES_FILENAME);
-
 const validateStoredPreferences = (value: unknown): UserPreferences | null => {
   const parsed = userPreferencesSchema.safeParse(value);
   if (!parsed.success) {
@@ -82,25 +70,19 @@ const validateStoredPreferences = (value: unknown): UserPreferences | null => {
 export const createUserPreferencesStore = (
   options: CreateUserPreferencesStoreOptions = {}
 ): UserPreferencesStoreBundle => {
-  const userFilePath = options.userFilePath ?? getDefaultUserPreferencesPath();
-  const workspaceFilePath =
-    options.workspaceFilePath ?? getDefaultWorkspacePreferencesPath();
-
-  const userStore = new FilePreferencesStore<UserPreferences>({
-    filePath: userFilePath,
-    validate: validateStoredPreferences,
-  });
-  const workspaceStore = new FilePreferencesStore<UserPreferences>({
-    filePath: workspaceFilePath,
-    validate: validateStoredPreferences,
-  });
-
-  const store = new LayeredPreferencesStore<UserPreferences>({
-    stores: [userStore, workspaceStore],
-    merge: shallowMergePreferences,
-  });
-
-  return { store, userFilePath, workspaceFilePath, workspaceStore };
+  const { paths, store, workspaceStore } =
+    createLayeredPreferences<UserPreferences>({
+      appName: USER_PREFERENCES_APP_NAME,
+      userFilePath: options.userFilePath,
+      workspaceFilePath: options.workspaceFilePath,
+      validate: validateStoredPreferences,
+    });
+  return {
+    store,
+    userFilePath: paths.userFilePath,
+    workspaceFilePath: paths.workspaceFilePath,
+    workspaceStore,
+  };
 };
 
 export const patchWorkspacePreferences = async (

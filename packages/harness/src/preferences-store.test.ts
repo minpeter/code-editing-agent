@@ -9,6 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  createLayeredPreferences,
+  DEFAULT_LAYERED_PREFERENCES_APP_NAME,
+  DEFAULT_LAYERED_PREFERENCES_FILE_NAME,
   FilePreferencesStore,
   InMemoryPreferencesStore,
   LayeredPreferencesStore,
@@ -256,5 +259,170 @@ describe("shallowMergePreferences", () => {
 
   it("returns null when both inputs are null", () => {
     expect(shallowMergePreferences(null, null)).toBeNull();
+  });
+});
+
+describe("createLayeredPreferences", () => {
+  let tmpDir: string;
+  let homeDirOverride: string;
+  let cwdOverride: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "create-layered-prefs-test-"));
+    homeDirOverride = join(tmpDir, "home");
+    cwdOverride = join(tmpDir, "project");
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("uses default app name and file name for the layered paths", () => {
+    const { paths } = createLayeredPreferences<TestPrefs>({
+      homeDir: homeDirOverride,
+      cwd: cwdOverride,
+    });
+    expect(paths.userFilePath).toBe(
+      join(
+        homeDirOverride,
+        `.${DEFAULT_LAYERED_PREFERENCES_APP_NAME}`,
+        DEFAULT_LAYERED_PREFERENCES_FILE_NAME
+      )
+    );
+    expect(paths.workspaceFilePath).toBe(
+      join(
+        cwdOverride,
+        `.${DEFAULT_LAYERED_PREFERENCES_APP_NAME}`,
+        DEFAULT_LAYERED_PREFERENCES_FILE_NAME
+      )
+    );
+  });
+
+  it("honors a custom app name and file name", () => {
+    const { paths } = createLayeredPreferences<TestPrefs>({
+      appName: "custom-app",
+      fileName: "prefs.json",
+      homeDir: homeDirOverride,
+      cwd: cwdOverride,
+    });
+    expect(paths.userFilePath).toBe(
+      join(homeDirOverride, ".custom-app", "prefs.json")
+    );
+    expect(paths.workspaceFilePath).toBe(
+      join(cwdOverride, ".custom-app", "prefs.json")
+    );
+  });
+
+  it("honors fully custom file paths", () => {
+    const userFilePath = join(tmpDir, "user", "custom.json");
+    const workspaceFilePath = join(tmpDir, "ws", "custom.json");
+    const { paths } = createLayeredPreferences<TestPrefs>({
+      userFilePath,
+      workspaceFilePath,
+    });
+    expect(paths.userFilePath).toBe(userFilePath);
+    expect(paths.workspaceFilePath).toBe(workspaceFilePath);
+  });
+
+  it("round-trips preferences through the workspace layer", async () => {
+    const { store, workspaceStore } = createLayeredPreferences<TestPrefs>({
+      homeDir: homeDirOverride,
+      cwd: cwdOverride,
+    });
+    await store.save({ translateEnabled: false, reasoningMode: "on" });
+    expect(await workspaceStore.load()).toEqual({
+      translateEnabled: false,
+      reasoningMode: "on",
+    });
+  });
+
+  it("layered load merges user defaults under workspace overrides", async () => {
+    const { userStore, workspaceStore, store } =
+      createLayeredPreferences<TestPrefs>({
+        homeDir: homeDirOverride,
+        cwd: cwdOverride,
+      });
+    await userStore.save({
+      translateEnabled: true,
+      reasoningMode: "off",
+    });
+    await workspaceStore.save({ reasoningMode: "on" });
+    expect(await store.load()).toEqual({
+      translateEnabled: true,
+      reasoningMode: "on",
+    });
+  });
+
+  it("patch() merges a partial into the existing workspace value", async () => {
+    const { workspaceStore, patch } = createLayeredPreferences<TestPrefs>({
+      homeDir: homeDirOverride,
+      cwd: cwdOverride,
+    });
+    await workspaceStore.save({
+      translateEnabled: true,
+      reasoningMode: "on",
+    });
+    const merged = await patch({ translateEnabled: false });
+    expect(merged).toEqual({
+      translateEnabled: false,
+      reasoningMode: "on",
+    });
+    expect(await workspaceStore.load()).toEqual({
+      translateEnabled: false,
+      reasoningMode: "on",
+    });
+  });
+
+  it("patch() on an empty workspace creates the file with only the patched fields", async () => {
+    const { workspaceStore, patch } = createLayeredPreferences<TestPrefs>({
+      homeDir: homeDirOverride,
+      cwd: cwdOverride,
+    });
+    const merged = await patch({ translateEnabled: false });
+    expect(merged).toEqual({ translateEnabled: false });
+    expect(await workspaceStore.load()).toEqual({ translateEnabled: false });
+  });
+
+  it("patch() treats undefined entries as no-op fields", async () => {
+    const { workspaceStore, patch } = createLayeredPreferences<TestPrefs>({
+      homeDir: homeDirOverride,
+      cwd: cwdOverride,
+    });
+    await workspaceStore.save({ translateEnabled: true });
+    await patch({ translateEnabled: undefined });
+    expect(await workspaceStore.load()).toEqual({ translateEnabled: true });
+  });
+
+  it("routes writes through the workspace layer, never the user layer", async () => {
+    const { userStore, workspaceStore, store } =
+      createLayeredPreferences<TestPrefs>({
+        homeDir: homeDirOverride,
+        cwd: cwdOverride,
+      });
+    await userStore.save({ translateEnabled: true });
+    await store.save({ translateEnabled: false });
+    expect(await userStore.load()).toEqual({ translateEnabled: true });
+    expect(await workspaceStore.load()).toEqual({ translateEnabled: false });
+  });
+
+  it("runs the provided validator on loaded values", async () => {
+    const { userStore, store } = createLayeredPreferences<TestPrefs>({
+      homeDir: homeDirOverride,
+      cwd: cwdOverride,
+      validate: (value) => {
+        if (typeof value !== "object" || value === null) {
+          return null;
+        }
+        const record = value as Record<string, unknown>;
+        if (record.reasoningMode === "bogus") {
+          return null;
+        }
+        return record as TestPrefs;
+      },
+    });
+    await userStore.save({
+      reasoningMode: "bogus" as TestPrefs["reasoningMode"],
+    });
+    expect(await store.load()).toBeNull();
   });
 });

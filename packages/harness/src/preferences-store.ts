@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 export interface PreferencesStore<T> {
   clear(): Promise<void>;
@@ -173,4 +174,79 @@ function filterUndefined<T extends object>(value: T): T {
     }
   }
   return result as T;
+}
+
+export interface LayeredPreferencesPaths {
+  userFilePath: string;
+  workspaceFilePath: string;
+}
+
+export interface CreateLayeredPreferencesOptions<T extends object> {
+  appName?: string;
+  cwd?: string;
+  fileName?: string;
+  homeDir?: string;
+  merge?: (accumulator: T | null, next: T | null) => T | null;
+  userFilePath?: string;
+  validate?: (value: unknown) => T | null;
+  workspaceFilePath?: string;
+}
+
+export interface LayeredPreferences<T extends object> {
+  patch: (partial: Partial<T>) => Promise<T>;
+  paths: LayeredPreferencesPaths;
+  store: PreferencesStore<T>;
+  userStore: PreferencesStore<T>;
+  workspaceStore: PreferencesStore<T>;
+}
+
+export const DEFAULT_LAYERED_PREFERENCES_APP_NAME = "plugsuits";
+export const DEFAULT_LAYERED_PREFERENCES_FILE_NAME = "settings.json";
+
+export function createLayeredPreferences<T extends object>(
+  options: CreateLayeredPreferencesOptions<T> = {}
+): LayeredPreferences<T> {
+  const appName = options.appName ?? DEFAULT_LAYERED_PREFERENCES_APP_NAME;
+  const fileName = options.fileName ?? DEFAULT_LAYERED_PREFERENCES_FILE_NAME;
+  const cwd = options.cwd ?? process.cwd();
+  const home = options.homeDir ?? homedir();
+
+  const userFilePath =
+    options.userFilePath ?? join(home, `.${appName}`, fileName);
+  const workspaceFilePath =
+    options.workspaceFilePath ?? join(cwd, `.${appName}`, fileName);
+
+  const userStore = new FilePreferencesStore<T>({
+    filePath: userFilePath,
+    validate: options.validate,
+  });
+  const workspaceStore = new FilePreferencesStore<T>({
+    filePath: workspaceFilePath,
+    validate: options.validate,
+  });
+
+  const store = new LayeredPreferencesStore<T>({
+    stores: [userStore, workspaceStore],
+    merge: options.merge ?? shallowMergePreferences,
+  });
+
+  const patch = async (partial: Partial<T>): Promise<T> => {
+    const existing = (await workspaceStore.load()) ?? ({} as T);
+    const merged: T = { ...(existing as object) } as T;
+    for (const [key, value] of Object.entries(partial as object)) {
+      if (value !== undefined) {
+        (merged as Record<string, unknown>)[key] = value;
+      }
+    }
+    await workspaceStore.save(merged);
+    return merged;
+  };
+
+  return {
+    paths: { userFilePath, workspaceFilePath },
+    patch,
+    store,
+    userStore,
+    workspaceStore,
+  };
 }
