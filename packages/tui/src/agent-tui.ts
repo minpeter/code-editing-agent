@@ -111,48 +111,6 @@ const ignore = (): void => {
   return;
 };
 
-class StatusSpinner extends Text {
-  private readonly tui: TUI;
-  private readonly spinnerColorFn: (text: string) => string;
-  private readonly messageColorFn: (text: string) => string;
-  private readonly ticker: SpinnerTicker;
-  private currentFrame = "";
-  private message: string;
-
-  constructor(
-    tui: TUI,
-    spinnerColorFn: (text: string) => string,
-    messageColorFn: (text: string) => string,
-    message: string
-  ) {
-    super("", 1, 0);
-    this.tui = tui;
-    this.spinnerColorFn = spinnerColorFn;
-    this.messageColorFn = messageColorFn;
-    this.message = message;
-    this.ticker = createSpinnerTicker((frame) => {
-      this.currentFrame = frame;
-      this.updateDisplay();
-    });
-  }
-
-  stop(): void {
-    this.ticker.stop();
-  }
-
-  setMessage(message: string): void {
-    this.message = message;
-    this.updateDisplay();
-  }
-
-  private updateDisplay(): void {
-    this.setText(
-      `${this.spinnerColorFn(this.currentFrame)} ${this.messageColorFn(this.message)}`
-    );
-    this.tui.requestRender();
-  }
-}
-
 const truncatePlainToWidth = (text: string, maxWidth: number): string => {
   if (maxWidth <= 0) {
     return "";
@@ -188,6 +146,7 @@ class FooterStatusBar extends Text {
   private readonly ticker: SpinnerTicker;
   private currentFrame = "";
   private entries: FooterStatusEntry[] = [];
+  private foregroundMessage: string | null = null;
   private rightText: string | undefined;
   private rightTextPressure:
     | "critical"
@@ -213,6 +172,16 @@ class FooterStatusBar extends Text {
     this.tui.requestRender();
   }
 
+  setForegroundMessage(message: string | null): void {
+    this.foregroundMessage = message;
+    this.invalidate();
+    this.tui.requestRender();
+  }
+
+  getForegroundMessage(): string | null {
+    return this.foregroundMessage;
+  }
+
   setRightText(
     text: string | undefined,
     pressure?: "critical" | "elevated" | "normal" | "warning"
@@ -227,8 +196,19 @@ class FooterStatusBar extends Text {
     this.ticker.stop();
   }
 
+  private resolveLeadingEntry(): FooterStatusEntry | undefined {
+    if (this.foregroundMessage !== null) {
+      return { message: this.foregroundMessage, state: "running" };
+    }
+    return this.entries[0];
+  }
+
   render(width: number): string[] {
-    if (this.entries.length === 0 && !this.rightText) {
+    if (
+      this.entries.length === 0 &&
+      this.foregroundMessage === null &&
+      !this.rightText
+    ) {
       return [];
     }
 
@@ -262,13 +242,13 @@ class FooterStatusBar extends Text {
       };
     };
 
-    const firstEntry = this.entries[0];
-    if (firstEntry || rightTextStyled) {
+    const leadingEntry = this.resolveLeadingEntry();
+    if (leadingEntry || rightTextStyled) {
       const maxLeftWidth = rightTextPlain
         ? Math.max(0, contentWidth - visibleWidth(rightTextPlain) - 1)
         : contentWidth;
-      const left = firstEntry
-        ? renderLeftEntry(firstEntry, maxLeftWidth)
+      const left = leadingEntry
+        ? renderLeftEntry(leadingEntry, maxLeftWidth)
         : null;
       const leftWidth = left ? visibleWidth(left.plain) : 0;
       const gap = rightTextPlain
@@ -278,7 +258,9 @@ class FooterStatusBar extends Text {
       lines.push(line + " ".repeat(Math.max(0, width - visibleWidth(line))));
     }
 
-    for (const entry of this.entries.slice(1)) {
+    const remainingEntries =
+      this.foregroundMessage === null ? this.entries.slice(1) : this.entries;
+    for (const entry of remainingEntries) {
       const left = renderLeftEntry(entry, contentWidth);
       const line = `${" ".repeat(1)}${left.styled}`;
       lines.push(line + " ".repeat(Math.max(0, width - visibleWidth(line))));
@@ -664,7 +646,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const chatContainer = new Container();
   const overlayContainer = new Container();
   const editorContainer = new Container();
-  const statusContainer = new Container();
   const footerContainer = new Container();
   const footerStatusBar = new FooterStatusBar(tui);
 
@@ -713,7 +694,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   tui.addChild(chatContainer);
   tui.addChild(overlayContainer);
   tui.addChild(editorContainer);
-  tui.addChild(statusContainer);
   tui.addChild(footerContainer);
   tui.setFocus(editor);
 
@@ -723,7 +703,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   let streamInterruptRequested = false;
   let inputResolver: null | ((value: string | null) => void) = null;
   let lastCtrlCPressAt = 0;
-  let foregroundStatus: StatusSpinner | null = null;
   let foregroundStatusMessage: string | null = null;
   let foregroundStatusBeforeBlocking: string | null = null;
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
@@ -762,14 +741,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     );
   };
 
-  const createStatusSpinner = (message: string): StatusSpinner =>
-    new StatusSpinner(
-      tui,
-      (text: string) => style(ANSI_CYAN, text),
-      (text: string) => style(ANSI_DIM, text),
-      message
-    );
-
   const renderFooterStatuses = (): void => {
     footerStatusBar.setEntries([...backgroundStatuses.values()]);
   };
@@ -791,27 +762,14 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     renderFooterStatuses();
   };
 
-  const detachForegroundSpinner = (): void => {
-    if (foregroundStatus) {
-      foregroundStatus.stop();
-      statusContainer.removeChild(foregroundStatus);
-      foregroundStatus = null;
-    }
-    foregroundStatusMessage = null;
-  };
-
   const clearStatus = (): void => {
-    detachForegroundSpinner();
-    tui.requestRender();
+    foregroundStatusMessage = null;
+    footerStatusBar.setForegroundMessage(null);
   };
 
   const showLoader = (message: string): void => {
-    detachForegroundSpinner();
-    const spinner = createStatusSpinner(message);
-    statusContainer.addChild(spinner);
-    foregroundStatus = spinner;
     foregroundStatusMessage = message;
-    tui.requestRender();
+    footerStatusBar.setForegroundMessage(message);
   };
 
   const clearPromptInput = (): void => {
@@ -1207,9 +1165,10 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     const orchestrator = createSpinnerOrchestrator(
       {
         clearStatus,
-        hasSpinner: () => foregroundStatus !== null,
+        hasSpinner: () => foregroundStatusMessage !== null,
         setMessage: (message) => {
-          foregroundStatus?.setMessage(message);
+          foregroundStatusMessage = message;
+          footerStatusBar.setForegroundMessage(message);
         },
         showLoader,
       },
@@ -1306,7 +1265,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         return;
       }
       hasClearedStreamingLoader = true;
-      detachForegroundSpinner();
+      clearStatus();
     };
   };
 
@@ -1676,12 +1635,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     } else {
       config.messageHistory.clear();
     }
-    if (foregroundStatus) {
-      foregroundStatus.stop();
-      statusContainer.removeChild(foregroundStatus);
-      foregroundStatus = null;
-    }
-    foregroundStatusMessage = null;
+    clearStatus();
     chatContainer.clear();
     addNewSessionMessage(chatContainer);
     await config.onCommandAction?.(commandResult.action);
