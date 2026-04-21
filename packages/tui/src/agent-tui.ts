@@ -1227,6 +1227,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     };
 
     const baseLoaderMessage = loaderMessage ?? foregroundStatusMessage;
+    let reasoningActive = false;
     let reasoningRevivedSpinner = false;
     let toolPendingCount = 0;
     let toolRevivedSpinner = false;
@@ -1247,6 +1248,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       getToolView: (toolCallId: string) => toolViews.get(toolCallId),
       chatContainer,
       onReasoningStart: () => {
+        reasoningActive = true;
         if (foregroundStatus) {
           foregroundStatus.setMessage("Thinking...");
         } else {
@@ -1255,6 +1257,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         }
       },
       onReasoningEnd: () => {
+        reasoningActive = false;
         if (reasoningRevivedSpinner) {
           clearStatus();
           reasoningRevivedSpinner = false;
@@ -1264,6 +1267,9 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       },
       onToolPendingStart: () => {
         toolPendingCount += 1;
+        if (reasoningActive) {
+          return;
+        }
         if (foregroundStatus) {
           foregroundStatus.setMessage("Executing...");
         } else {
@@ -1274,6 +1280,9 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       onToolPendingEnd: () => {
         toolPendingCount = Math.max(0, toolPendingCount - 1);
         if (toolPendingCount > 0) {
+          return;
+        }
+        if (reasoningActive) {
           return;
         }
         if (toolRevivedSpinner) {

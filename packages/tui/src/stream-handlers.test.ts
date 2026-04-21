@@ -108,6 +108,62 @@ describe("stream-handlers", () => {
     ).toBe(true);
   });
 
+  // Regression: approval-gated flows (tool-call → tool-approval-request) used
+  // to strand the pending counter at 1 and leave the foreground spinner stuck
+  // on "Executing..." while execution was actually paused awaiting approval.
+  it("fires onToolPendingEnd when a tool enters the approval gate", () => {
+    const onToolPendingEnd = vi.fn();
+    const { state } = createState({ onToolPendingEnd });
+
+    handleToolApprovalRequest(
+      {
+        type: "tool-approval-request",
+        toolCallId: "call_approval",
+        toolName: "shell_execute",
+        reason: "Needs user approval.",
+        providerExecuted: false,
+      } as never,
+      state
+    );
+
+    expect(onToolPendingEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("tool-call → tool-approval-request leaves the pending counter at zero", () => {
+    let pending = 0;
+    const { state } = createState({
+      onToolPendingStart: () => {
+        pending += 1;
+      },
+      onToolPendingEnd: () => {
+        pending -= 1;
+      },
+    });
+
+    handleToolCall(
+      {
+        type: "tool-call",
+        toolCallId: "call_1",
+        toolName: "shell_execute",
+        input: { command: "rm -rf /" },
+      } as never,
+      state
+    );
+    expect(pending).toBe(1);
+
+    handleToolApprovalRequest(
+      {
+        type: "tool-approval-request",
+        toolCallId: "call_1",
+        toolName: "shell_execute",
+        reason: "Destructive command.",
+        providerExecuted: false,
+      } as never,
+      state
+    );
+    expect(pending).toBe(0);
+  });
+
   it("fires onToolPendingStart when a tool-call is dispatched", () => {
     const onToolPendingStart = vi.fn();
     const { state } = createState({ onToolPendingStart });

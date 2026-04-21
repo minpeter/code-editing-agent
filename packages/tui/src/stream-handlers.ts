@@ -311,6 +311,7 @@ export const handleToolApprovalRequest: StreamPartHandler = (part, state) => {
     toolName: string;
   };
 
+  state.onToolPendingEnd?.();
   state.resetAssistantView(true);
   const view = state.ensureToolView(
     approvalPart.toolCallId,
