@@ -1,3 +1,32 @@
+/**
+ * ATIF-v1.4 trajectory collector.
+ *
+ * This module is the ONLY surface in the headless package that produces the
+ * persisted `trajectory.json` file, and that file MUST conform to Harbor's
+ * ATIF v1.4 specification:
+ *
+ *   https://www.harborframework.com/docs/agents/trajectory-format
+ *
+ * ATIF v1.4 compliance rules (load-bearing — do not relax without bumping
+ * the Harbor spec version this package claims to target):
+ *
+ *   • `schema_version` is the literal string "ATIF-v1.4".
+ *   • Every {@link AtifStep.step_id} is a sequential integer starting at 1.
+ *   • `steps[*].source` is limited to `"user" | "agent" | "system"`; lifecycle
+ *     event types (approval, compaction, interrupt, turn-start, error) are
+ *     NEVER persisted as step sources — they live in the JSONL stream only.
+ *   • Lifecycle annotations that the spec allows persisting go under
+ *     `extra.approval_events`, `extra.compaction_events`, and
+ *     `extra.interrupt_events`. New lifecycle types must NOT introduce new
+ *     top-level fields.
+ *   • `final_metrics` must include every key defined in ATIF v1.4 even if
+ *     the value is `null` (null-when-absent, not omitted).
+ *   • Metrics are pulled from the SDK `stream.usage`; never estimated.
+ *
+ * The JSONL event stream emitted to stdout by the runner is a DIFFERENT
+ * surface (internal protocol, not ATIF) — see `types.ts` for that contract.
+ */
+
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
@@ -11,6 +40,13 @@ import type {
   ToolCallData,
 } from "./types";
 
+/**
+ * Shape of a single ATIF v1.4 `Step` entry inside `trajectory.json`.
+ *
+ * Any field added here MUST be defined by ATIF v1.4 (or be ignored by the
+ * spec as part of forward-compatible `extra`). Do not introduce ad-hoc
+ * step-level fields — put them under `extra` instead.
+ */
 interface AtifStep {
   extra?: Record<string, unknown>;
   is_copied_context?: boolean;
@@ -26,6 +62,14 @@ interface AtifStep {
   tool_calls?: ToolCallData[];
 }
 
+/**
+ * Shape of the persisted ATIF v1.4 `Trajectory` JSON document.
+ *
+ * `schema_version` is the literal "ATIF-v1.4" and must match the Harbor
+ * spec version this package targets. Bump it only when the underlying
+ * Harbor spec bumps and this implementation has been audited against the
+ * new version's required/optional fields.
+ */
 export interface TrajectoryJson {
   agent: { name: string; version: string; model_name: string };
   extra?: {

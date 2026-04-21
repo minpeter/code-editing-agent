@@ -230,7 +230,20 @@ export interface MetadataEvent {
 // ============================================================================
 
 /**
- * The complete union of all trajectory event types.
+ * The complete union of all JSONL stream event types.
+ *
+ * This union defines the INTERNAL JSONL protocol — it is NOT the ATIF
+ * schema. Adding a new event type here is additive and non-breaking, but
+ * the corresponding switch in `collectTrajectoryEvent` must explicitly
+ * decide whether the new type is:
+ *
+ *   • persisted into an ATIF v1.4 `extra.*` bucket (lifecycle annotation
+ *     that Harbor accepts as forward-compatible extension), or
+ *   • dropped (lives only on the JSONL stream; `trajectory.json` stays
+ *     ATIF v1.4 compliant).
+ *
+ * It MUST NEVER be persisted as a top-level ATIF field or as a new
+ * `steps[*].source` value — that would violate the Harbor spec.
  */
 export type TrajectoryEvent =
   | StepEvent

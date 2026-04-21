@@ -1,3 +1,18 @@
+/**
+ * ATIF v1.4 compliance test suite.
+ *
+ * These tests are load-bearing: they encode the Harbor ATIF v1.4 shape
+ * contract (https://www.harborframework.com/docs/agents/trajectory-format)
+ * as executable assertions. A regression here means `trajectory.json`
+ * output no longer passes `harbor.utils.trajectory_validator`, which
+ * breaks terminal-bench runs and any downstream scorer.
+ *
+ * Before loosening any assertion here, confirm the change is permitted by
+ * the current Harbor spec version this package targets (`ATIF-v1.4`) and
+ * that the Python validator in `packages/cea/benchmark/test_trajectory.py`
+ * is updated in lock-step.
+ */
+
 import { describe, expect, it } from "vitest";
 import { TrajectoryCollector } from "../trajectory-collector";
 import type {

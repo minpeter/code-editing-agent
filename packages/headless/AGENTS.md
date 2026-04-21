@@ -145,3 +145,16 @@ import type {
 - Estimating token counts (use `metrics` from SDK only).
 - Manual `step_id` management outside the runner.
 - Using `console.log` for non-event output.
+
+## ATIF v1.4 COMPLIANCE (persisted trajectory.json)
+
+`TrajectoryCollector` writes the only output that MUST conform to Harbor's ATIF v1.4 spec (<https://www.harborframework.com/docs/agents/trajectory-format>). When editing `trajectory-collector.ts` or `collectTrajectoryEvent` in `runner.ts`, keep the following invariants:
+
+- **schema_version is the literal `"ATIF-v1.4"`**. Never bump unilaterally — bump only when the upstream Harbor spec bumps and this implementation has been audited against the new version's required/optional fields.
+- **`steps[*].source` ∈ `{user, agent, system}`**. Never widen this set; new event types go to `extra.*` or are dropped from persistence.
+- **Persisted lifecycle annotations live under `extra.*`**: `approval_events`, `compaction_events`, `interrupt_events`. Extending this set is acceptable (ATIF `extra` is forward-compatible) but each new bucket requires a new collector method and a corresponding `collectTrajectoryEvent` case.
+- **Adding a JSONL event type is additive for stdout** but requires an explicit routing decision in `collectTrajectoryEvent`: persist under `extra.*`, or drop. Leaving the `default: return;` fallthrough is a valid choice for transient signals (the pattern `turn-start` uses).
+- **`final_metrics` keys are null-when-absent, not omitted**. The shape is load-bearing for downstream tools (Harbor validator, scorer).
+- **Metrics come from SDK `stream.usage`** — never estimated; never hand-filled.
+
+Violating these invariants silently breaks Harbor benchmark runs, since the persisted trajectory will fail `harbor.utils.trajectory_validator` or produce unusable scorer output.

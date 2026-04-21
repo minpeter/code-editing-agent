@@ -170,6 +170,14 @@ function getRecommendedMaxOutputTokens(
   return history.getRecommendedMaxOutputTokens(messages);
 }
 
+/**
+ * Routes a JSONL stream event to the ATIF-v1.4 trajectory collector, if
+ * persistence is enabled. The `default` case INTENTIONALLY drops event
+ * types that are not part of ATIF v1.4 (e.g. `turn-start`, `error`) — they
+ * stay on the JSONL stream only. Adding a case here must be accompanied by
+ * a matching `extra.*` persistence path in `TrajectoryCollector.finalize`
+ * so `trajectory.json` stays ATIF v1.4 compliant.
+ */
 function collectTrajectoryEvent(
   collector: TrajectoryCollector | null,
   event: TrajectoryEvent
@@ -294,6 +302,9 @@ async function runTodoReminderLoop(params: {
 
 export async function runHeadless(config: HeadlessRunnerConfig): Promise<void> {
   const emitEventSink = config.emitEvent ?? defaultEmitEvent;
+  // When `atifOutputPath` is set, the collected trajectory is written to
+  // disk in ATIF v1.4 format. The JSONL stream to stdout is a separate
+  // surface (internal protocol, not ATIF) and continues regardless.
   const trajectoryCollector = config.atifOutputPath
     ? new TrajectoryCollector()
     : null;
