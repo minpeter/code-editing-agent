@@ -1,9 +1,21 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { FileSnapshotStore, formatContextUsage } from "@ai-sdk-tool/harness";
+import {
+  FileSnapshotStore,
+  formatContextUsage,
+  parseCommand,
+} from "@ai-sdk-tool/harness";
 import { createTogglePreferenceCommand } from "@ai-sdk-tool/harness/preferences";
 import { createAgentRuntime, defineAgent } from "@ai-sdk-tool/harness/runtime";
 import { runAgentSessionHeadless } from "@ai-sdk-tool/headless/session";
+import type { CommandPreprocessHooks } from "@ai-sdk-tool/tui";
 import { runAgentSessionTUI } from "@ai-sdk-tool/tui/session";
+import {
+  Container,
+  type SelectItem,
+  SelectList,
+  Spacer,
+  Text,
+} from "@mariozechner/pi-tui";
 import { env } from "./env";
 import { createPreferences, type MinimalAgentPreferences } from "./preferences";
 
@@ -17,6 +29,72 @@ const model = createOpenAICompatible({
 const preferences = createPreferences();
 const initialPreferences = await preferences.store.load();
 let reasoningEnabled = initialPreferences?.reasoningEnabled ?? false;
+
+const showReasoningSelector = (
+  hooks: CommandPreprocessHooks
+): Promise<boolean | null> => {
+  hooks.clearStatus();
+
+  const selectorContainer = new Container();
+  const currentValue = reasoningEnabled;
+  const items: SelectItem[] = [
+    {
+      value: "on",
+      label: `on${currentValue ? " (current)" : ""}`,
+      description: "Enable provider-level reasoning",
+    },
+    {
+      value: "off",
+      label: `off${currentValue ? "" : " (current)"}`,
+      description: "Disable provider-level reasoning",
+    },
+  ];
+
+  const selectList = new SelectList(items, 10, hooks.editorTheme.selectList);
+  selectList.setSelectedIndex(currentValue ? 0 : 1);
+
+  selectorContainer.addChild(
+    new Text("\x1b[2mSelect reasoning mode\x1b[0m", 1, 0)
+  );
+  selectorContainer.addChild(new Spacer(1));
+  selectorContainer.addChild(selectList);
+
+  hooks.statusContainer.addChild(selectorContainer);
+  hooks.tui.requestRender();
+
+  return new Promise<boolean | null>((resolve) => {
+    let settled = false;
+    let removeInputListener: (() => void) | null = null;
+
+    const finish = (value: boolean | null): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      removeInputListener?.();
+      hooks.statusContainer.removeChild(selectorContainer);
+      hooks.tui.requestRender();
+      resolve(value);
+    };
+
+    selectList.onSelect = (item) => {
+      finish(item.value === "on");
+    };
+    selectList.onCancel = () => {
+      finish(null);
+    };
+
+    removeInputListener = hooks.addInputListener((data: string) => {
+      if (hooks.isCtrlCInput(data)) {
+        finish(null);
+        return { consume: true };
+      }
+      selectList.handleInput(data);
+      hooks.tui.requestRender();
+      return { consume: true };
+    });
+  });
+};
 
 const agent = defineAgent({
   name: "minimal-agent",
@@ -92,6 +170,17 @@ try {
         if (action.type === "new-session") {
           await session.reset();
         }
+      },
+      preprocessCommand: async (input, hooks) => {
+        const parsed = parseCommand(input);
+        if (!parsed || parsed.name !== "reasoning" || parsed.args.length > 0) {
+          return input;
+        }
+        const selected = await showReasoningSelector(hooks);
+        if (selected === null) {
+          return null;
+        }
+        return `/reasoning ${selected ? "on" : "off"}`;
       },
     });
   }
