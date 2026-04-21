@@ -22,6 +22,23 @@ const stripInlineComment = (value: string): string => {
   return (commentIndex >= 0 ? value.slice(0, commentIndex) : value).trimEnd();
 };
 
+const isEscaped = (value: string, index: number): boolean => {
+  let slashCount = 0;
+  for (let i = index - 1; i >= 0 && value[i] === "\\"; i -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+};
+
+const findClosingQuoteIndex = (value: string, quote: string): number => {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === quote && !isEscaped(value, index)) {
+      return index;
+    }
+  }
+  return -1;
+};
+
 export const parseEnvFile = (content: string): Record<string, string> => {
   const entries: Record<string, string> = {};
   const lines = content.split(LINE_BREAK);
@@ -43,16 +60,19 @@ export const parseEnvFile = (content: string): Record<string, string> => {
     const trimmedValue = valueStart.trimStart();
     const quote = trimmedValue[0];
     if (quote === '"' || quote === "'") {
-      const valueParts = [trimmedValue.slice(1)];
-      while (!valueParts.at(-1)?.endsWith(quote) && index < lines.length - 1) {
+      let quotedValue = trimmedValue.slice(1);
+      let closingQuoteIndex = findClosingQuoteIndex(quotedValue, quote);
+
+      while (closingQuoteIndex < 0 && index < lines.length - 1) {
         index += 1;
-        valueParts.push(lines[index] ?? "");
+        quotedValue = `${quotedValue}\n${lines[index] ?? ""}`;
+        closingQuoteIndex = findClosingQuoteIndex(quotedValue, quote);
       }
 
-      const quotedValue = valueParts.join("\n");
-      const value = quotedValue.endsWith(quote)
-        ? quotedValue.slice(0, -1)
-        : quotedValue;
+      const value =
+        closingQuoteIndex >= 0
+          ? quotedValue.slice(0, closingQuoteIndex)
+          : quotedValue;
       entries[key] = decodeQuotedValue(value, quote);
       continue;
     }

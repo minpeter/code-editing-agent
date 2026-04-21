@@ -24,4 +24,14 @@ NEXT=value`)
       TOKEN: "abc#123",
     });
   });
+
+  it("ignores comments after quoted values without consuming later lines", () => {
+    expect(
+      parseEnvFile(`AI_MODEL="openai/gpt-5.4" # default model
+AI_API_KEY=secret`)
+    ).toEqual({
+      AI_MODEL: "openai/gpt-5.4",
+      AI_API_KEY: "secret",
+    });
+  });
 });
