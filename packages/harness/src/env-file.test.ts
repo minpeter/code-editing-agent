@@ -1,0 +1,27 @@
+import { describe, expect, it } from "vitest";
+import { parseEnvFile } from "./env-file";
+
+describe("parseEnvFile", () => {
+  it("preserves multi-line quoted values", () => {
+    expect(
+      parseEnvFile(`MULTILINE="first
+second"
+NEXT=value`)
+    ).toEqual({
+      MULTILINE: "first\nsecond",
+      NEXT: "value",
+    });
+  });
+
+  it("strips inline comments from unquoted values", () => {
+    expect(parseEnvFile("AI_MODEL=openai/gpt-5.4 # default model")).toEqual({
+      AI_MODEL: "openai/gpt-5.4",
+    });
+  });
+
+  it("keeps hash characters inside quoted values", () => {
+    expect(parseEnvFile('TOKEN="abc#123"')).toEqual({
+      TOKEN: "abc#123",
+    });
+  });
+});

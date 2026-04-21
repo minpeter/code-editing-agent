@@ -44,6 +44,9 @@ class CodeEditingAgent(BaseInstalledAgent):
         prompt = shlex.quote(instruction)
         env = {
             "AI_API_KEY": os.getenv("AI_API_KEY", ""),
+            "AI_BASE_URL": os.getenv("AI_BASE_URL", ""),
+            "AI_MODEL": os.getenv("AI_MODEL", ""),
+            "AI_CONTEXT_LIMIT": os.getenv("AI_CONTEXT_LIMIT", ""),
             "PATH": "/usr/local/bin:/usr/bin:/bin",
             "ATIF_OUTPUT_PATH": "/logs/agent/trajectory.json",
         }
