@@ -62,7 +62,10 @@ The workspace layer overrides the user layer on conflict. Writes land on the wor
 Adding a new persisted toggle is roughly ten lines of declarative config. The harness ships a `createTogglePreferenceCommand` factory that handles argument parsing, validation, persistence, and response messages:
 
 ```typescript
-import { createTogglePreferenceCommand } from "@ai-sdk-tool/harness/preferences";
+import {
+  createLayeredPreferences,
+  createTogglePreferenceCommand,
+} from "@ai-sdk-tool/harness/preferences";
 
 const prefs = createLayeredPreferences<{ reasoningEnabled?: boolean }>({
   appName: "minimal-agent",
@@ -70,7 +73,7 @@ const prefs = createLayeredPreferences<{ reasoningEnabled?: boolean }>({
 let reasoningEnabled =
   (await prefs.store.load())?.reasoningEnabled ?? false;
 
-// Inside defineAgent({ commands: [...] }):
+// Then, inside defineAgent({ commands: [...] }), add:
 createTogglePreferenceCommand({
   name: "reasoning",
   preferences: prefs,
