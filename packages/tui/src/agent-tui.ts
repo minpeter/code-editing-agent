@@ -1189,7 +1189,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     let assistantView: AssistantStreamView | null = null;
     let suppressAssistantLeadingSpacer = false;
     let firstVisiblePartSeen = false;
-    let firstTextStartSeen = false;
 
     const resetAssistantView = (suppressLeadingSpacer = false): void => {
       if (suppressLeadingSpacer) {
@@ -1268,19 +1267,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         const part = rawPart as {
           type: string;
         };
-
-        if (!firstTextStartSeen && part.type === "text-start") {
-          firstTextStartSeen = true;
-          idleStatusPlaceholderMode = "suppressed";
-        }
-
-        if (
-          part.type === "tool-input-start" &&
-          idleStatusPlaceholderMode === "suppressed"
-        ) {
-          idleStatusPlaceholderMode = "normal";
-          renderForegroundStatus();
-        }
 
         if (
           !firstVisiblePartSeen &&
