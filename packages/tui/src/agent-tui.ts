@@ -161,6 +161,22 @@ class StatusSpinner extends Text {
   }
 }
 
+/**
+ * Fixed-height placeholder that occupies the same 2 vertical lines as
+ * {@link StatusSpinner} while idle. Keeping the status slot at a constant
+ * height prevents layout shift when the spinner is mounted/unmounted, and
+ * guarantees a persistent blank buffer directly above the prompt editor.
+ */
+class IdleStatusPlaceholder extends Text {
+  constructor() {
+    super("", 1, 0);
+  }
+
+  render(_width: number): string[] {
+    return ["", ""];
+  }
+}
+
 const truncatePlainToWidth = (text: string, maxWidth: number): string => {
   if (maxWidth <= 0) {
     return "";
@@ -708,7 +724,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   headerContainer.addChild(new Spacer(1));
   headerContainer.addChild(title);
   headerContainer.addChild(help);
-  headerContainer.addChild(new Spacer(1));
 
   const editor = new Editor(tui, editorTheme, {
     paddingX: 1,
@@ -781,13 +796,15 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       message
     );
 
+  const idleStatusPlaceholder = new IdleStatusPlaceholder();
+
   const renderForegroundStatus = (): void => {
     statusContainer.clear();
-    if (foregroundStatus) {
-      statusContainer.addChild(foregroundStatus);
-    }
+    statusContainer.addChild(foregroundStatus ?? idleStatusPlaceholder);
     tui.requestRender();
   };
+
+  renderForegroundStatus();
 
   const renderFooterStatuses = (): void => {
     footerStatusBar.setEntries([...backgroundStatuses.values()]);
