@@ -10,7 +10,7 @@ import {
 type TestStreamPart = TextStreamPart<ToolSet>;
 
 const LARGE_BLANK_GAP_REGEX = /\n[ \t]*\n[ \t]*\n[ \t]*\n/;
-const EXECUTING_SPINNER_TEXT_REGEX = /[-\\|/] Executing\.\./;
+const EXECUTING_SPINNER_TEXT_REGEX = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏].*Executing\.\.\./;
 const tagGrepLine = (
   path: string,
   lineNumber: number,
@@ -686,8 +686,8 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Read src/streamed.ts");
-    expect(output).toContain("Executing..");
-    expect(EXECUTING_SPINNER_TEXT_REGEX.test(output)).toBe(true);
+    expect(output).not.toContain("Executing...");
+    expect(EXECUTING_SPINNER_TEXT_REGEX.test(output)).toBe(false);
     expect(output).not.toContain("\x1b[100m");
     expect(output).not.toContain("Tool read_file");
   });
@@ -712,54 +712,9 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Read src/no-flicker.ts");
-    expect(output).toContain("Executing..");
+    expect(output).not.toContain("Executing...");
     expect(output).not.toContain("Tool read_file");
     expect(snapshots.some((frame) => frame.includes("{}"))).toBe(false);
-  });
-
-  it("preserves requestRender this-context for pending spinner updates", async () => {
-    const chatContainer = new Container();
-    const renderTracker = {
-      renderCalls: 0,
-      doRender() {
-        this.renderCalls += 1;
-      },
-      requestRender() {
-        this.doRender();
-      },
-    };
-
-    async function* stream(): AsyncIterable<TestStreamPart> {
-      yield {
-        type: "tool-input-start",
-        id: "call_bound_request_render",
-        toolName: "read_file",
-      };
-      yield {
-        type: "tool-input-delta",
-        id: "call_bound_request_render",
-        delta: '{"path":"src/bound-context.ts"',
-      };
-      await new Promise((resolve) => setTimeout(resolve, 180));
-    }
-
-    await renderFullStreamWithPiTui(stream(), {
-      chatContainer,
-      markdownTheme,
-      ui: renderTracker,
-      showReasoning: true,
-      showSteps: false,
-      showFinishReason: false,
-      showToolResults: true,
-      showRawToolIo: false,
-      showSources: false,
-      showFiles: false,
-    });
-
-    const output = chatContainer.render(120).join("\n");
-    expect(output).toContain("Read src/bound-context.ts");
-    expect(output).toContain("Executing..");
-    expect(renderTracker.renderCalls).toBeGreaterThan(2);
   });
 
   it("streams shell_execute pretty header from partial tool-input-delta", async () => {
@@ -777,8 +732,8 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Shell echo streamed");
-    expect(output).toContain("Executing..");
-    expect(EXECUTING_SPINNER_TEXT_REGEX.test(output)).toBe(true);
+    expect(output).not.toContain("Executing...");
+    expect(EXECUTING_SPINNER_TEXT_REGEX.test(output)).toBe(false);
     expect(output).not.toContain("Tool shell_execute");
   });
 
@@ -797,7 +752,7 @@ describe("renderFullStreamWithPiTui", () => {
     ]);
 
     expect(output).toContain("Read src/late-name.ts");
-    expect(output).toContain("Executing..");
+    expect(output).not.toContain("Executing...");
     expect(output).not.toContain("Tool tool");
   });
 

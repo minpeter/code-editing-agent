@@ -106,9 +106,6 @@ const TAB_PATTERN = /\t/g;
 const MAX_READ_PREVIEW_LINES = 10;
 const MAX_WRITE_FILE_PREVIEW_LINES = 200;
 const MAX_WRITE_FILE_PREVIEW_CHARS = 100_000;
-const TOOL_PENDING_MESSAGE = "Executing..";
-const TOOL_PENDING_MARKER = "__tool_pending_status__";
-const TOOL_PENDING_SPINNER_FRAMES = ["-", "\\", "|", "/"] as const;
 const HASHLINE_TAG_ONLY_PATTERN = /^(.*\d+#[ZPMQVRWSNKTXJBYH]{2})\s*$/;
 const HASHLINE_PIPE_ONLY_PATTERN = /^\|\s*(.*)$/;
 const HASHLINE_TAG_PIPE_ONLY_PATTERN =
@@ -617,13 +614,7 @@ const renderGrepOutput = (output: string): GrepRenderPayload | null => {
   };
 };
 
-const renderPendingOutput = (): string => TOOL_PENDING_MARKER;
-
-const buildPendingSpinnerText = (frame: string): string =>
-  `${frame} ${TOOL_PENDING_MESSAGE}`;
-
-const renderToolOutput = (_toolName: string, output: unknown): string =>
-  renderCodeBlock("text", output);
+const renderPendingOutput = (): string => "";
 
 const ANSI_RESET = "\x1b[0m";
 const ANSI_DIM = "\x1b[2m";
@@ -631,6 +622,9 @@ const ANSI_ITALIC = "\x1b[3m";
 const ANSI_GRAY = "\x1b[90m";
 const ANSI_BG_GRAY = "\x1b[100m";
 const ANSI_BG_DARK_RED = "\x1b[48;5;88m";
+
+const renderToolOutput = (_toolName: string, output: unknown): string =>
+  renderCodeBlock("text", output);
 const LEADING_NEWLINES = /^\n+/;
 const TRAILING_NEWLINES = /\n+$/;
 
@@ -984,16 +978,12 @@ class ToolCallView extends Container {
   private readonly readBlock: Container;
   private readonly readBody: TruncatedReadBody;
   private readonly readHeader: TrimmedMarkdown;
-  private readonly requestRender: () => void;
   private readonly showRawToolIo: boolean;
   private error: unknown;
   private finalInput: unknown;
   private inputBuffer = "";
   private output: unknown;
   private outputDenied = false;
-  private pendingSpinnerFrameIndex = 0;
-  private pendingSpinnerInterval: ReturnType<typeof setInterval> | null = null;
-  private pendingTemplate: string | null = null;
   private parsedInput: unknown;
   private readMode = false;
   private toolName: string;
@@ -1002,13 +992,12 @@ class ToolCallView extends Container {
     callId: string,
     toolName: string,
     markdownTheme: MarkdownTheme,
-    requestRender: () => void,
+    _requestRender: () => void,
     showRawToolIo: boolean
   ) {
     super();
     this.callId = callId;
     this.toolName = toolName;
-    this.requestRender = requestRender;
     this.showRawToolIo = showRawToolIo;
     this.content = new TrimmedMarkdown("", 1, 0, markdownTheme);
     this.readHeader = new TrimmedMarkdown("", 1, 0, markdownTheme);
@@ -1022,7 +1011,7 @@ class ToolCallView extends Container {
   }
 
   dispose(): void {
-    this.stopPendingSpinner();
+    return;
   }
 
   private setReadMode(enabled: boolean): void {
@@ -1033,47 +1022,6 @@ class ToolCallView extends Container {
     this.readMode = enabled;
     this.clear();
     this.addChild(enabled ? this.readBlock : this.content);
-  }
-
-  private stopPendingSpinner(): void {
-    this.pendingTemplate = null;
-    if (!this.pendingSpinnerInterval) {
-      return;
-    }
-    clearInterval(this.pendingSpinnerInterval);
-    this.pendingSpinnerInterval = null;
-  }
-
-  private applyPendingSpinnerFrame(): void {
-    if (!this.pendingTemplate) {
-      return;
-    }
-
-    const frame = TOOL_PENDING_SPINNER_FRAMES[this.pendingSpinnerFrameIndex];
-    this.readBody.setText(
-      this.pendingTemplate.replaceAll(
-        TOOL_PENDING_MARKER,
-        buildPendingSpinnerText(frame)
-      )
-    );
-  }
-
-  private startPendingSpinner(template: string): void {
-    this.pendingTemplate = template;
-    this.pendingSpinnerFrameIndex = 0;
-    this.applyPendingSpinnerFrame();
-
-    if (this.pendingSpinnerInterval) {
-      return;
-    }
-
-    this.pendingSpinnerInterval = setInterval(() => {
-      this.pendingSpinnerFrameIndex =
-        (this.pendingSpinnerFrameIndex + 1) %
-        TOOL_PENDING_SPINNER_FRAMES.length;
-      this.applyPendingSpinnerFrame();
-      this.requestRender();
-    }, 80);
   }
 
   async appendInputChunk(chunk: string): Promise<void> {
@@ -1168,13 +1116,6 @@ class ToolCallView extends Container {
     this.setReadMode(true);
     this.readBody.setBackgroundEnabled(options?.useBackground ?? true);
     this.readHeader.setText(header);
-
-    if (options?.isPending) {
-      this.startPendingSpinner(body);
-      return;
-    }
-
-    this.stopPendingSpinner();
     this.readBody.setText(body);
   }
 
@@ -1677,8 +1618,6 @@ class ToolCallView extends Container {
     if (!this.showRawToolIo && this.tryRenderPrettyMode()) {
       return;
     }
-
-    this.stopPendingSpinner();
 
     if (this.shouldSuppressRawFallback()) {
       return;

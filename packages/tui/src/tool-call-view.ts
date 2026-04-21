@@ -2,7 +2,6 @@ import {
   Container,
   Markdown,
   type MarkdownTheme,
-  Spacer,
   truncateToWidth,
   visibleWidth,
 } from "@mariozechner/pi-tui";
@@ -16,10 +15,6 @@ const BACKTICK_FENCE_PATTERN = /`{3,}/g;
 const ANSI_RESET = "\x1b[0m";
 const ANSI_BG_GRAY = "\x1b[100m";
 const ANSI_BG_DARK_RED = "\x1b[48;5;88m";
-
-const PENDING_SPINNER_FRAMES = ["-", "\\", "|", "/"] as const;
-const PENDING_MESSAGE = "Executing..";
-const PENDING_MARKER = "__tool_pending_status__";
 
 const safeStringify = (value: unknown): string => {
   if (typeof value === "string") {
@@ -143,10 +138,11 @@ class BackgroundBody {
         : paddedLine;
     });
 
+    const result = ["", ...renderedLines];
     this.cachedText = this.text;
     this.cachedWidth = width;
-    this.cachedLines = renderedLines;
-    return renderedLines;
+    this.cachedLines = result;
+    return result;
   }
 }
 
@@ -160,10 +156,9 @@ export interface ToolRendererMap {
 
 export class BaseToolCallView extends Container {
   private readonly callId: string;
-  private readonly content: Markdown;
+  private readonly content: TrimmedMarkdown;
   private readonly markdownTheme: MarkdownTheme;
   private readonly renderers?: ToolRendererMap;
-  private readonly requestRender: (() => void) | undefined;
   private readonly showRawToolIo: boolean;
   private displayMode: "content" | "pretty" = "content";
   private error: unknown;
@@ -172,9 +167,6 @@ export class BaseToolCallView extends Container {
   private output: unknown;
   private outputDenied = false;
   private parsedInput: unknown;
-  private pendingSpinnerFrameIndex = 0;
-  private pendingSpinnerInterval: ReturnType<typeof setInterval> | null = null;
-  private pendingTemplate: string | null = null;
   private prettyBlockActive = false;
   private readBlock: Container | null = null;
   private readBody: BackgroundBody | null = null;
@@ -186,7 +178,7 @@ export class BaseToolCallView extends Container {
     callId: string,
     toolName: string,
     markdownTheme: MarkdownTheme,
-    requestRender?: () => void,
+    _requestRender?: () => void,
     showRawToolIo?: boolean,
     renderers?: ToolRendererMap
   ) {
@@ -194,16 +186,15 @@ export class BaseToolCallView extends Container {
     this.callId = callId;
     this.toolName = toolName;
     this.markdownTheme = markdownTheme;
-    this.requestRender = requestRender;
     this.showRawToolIo = showRawToolIo ?? false;
     this.renderers = renderers;
-    this.content = new Markdown("", 1, 0, markdownTheme);
+    this.content = new TrimmedMarkdown("", 1, 0, markdownTheme);
     this.addChild(this.content);
     this.refresh();
   }
 
   dispose(): void {
-    this.stopPendingSpinner();
+    return;
   }
 
   async appendInputChunk(chunk: string): Promise<void> {
@@ -285,13 +276,6 @@ export class BaseToolCallView extends Container {
 
     this.readBody.setBackgroundEnabled(options?.useBackground ?? true);
     this.readHeader.setText(header);
-
-    if (options?.isPending) {
-      this.startPendingSpinner(body);
-      return;
-    }
-
-    this.stopPendingSpinner();
     this.readBody.setText(body);
   }
 
@@ -304,7 +288,6 @@ export class BaseToolCallView extends Container {
     const body = new BackgroundBody("", 1, applyGrayBackground);
     const block = new Container();
     block.addChild(header);
-    block.addChild(new Spacer(1));
     block.addChild(body as unknown as InstanceType<typeof Container>);
 
     this.readHeader = header;
@@ -323,46 +306,6 @@ export class BaseToolCallView extends Container {
     } else {
       this.addChild(this.content);
     }
-  }
-
-  private startPendingSpinner(template: string): void {
-    this.pendingTemplate = template.length > 0 ? template : PENDING_MARKER;
-    this.pendingSpinnerFrameIndex = 0;
-    this.applyPendingSpinnerFrame();
-
-    if (this.pendingSpinnerInterval) {
-      return;
-    }
-
-    this.pendingSpinnerInterval = setInterval(() => {
-      this.pendingSpinnerFrameIndex =
-        (this.pendingSpinnerFrameIndex + 1) % PENDING_SPINNER_FRAMES.length;
-      this.applyPendingSpinnerFrame();
-      this.requestRender?.();
-    }, 80);
-  }
-
-  private stopPendingSpinner(): void {
-    this.pendingTemplate = null;
-    if (!this.pendingSpinnerInterval) {
-      return;
-    }
-    clearInterval(this.pendingSpinnerInterval);
-    this.pendingSpinnerInterval = null;
-  }
-
-  private applyPendingSpinnerFrame(): void {
-    if (!(this.pendingTemplate && this.readBody)) {
-      return;
-    }
-
-    const frame = PENDING_SPINNER_FRAMES[this.pendingSpinnerFrameIndex];
-    const spinnerText = `${frame} ${PENDING_MESSAGE}`;
-    this.readBody.setText(
-      this.pendingTemplate.includes(PENDING_MARKER)
-        ? this.pendingTemplate.replaceAll(PENDING_MARKER, spinnerText)
-        : spinnerText
-    );
   }
 
   private resolveBestInput(): unknown {
@@ -425,7 +368,6 @@ export class BaseToolCallView extends Container {
       }
     }
 
-    this.stopPendingSpinner();
     this.setDisplayMode("content");
 
     if (this.shouldSuppressRawFallback()) {

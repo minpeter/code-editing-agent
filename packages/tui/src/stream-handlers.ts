@@ -103,6 +103,11 @@ export interface PiTuiStreamState {
   ensureToolView: (toolCallId: string, toolName: string) => ToolCallView;
   flags: PiTuiRenderFlags;
   getToolView: (toolCallId: string) => ToolCallView | undefined;
+  onReasoningEnd?: () => void;
+  onReasoningStart?: () => void;
+  onToolPendingEnd?: () => void;
+  onToolPendingStart?: () => void;
+  pendingToolCallIds: Set<string>;
   resetAssistantView: (suppressLeadingSpacer?: boolean) => void;
   streamedToolCallIds: Set<string>;
 }
@@ -158,6 +163,7 @@ export const handleReasoningStart: StreamPartHandler = (_part, state) => {
   if (state.flags.showReasoning) {
     state.ensureAssistantView();
   }
+  state.onReasoningStart?.();
 };
 
 export const handleReasoningDelta: StreamPartHandler = (part, state) => {
@@ -170,6 +176,10 @@ export const handleReasoningDelta: StreamPartHandler = (part, state) => {
     { type: "reasoning-delta" }
   >;
   state.ensureAssistantView().appendReasoning(reasoningPart.text);
+};
+
+export const handleReasoningEnd: StreamPartHandler = (_part, state) => {
+  state.onReasoningEnd?.();
 };
 
 export const handleToolInputStart: StreamPartHandler = async (part, state) => {
@@ -232,6 +242,16 @@ export const handleToolInputEnd: StreamPartHandler = (part, state) => {
   }
 };
 
+const firePendingEndIfTracked = (
+  state: PiTuiStreamState,
+  toolCallId: string
+): void => {
+  if (!state.pendingToolCallIds.delete(toolCallId)) {
+    return;
+  }
+  state.onToolPendingEnd?.();
+};
+
 export const handleToolCall: StreamPartHandler = (part, state) => {
   const toolCallPart = part as Extract<StreamPart, { type: "tool-call" }>;
   const inputState = state.activeToolInputs.get(toolCallPart.toolCallId);
@@ -252,14 +272,21 @@ export const handleToolCall: StreamPartHandler = (part, state) => {
   if (!shouldSkipToolCallRender) {
     view.setToolName(toolCallPart.toolName);
   }
+
+  if (!state.pendingToolCallIds.has(toolCallPart.toolCallId)) {
+    state.pendingToolCallIds.add(toolCallPart.toolCallId);
+    state.onToolPendingStart?.();
+  }
 };
 
 export const handleToolResult: StreamPartHandler = (part, state) => {
+  const toolResultPart = part as Extract<StreamPart, { type: "tool-result" }>;
+  firePendingEndIfTracked(state, toolResultPart.toolCallId);
+
   if (!state.flags.showToolResults) {
     return;
   }
 
-  const toolResultPart = part as Extract<StreamPart, { type: "tool-result" }>;
   state.resetAssistantView(true);
   const view = state.ensureToolView(
     toolResultPart.toolCallId,
@@ -270,6 +297,7 @@ export const handleToolResult: StreamPartHandler = (part, state) => {
 
 export const handleToolError: StreamPartHandler = (part, state) => {
   const toolErrorPart = part as Extract<StreamPart, { type: "tool-error" }>;
+  firePendingEndIfTracked(state, toolErrorPart.toolCallId);
   state.resetAssistantView(true);
   const view = state.ensureToolView(
     toolErrorPart.toolCallId,
@@ -283,6 +311,7 @@ export const handleToolOutputDenied: StreamPartHandler = (part, state) => {
     StreamPart,
     { type: "tool-output-denied" }
   >;
+  firePendingEndIfTracked(state, deniedPart.toolCallId);
   state.resetAssistantView(true);
   const view = state.ensureToolView(deniedPart.toolCallId, deniedPart.toolName);
   view.setOutputDenied();
@@ -296,6 +325,7 @@ export const handleToolApprovalRequest: StreamPartHandler = (part, state) => {
     toolName: string;
   };
 
+  firePendingEndIfTracked(state, approvalPart.toolCallId);
   state.resetAssistantView(true);
   const view = state.ensureToolView(
     approvalPart.toolCallId,
@@ -386,6 +416,7 @@ export const STREAM_HANDLERS: Record<string, StreamPartHandler> = {
   "text-delta": handleTextDelta,
   "reasoning-start": handleReasoningStart,
   "reasoning-delta": handleReasoningDelta,
+  "reasoning-end": handleReasoningEnd,
   "tool-input-start": handleToolInputStart,
   "tool-input-delta": handleToolInputDelta,
   "tool-input-end": handleToolInputEnd,
@@ -401,12 +432,7 @@ export const STREAM_HANDLERS: Record<string, StreamPartHandler> = {
   finish: handleFinish,
 };
 
-export const IGNORE_PART_TYPES = new Set([
-  "abort",
-  "text-end",
-  "reasoning-end",
-  "start",
-]);
+export const IGNORE_PART_TYPES = new Set(["abort", "text-end", "start"]);
 
 export const isVisibleStreamPart = (
   part: StreamPart,
@@ -415,16 +441,14 @@ export const isVisibleStreamPart = (
   switch (part.type) {
     case "abort":
     case "text-end":
+    case "reasoning-start":
+    case "reasoning-delta":
     case "reasoning-end":
     case "start":
     case "tool-input-end":
       return false;
     case "text-start":
       return true;
-    case "reasoning-start":
-      return flags.showReasoning;
-    case "reasoning-delta":
-      return flags.showReasoning;
     case "tool-result":
       return flags.showToolResults;
     case "start-step":

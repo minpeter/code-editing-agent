@@ -1,6 +1,7 @@
 export * from "./agent-tui";
 export * from "./autocomplete";
 export * from "./colors";
+export * from "./pending-spinner";
 export * from "./spinner";
 export * from "./stream-handlers";
 export * from "./stream-views";
