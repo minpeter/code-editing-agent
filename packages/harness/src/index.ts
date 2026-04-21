@@ -160,6 +160,14 @@ export type {
 } from "./post-compact-restoration";
 export { PostCompactRestorer } from "./post-compact-restoration";
 export type {
+  EnumPreferenceCommandConfig,
+  TogglePreferenceCommandConfig,
+} from "./preference-commands";
+export {
+  createEnumPreferenceCommand,
+  createTogglePreferenceCommand,
+} from "./preference-commands";
+export type {
   CreateLayeredPreferencesOptions,
   FilePreferencesStoreOptions,
   LayeredPreferences,

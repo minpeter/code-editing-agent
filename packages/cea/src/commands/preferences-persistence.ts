@@ -1,4 +1,7 @@
-import type { PreferencesStore } from "@ai-sdk-tool/harness";
+import type {
+  LayeredPreferences,
+  PreferencesStore,
+} from "@ai-sdk-tool/harness";
 import {
   patchWorkspacePreferences,
   type UserPreferences,
@@ -6,21 +9,28 @@ import {
 
 type WorkspacePreferencesStore = PreferencesStore<UserPreferences>;
 
+let preferencesBundle: LayeredPreferences<UserPreferences> | null = null;
 let workspacePreferencesStore: WorkspacePreferencesStore | null = null;
 let onPersistError: ((error: unknown) => void) | null = null;
 
 export const configurePreferencesPersistence = (options: {
+  bundle?: LayeredPreferences<UserPreferences>;
   onError?: (error: unknown) => void;
   workspaceStore: WorkspacePreferencesStore;
 }): void => {
+  preferencesBundle = options.bundle ?? null;
   workspacePreferencesStore = options.workspaceStore;
   onPersistError = options.onError ?? null;
 };
 
 export const resetPreferencesPersistenceForTesting = (): void => {
+  preferencesBundle = null;
   workspacePreferencesStore = null;
   onPersistError = null;
 };
+
+export const getPreferencesBundle =
+  (): LayeredPreferences<UserPreferences> | null => preferencesBundle;
 
 const handlePersistError = (error: unknown): void => {
   if (onPersistError) {

@@ -1,4 +1,12 @@
 export type {
+  EnumPreferenceCommandConfig,
+  TogglePreferenceCommandConfig,
+} from "../preference-commands";
+export {
+  createEnumPreferenceCommand,
+  createTogglePreferenceCommand,
+} from "../preference-commands";
+export type {
   CreateLayeredPreferencesOptions,
   FilePreferencesStoreOptions,
   LayeredPreferences,

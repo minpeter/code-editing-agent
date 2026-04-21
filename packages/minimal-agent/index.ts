@@ -1,10 +1,11 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { FileSnapshotStore, formatContextUsage } from "@ai-sdk-tool/harness";
+import { createTogglePreferenceCommand } from "@ai-sdk-tool/harness/preferences";
 import { createAgentRuntime, defineAgent } from "@ai-sdk-tool/harness/runtime";
 import { runAgentSessionHeadless } from "@ai-sdk-tool/headless/session";
 import { runAgentSessionTUI } from "@ai-sdk-tool/tui/session";
 import { env } from "./env";
-import { createPreferences } from "./preferences";
+import { createPreferences, type MinimalAgentPreferences } from "./preferences";
 
 const modelId = env.AI_MODEL;
 const model = createOpenAICompatible({
@@ -13,28 +14,9 @@ const model = createOpenAICompatible({
   baseURL: env.AI_BASE_URL,
 })(modelId);
 
-const TRUTHY_TOGGLE_VALUES = new Set(["on", "enable", "true"]);
-const FALSY_TOGGLE_VALUES = new Set(["off", "disable", "false"]);
-
-const parseToggle = (raw: string | undefined): boolean | null => {
-  if (!raw) {
-    return null;
-  }
-  if (TRUTHY_TOGGLE_VALUES.has(raw)) {
-    return true;
-  }
-  if (FALSY_TOGGLE_VALUES.has(raw)) {
-    return false;
-  }
-  return null;
-};
-
 const preferences = createPreferences();
 const initialPreferences = await preferences.store.load();
 let reasoningEnabled = initialPreferences?.reasoningEnabled ?? false;
-
-const getReasoningProviderOptions = () =>
-  reasoningEnabled ? { openai: { reasoningEffort: "medium" } } : undefined;
 
 const agent = defineAgent({
   name: "minimal-agent",
@@ -46,7 +28,11 @@ const agent = defineAgent({
   history: {
     compaction: { enabled: true, contextLimit: env.AI_CONTEXT_LIMIT },
   },
-  onBeforeTurn: () => ({ providerOptions: getReasoningProviderOptions() }),
+  onBeforeTurn: () => ({
+    providerOptions: reasoningEnabled
+      ? { openai: { reasoningEffort: "medium" } }
+      : undefined,
+  }),
   commands: [
     {
       name: "new",
@@ -58,34 +44,16 @@ const agent = defineAgent({
         message: "New session.",
       }),
     },
-    {
+    createTogglePreferenceCommand<MinimalAgentPreferences, "reasoningEnabled">({
       name: "reasoning",
-      description:
-        "Toggle provider-level reasoning (on/off). Persisted across sessions.",
-      argumentSuggestions: ["on", "off"],
-      execute: async ({ args }) => {
-        const raw = args[0]?.toLowerCase();
-        if (!raw) {
-          return {
-            success: true,
-            message: `Reasoning is ${reasoningEnabled ? "enabled" : "disabled"}. Usage: /reasoning <on|off>`,
-          };
-        }
-        const next = parseToggle(raw);
-        if (next === null) {
-          return {
-            success: false,
-            message: `Invalid argument: ${raw}. Use 'on' or 'off'.`,
-          };
-        }
+      featureName: "Reasoning",
+      preferences,
+      field: "reasoningEnabled",
+      get: () => reasoningEnabled,
+      set: (next) => {
         reasoningEnabled = next;
-        await preferences.patch({ reasoningEnabled: next });
-        return {
-          success: true,
-          message: `Reasoning ${next ? "enabled" : "disabled"}.`,
-        };
       },
-    },
+    }),
   ],
 });
 

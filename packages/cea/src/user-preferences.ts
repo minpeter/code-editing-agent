@@ -1,5 +1,6 @@
 import {
   createLayeredPreferences,
+  type LayeredPreferences,
   type PreferencesStore,
 } from "@ai-sdk-tool/harness";
 import { z } from "zod";
@@ -38,6 +39,7 @@ export interface CreateUserPreferencesStoreOptions {
 }
 
 export interface UserPreferencesStoreBundle {
+  bundle: LayeredPreferences<UserPreferences>;
   store: PreferencesStore<UserPreferences>;
   userFilePath: string;
   workspaceFilePath: string;
@@ -70,18 +72,18 @@ const validateStoredPreferences = (value: unknown): UserPreferences | null => {
 export const createUserPreferencesStore = (
   options: CreateUserPreferencesStoreOptions = {}
 ): UserPreferencesStoreBundle => {
-  const { paths, store, workspaceStore } =
-    createLayeredPreferences<UserPreferences>({
-      appName: USER_PREFERENCES_APP_NAME,
-      userFilePath: options.userFilePath,
-      workspaceFilePath: options.workspaceFilePath,
-      validate: validateStoredPreferences,
-    });
+  const bundle = createLayeredPreferences<UserPreferences>({
+    appName: USER_PREFERENCES_APP_NAME,
+    userFilePath: options.userFilePath,
+    workspaceFilePath: options.workspaceFilePath,
+    validate: validateStoredPreferences,
+  });
   return {
-    store,
-    userFilePath: paths.userFilePath,
-    workspaceFilePath: paths.workspaceFilePath,
-    workspaceStore,
+    bundle,
+    store: bundle.store,
+    userFilePath: bundle.paths.userFilePath,
+    workspaceFilePath: bundle.paths.workspaceFilePath,
+    workspaceStore: bundle.workspaceStore,
   };
 };
 

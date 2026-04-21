@@ -5,7 +5,7 @@ import {
 import { z } from "zod";
 
 const SCHEMA_VERSION = 1;
-const APP_NAME = "plugsuits";
+const APP_NAME = "minimal-agent";
 
 const schema = z
   .object({

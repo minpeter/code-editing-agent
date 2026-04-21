@@ -143,6 +143,7 @@ mkdirSync(sessionStoreBaseDir, { recursive: true });
 const store = new FileSnapshotStore(sessionStoreBaseDir);
 const userPreferencesBundle = createUserPreferencesStore();
 configurePreferencesPersistence({
+  bundle: userPreferencesBundle.bundle,
   workspaceStore: userPreferencesBundle.workspaceStore,
 });
 const resolveSessionMemoryStorePath = (sessionId: string): string =>
