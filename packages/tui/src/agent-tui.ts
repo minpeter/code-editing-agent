@@ -144,6 +144,8 @@ interface FooterStatusEntry {
 
 const BACKGROUND_COMPACTION_STATUS_MESSAGE = "Background compaction...";
 const BLOCKING_COMPACTION_STATUS_MESSAGE = "Compacting...";
+const EMPTY_INPUT_STATUS_MESSAGE = "Type a message to send";
+const EMPTY_INPUT_STATUS_DURATION_MS = 900;
 const STATUS_ELLIPSIS_SUFFIX = /\.\.\.$/;
 const DEFAULT_INTERRUPT_ABORT_MESSAGE = "User requested stream interruption";
 const DEFAULT_HELP_TEXT =
@@ -224,23 +226,23 @@ const formatBackgroundCompactionBadge = (count: number): null | string => {
 
 export function summarizeFooterStatuses(params: {
   entries: Array<{ message: string; state: "ready" | "running" }>;
-  foregroundMessage: null | string;
+  foregroundStatus: null | { message: string; state: "ready" | "running" };
 }): {
   primary: null | { message: string; state: "ready" | "running" };
   secondaryBadge: null | string;
 } {
-  if (params.foregroundMessage !== null) {
+  if (params.foregroundStatus !== null) {
     const backgroundCompactionCount = params.entries.filter(
       (entry) =>
         entry.state === "running" && isBackgroundCompactionStatus(entry.message)
     ).length;
     return {
       primary: {
-        message: formatPrimaryFooterStatusLabel(params.foregroundMessage),
-        state: "running",
+        message: formatPrimaryFooterStatusLabel(params.foregroundStatus.message),
+        state: params.foregroundStatus.state,
       },
       secondaryBadge:
-        stripStatusEllipsis(params.foregroundMessage) ===
+        stripStatusEllipsis(params.foregroundStatus.message) ===
         stripStatusEllipsis(BLOCKING_COMPACTION_STATUS_MESSAGE)
           ? null
           : formatBackgroundCompactionBadge(backgroundCompactionCount),
@@ -277,6 +279,8 @@ class FooterStatusBar extends Text {
   private currentFrame = "";
   private entries: FooterStatusEntry[] = [];
   private foregroundMessage: string | null = null;
+  private foregroundLevel: "error" | "info" | "warning" | undefined;
+  private foregroundState: "ready" | "running" = "running";
   private rightText: string | undefined;
   private rightTextPressure:
     | "critical"
@@ -302,8 +306,14 @@ class FooterStatusBar extends Text {
     this.tui.requestRender();
   }
 
-  setForegroundMessage(message: string | null): void {
+  setForegroundMessage(
+    message: string | null,
+    level: "error" | "info" | "warning" = "info",
+    state: "ready" | "running" = "running"
+  ): void {
     this.foregroundMessage = message;
+    this.foregroundLevel = message === null ? undefined : level;
+    this.foregroundState = message === null ? "running" : state;
     this.invalidate();
     this.tui.requestRender();
   }
@@ -377,7 +387,13 @@ class FooterStatusBar extends Text {
 
     const display = summarizeFooterStatuses({
       entries: this.entries,
-      foregroundMessage: this.foregroundMessage,
+      foregroundStatus:
+        this.foregroundMessage === null
+          ? null
+          : {
+              message: this.foregroundMessage,
+              state: this.foregroundState,
+            },
     });
     if (display.primary || rightTextStyled) {
       const maxLeftWidth = rightTextPlain
@@ -386,6 +402,10 @@ class FooterStatusBar extends Text {
       const left = display.primary
         ? renderLeftEntry(
             {
+              level:
+                this.foregroundMessage !== null
+                  ? this.foregroundLevel
+                  : undefined,
               message: display.primary.message,
               state: display.primary.state,
             },
@@ -916,6 +936,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   let lastCtrlCPressAt = 0;
   let foregroundStatusMessage: string | null = null;
   let foregroundStatusBeforeBlocking: string | null = null;
+  let emptyInputStatusTimeout: ReturnType<typeof setTimeout> | null = null;
   const backgroundStatuses = new Map<string, FooterStatusEntry>();
   let blockingCompactionActive = false;
   let commandInputListenerActive = false;
@@ -978,9 +999,37 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     footerStatusBar.setForegroundMessage(null);
   };
 
-  const showLoader = (message: string): void => {
+  const clearEmptyInputStatusTimeout = (): void => {
+    if (emptyInputStatusTimeout !== null) {
+      clearTimeout(emptyInputStatusTimeout);
+      emptyInputStatusTimeout = null;
+    }
+  };
+
+  const showFooterStatus = (
+    message: string,
+    level: "error" | "info" | "warning" = "info",
+    state: "ready" | "running" = "running"
+  ): void => {
     foregroundStatusMessage = message;
-    footerStatusBar.setForegroundMessage(message);
+    footerStatusBar.setForegroundMessage(message, level, state);
+  };
+
+  const showLoader = (message: string): void => {
+    showFooterStatus(message, "info", "running");
+  };
+
+  const nudgeEmptyInput = (): void => {
+    clearEmptyInputStatusTimeout();
+    showFooterStatus(EMPTY_INPUT_STATUS_MESSAGE, "warning", "ready");
+    emptyInputStatusTimeout = setTimeout(() => {
+      emptyInputStatusTimeout = null;
+      if (foregroundStatusMessage === EMPTY_INPUT_STATUS_MESSAGE) {
+        clearStatus();
+        tui.requestRender();
+      }
+    }, EMPTY_INPUT_STATUS_DURATION_MS);
+    tui.requestRender();
   };
 
   const clearPromptInput = (): void => {
@@ -1396,8 +1445,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
         clearStatus,
         hasSpinner: () => foregroundStatusMessage !== null,
         setMessage: (message) => {
-          foregroundStatusMessage = message;
-          footerStatusBar.setForegroundMessage(message);
+          showFooterStatus(message, "info");
         },
         showLoader,
       },
@@ -2133,8 +2181,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
   const processInput = async (input: string): Promise<boolean> => {
     const trimmed = input.trim();
     if (trimmed.length === 0) {
-      addSystemMessage(chatContainer, "메시지를 입력해주세요");
-      tui.requestRender();
+      nudgeEmptyInput();
       return true;
     }
 
@@ -2201,6 +2248,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
     }
   } finally {
     compactionOrchestrator.discardAll();
+    clearEmptyInputStatusTimeout();
     clearStatus();
     footerStatusBar.stop();
     const pendingResolver: unknown = inputResolver;
