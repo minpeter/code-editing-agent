@@ -149,6 +149,9 @@ const DEFAULT_INTERRUPT_ABORT_MESSAGE = "User requested stream interruption";
 const DEFAULT_HELP_TEXT =
   "Enter to submit, Shift+Enter for newline, /help for commands, Esc to interrupt, Ctrl+C to clear, Ctrl+C twice to exit";
 
+export const buildScrollbackPreservingResetGap = (rows: number): string =>
+  "\n".repeat(Math.max(1, rows));
+
 const stripStatusEllipsis = (message: string): string =>
   message.trim().replace(STATUS_ELLIPSIS_SUFFIX, "");
 
@@ -1874,6 +1877,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       return;
     }
 
+    terminal.write(buildScrollbackPreservingResetGap(terminal.rows));
     compactionOrchestrator.discardAll();
     if (config.messageHistory.reset) {
       config.messageHistory.reset();
@@ -1881,6 +1885,7 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       config.messageHistory.clear();
     }
     clearStatus();
+    overlayContainer.clear();
     chatContainer.clear();
     addNewSessionMessage(chatContainer);
     await runWithInterruptController(async (streamAbortController) => {
@@ -1896,8 +1901,6 @@ export async function createAgentTUI(config: AgentTUIConfig): Promise<void> {
       });
     });
     updateHeader();
-    terminal.clearScreen();
-    addNewSessionMessage(chatContainer);
     tui.requestRender(true);
 
     if (commandResult.message) {
