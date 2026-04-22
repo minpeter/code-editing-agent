@@ -149,8 +149,10 @@ const DEFAULT_INTERRUPT_ABORT_MESSAGE = "User requested stream interruption";
 const DEFAULT_HELP_TEXT =
   "Enter to submit, Shift+Enter for newline, /help for commands, Esc to interrupt, Ctrl+C to clear, Ctrl+C twice to exit";
 
-export const buildScrollbackPreservingResetGap = (rows: number): string =>
-  "\n".repeat(Math.max(1, rows));
+export const buildScrollbackPreservingResetGap = (rows: number): string => {
+  const safeRows = Math.max(1, rows);
+  return `\x1b[${safeRows};1H${"\r\n".repeat(safeRows)}`;
+};
 
 const stripStatusEllipsis = (message: string): string =>
   message.trim().replace(STATUS_ELLIPSIS_SUFFIX, "");
