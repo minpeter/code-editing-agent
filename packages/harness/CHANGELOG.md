@@ -1,5 +1,10 @@
 # @ai-sdk-tool/harness
 
+## 1.3.2
+
+### Fixes
+- `env.ts`: moved `.env` file discovery side-effects out of module top level into `loadDotEnvFilesIfAvailable()` helper. The module now loads safely in edge runtimes (Cloudflare Workers, Vercel Edge) without `node:fs` access. Callers that relied on the automatic `.env` loading must explicitly call `loadDotEnvFilesIfAvailable()` from their Node.js entry point.
+
 ## 1.3.1
 
 ### Patch Changes

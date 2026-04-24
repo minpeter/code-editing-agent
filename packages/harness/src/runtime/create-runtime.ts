@@ -1,6 +1,7 @@
 import { createAgent } from "../agent";
 import { CheckpointHistory } from "../checkpoint-history";
 import { createModelSummarizer } from "../compaction-prompts";
+import { loadDotEnvFilesIfAvailable } from "../env";
 import { SessionManager } from "../session";
 import { SkillsEngine } from "../skills";
 import type { Agent } from "../types";
@@ -42,6 +43,8 @@ export async function createAgentRuntime<
 >(
   config: AgentRuntimeConfig<TAgents, TContext>
 ): Promise<AgentRuntime<TAgents, TContext>> {
+  loadDotEnvFilesIfAvailable();
+
   const agentMap = new Map<string, DefinedAgent<TContext>>();
   for (const definition of config.agents as readonly DefinedAgent<TContext>[]) {
     if (agentMap.has(definition.name)) {

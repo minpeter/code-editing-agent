@@ -1,35 +1,41 @@
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 import { loadEnvFileCompat } from "./env-file";
 
-const findWorkspaceRootEnv = (startDir: string): string | null => {
-  let current = resolve(startDir);
+/** Call this only from Node.js entry points (CLI, test harness). Safe to omit in edge runtimes. */
+export const loadDotEnvFilesIfAvailable = (): void => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { existsSync } = require("node:fs") as typeof import("node:fs");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { dirname, resolve } = require("node:path") as typeof import("node:path");
 
-  while (true) {
-    if (existsSync(resolve(current, "pnpm-workspace.yaml"))) {
-      return resolve(current, ".env");
-    }
+  const findWorkspaceRootEnv = (startDir: string): string | null => {
+    let current = resolve(startDir);
 
-    const parent = dirname(current);
-    if (parent === current) {
-      return null;
+    while (true) {
+      if (existsSync(resolve(current, "pnpm-workspace.yaml"))) {
+        return resolve(current, ".env");
+      }
+
+      const parent = dirname(current);
+      if (parent === current) {
+        return null;
+      }
+      current = parent;
     }
-    current = parent;
+  };
+
+  const envFileCandidates = [
+    resolve(process.cwd(), ".env"),
+    findWorkspaceRootEnv(process.cwd()),
+  ].filter((envPath): envPath is string => envPath !== null);
+
+  for (const envPath of new Set(envFileCandidates)) {
+    if (existsSync(envPath)) {
+      loadEnvFileCompat(envPath);
+    }
   }
 };
-
-const ENV_FILE_CANDIDATES = [
-  resolve(process.cwd(), ".env"),
-  findWorkspaceRootEnv(process.cwd()),
-].filter((envPath): envPath is string => envPath !== null);
-
-for (const envPath of new Set(ENV_FILE_CANDIDATES)) {
-  if (existsSync(envPath)) {
-    loadEnvFileCompat(envPath);
-  }
-}
 
 export const env = createEnv({
   server: {
