@@ -1,14 +1,11 @@
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 import { loadEnvFileCompat } from "./env-file";
 
 /** Call this only from Node.js entry points (CLI, test harness). Safe to omit in edge runtimes. */
 export const loadDotEnvFilesIfAvailable = (): void => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { existsSync } = require("node:fs") as typeof import("node:fs");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { dirname, resolve } = require("node:path") as typeof import("node:path");
-
   const findWorkspaceRootEnv = (startDir: string): string | null => {
     let current = resolve(startDir);
 
