@@ -2,4 +2,4 @@
 "@ai-sdk-tool/harness": patch
 ---
 
-Fix dotenv loading from source-condition ESM entrypoints on Node 24.
+Keep the runtime subpath importable in edge runtimes by removing unconditional Node-only dotenv, skills, MCP, and crypto imports from the core runtime graph.

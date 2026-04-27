@@ -4,6 +4,7 @@ import {
   formatContextUsage,
   parseCommand,
 } from "@ai-sdk-tool/harness";
+import { loadDotEnvFilesIfAvailable } from "@ai-sdk-tool/harness/env-node";
 import { createTogglePreferenceCommand } from "@ai-sdk-tool/harness/preferences";
 import { createAgentRuntime, defineAgent } from "@ai-sdk-tool/harness/runtime";
 import { runAgentSessionHeadless } from "@ai-sdk-tool/headless/session";
@@ -16,8 +17,11 @@ import {
   Spacer,
   Text,
 } from "@mariozechner/pi-tui";
-import { env } from "./env";
 import { createPreferences, type MinimalAgentPreferences } from "./preferences";
+
+loadDotEnvFilesIfAvailable();
+
+const { env } = await import("./env");
 
 const modelId = env.AI_MODEL;
 const model = createOpenAICompatible({

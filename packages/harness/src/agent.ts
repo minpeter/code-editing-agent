@@ -6,7 +6,6 @@
 import { streamText, tool } from "ai";
 import { AgentError, AgentErrorCode } from "./errors";
 import type { AgentExecutionContext } from "./execution-context";
-import { resolveMCPOption } from "./mcp-init";
 import type { ToolDefinition, ToolSource } from "./tool-source";
 import type {
   Agent,
@@ -236,6 +235,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
   };
 
   if (config.mcp !== undefined) {
+    const { resolveMCPOption } = await import("./mcp-init");
     const resolved = await resolveMCPOption(config.mcp, mergedTools);
     mergedTools = resolved.tools;
     const previousClose = closeFn;

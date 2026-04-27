@@ -1,37 +1,11 @@
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
-import { loadEnvFileCompat } from "./env-file";
 
-/** Call this only from Node.js entry points (CLI, test harness). Safe to omit in edge runtimes. */
-export const loadDotEnvFilesIfAvailable = (): void => {
-  const findWorkspaceRootEnv = (startDir: string): string | null => {
-    let current = resolve(startDir);
-
-    while (true) {
-      if (existsSync(resolve(current, "pnpm-workspace.yaml"))) {
-        return resolve(current, ".env");
-      }
-
-      const parent = dirname(current);
-      if (parent === current) {
-        return null;
-      }
-      current = parent;
-    }
-  };
-
-  const envFileCandidates = [
-    resolve(process.cwd(), ".env"),
-    findWorkspaceRootEnv(process.cwd()),
-  ].filter((envPath): envPath is string => envPath !== null);
-
-  for (const envPath of new Set(envFileCandidates)) {
-    if (existsSync(envPath)) {
-      loadEnvFileCompat(envPath);
-    }
+const getRuntimeEnv = (): Record<string, string | undefined> => {
+  if (typeof process === "undefined") {
+    return {};
   }
+  return process.env;
 };
 
 export const env = createEnv({
@@ -52,6 +26,6 @@ export const env = createEnv({
     /** Log token usage per summarizer call. */
     DEBUG_TOKENS: z.stringbool().default(false),
   },
-  runtimeEnv: process.env,
+  runtimeEnv: getRuntimeEnv(),
   emptyStringAsUndefined: true,
 });

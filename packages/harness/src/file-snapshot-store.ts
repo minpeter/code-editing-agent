@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -12,6 +11,7 @@ import type { MessageLine, SessionFileLine } from "./compaction-types";
 import type { HistorySnapshot } from "./history-snapshot";
 import { encodeSessionId, type SessionData } from "./session-store";
 import type { SnapshotStore } from "./snapshot-store";
+import { createRuntimeUUID } from "./uuid";
 
 export class FileSnapshotStore implements SnapshotStore {
   private readonly baseDir: string;
@@ -52,7 +52,7 @@ export class FileSnapshotStore implements SnapshotStore {
 
   save(sessionId: string, snapshot: HistorySnapshot): Promise<void> {
     const filePath = this.getFilePath(sessionId);
-    const tempFilePath = `${filePath}.${randomUUID()}.tmp`;
+    const tempFilePath = `${filePath}.${createRuntimeUUID()}.tmp`;
     const lines: SessionFileLine[] = [
       {
         type: "header",

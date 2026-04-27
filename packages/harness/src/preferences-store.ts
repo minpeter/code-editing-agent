@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   mkdirSync,
   readFileSync,
@@ -8,6 +7,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { createRuntimeUUID } from "./uuid";
 
 export interface PreferencesStore<T> {
   clear(): Promise<void>;
@@ -73,7 +73,7 @@ export class FilePreferencesStore<T> implements PreferencesStore<T> {
 
   save(preferences: T): Promise<void> {
     mkdirSync(dirname(this.filePath), { recursive: true });
-    const tempFilePath = `${this.filePath}.${randomUUID()}.tmp`;
+    const tempFilePath = `${this.filePath}.${createRuntimeUUID()}.tmp`;
     writeFileSync(
       tempFilePath,
       `${JSON.stringify(preferences, null, 2)}\n`,
