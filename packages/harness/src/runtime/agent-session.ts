@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { CheckpointHistory } from "../checkpoint-history";
 import type { Command } from "../commands";
 import { runAgentLoop } from "../loop";
@@ -7,6 +5,7 @@ import type { SessionManager } from "../session";
 import type { SkillInfo } from "../skills";
 import type { SnapshotStore } from "../snapshot-store";
 import type { Agent, AgentConfig, RunnableAgent } from "../types";
+import { createRuntimeUUID } from "../uuid";
 import type {
   AgentHistoryConfig,
   AgentSession,
@@ -219,7 +218,9 @@ class AgentSessionImpl<TAgentName extends string, TContext>
     const previousSessionId = this.currentSessionId;
     const nextSessionId =
       options?.sessionId ??
-      (this.sessionManager ? this.sessionManager.initialize() : randomUUID());
+      (this.sessionManager
+        ? this.sessionManager.initialize()
+        : createRuntimeUUID());
 
     this.currentSessionId = nextSessionId;
     this.history.resetForSession(nextSessionId);
@@ -235,7 +236,7 @@ class AgentSessionImpl<TAgentName extends string, TContext>
   async fork(options?: {
     sessionId?: string;
   }): Promise<AgentSession<TAgentName, TContext>> {
-    const newSessionId = options?.sessionId ?? randomUUID();
+    const newSessionId = options?.sessionId ?? createRuntimeUUID();
     const snapshot = this.history.snapshot();
     const newHistory = new CheckpointHistory({
       ...this.historyDefaults,

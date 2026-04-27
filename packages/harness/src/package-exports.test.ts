@@ -47,5 +47,8 @@ describe("package exports", () => {
     expect(exportsMap["./utils"]?.["@ai-sdk-tool/source"]).toBe(
       "./src/subpath/utils.ts"
     );
+    expect(exportsMap["./env-node"]?.["@ai-sdk-tool/source"]).toBe(
+      "./src/env-node.ts"
+    );
   });
 });

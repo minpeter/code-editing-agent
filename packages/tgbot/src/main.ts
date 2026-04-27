@@ -1,9 +1,11 @@
 import { setDefaultResultOrder } from "node:dns";
+import { loadDotEnvFilesIfAvailable } from "@ai-sdk-tool/harness/env-node";
 import { Agent, setGlobalDispatcher } from "undici";
 
 setDefaultResultOrder("ipv4first");
 setGlobalDispatcher(new Agent({ connect: { autoSelectFamily: false } }));
 
+loadDotEnvFilesIfAvailable();
 await import("./env");
 const { closeAgent } = await import("./agent");
 const { bot, registerCommands } = await import("./bot");

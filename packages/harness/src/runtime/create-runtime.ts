@@ -1,18 +1,37 @@
 import { createAgent } from "../agent";
 import { CheckpointHistory } from "../checkpoint-history";
 import { createModelSummarizer } from "../compaction-prompts";
-import { loadDotEnvFilesIfAvailable } from "../env";
 import { SessionManager } from "../session";
-import { SkillsEngine } from "../skills";
+import type { SkillInfo } from "../skills";
 import type { Agent } from "../types";
 import { createAgentSession } from "./agent-session";
 import type {
   AgentRuntime,
   AgentRuntimeConfig,
   AgentSession,
+  AgentSkillsConfig,
   DefineAgentContext,
   DefinedAgent,
 } from "./types";
+
+const getDefaultCwd = (): string => {
+  if (typeof process === "undefined") {
+    return "/";
+  }
+
+  try {
+    return process.cwd();
+  } catch {
+    return "/";
+  }
+};
+
+const loadConfiguredSkills = async (
+  config: AgentSkillsConfig
+): Promise<SkillInfo[]> => {
+  const { SkillsEngine } = await import("../skills");
+  return await new SkillsEngine(config).loadAllSkills();
+};
 
 function assertAgentDefinition<TContext>(
   definition: DefinedAgent<TContext> | undefined,
@@ -43,8 +62,6 @@ export async function createAgentRuntime<
 >(
   config: AgentRuntimeConfig<TAgents, TContext>
 ): Promise<AgentRuntime<TAgents, TContext>> {
-  loadDotEnvFilesIfAvailable();
-
   const agentMap = new Map<string, DefinedAgent<TContext>>();
   for (const definition of config.agents as readonly DefinedAgent<TContext>[]) {
     if (agentMap.has(definition.name)) {
@@ -57,7 +74,7 @@ export async function createAgentRuntime<
   }
 
   const appName = config.name;
-  const cwd = process.cwd();
+  const cwd = config.cwd ?? getDefaultCwd();
   const sharedContext = config.context as TContext;
   const agentInstances = new Map<string, Agent>();
 
@@ -117,7 +134,7 @@ export async function createAgentRuntime<
         )
       : new CheckpointHistory(resolvedHistoryOptions);
     const skills = definition.skills
-      ? await new SkillsEngine(definition.skills).loadAllSkills()
+      ? await loadConfiguredSkills(definition.skills)
       : [];
 
     return createAgentSession({

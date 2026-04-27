@@ -91,6 +91,7 @@ export interface AgentRuntimeConfig<
 > {
   agents: TAgents;
   context?: TContext;
+  cwd?: string;
   defaultAgent?: TAgents[number]["name"];
   name: string;
   persistence?: AgentRuntimePersistenceConfig;

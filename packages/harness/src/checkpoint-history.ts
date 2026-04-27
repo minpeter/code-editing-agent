@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { ModelMessage, TextPart } from "ai";
 import { calculateCompactionSplitIndex } from "./compaction-planner";
 import {
@@ -41,6 +40,7 @@ import {
 } from "./token-utils";
 import { adjustSplitIndexForToolPairs } from "./tool-pair-validation";
 import { progressivePrune, pruneToolOutputs } from "./tool-pruning";
+import { createRuntimeUUID } from "./uuid";
 
 const TOOL_RESULT_CHARS_PER_TOKEN_INTERNAL = 6;
 
@@ -914,7 +914,7 @@ export class CheckpointHistory {
       : replayMessage;
 
     const summaryMessage: CheckpointMessage = {
-      id: randomUUID(),
+      id: createRuntimeUUID(),
       createdAt: Date.now(),
       isSummary: true,
       isSummaryMessage: true,
@@ -928,7 +928,7 @@ export class CheckpointHistory {
       effectiveReplayMessage
     );
     const continuationMessage: CheckpointMessage = {
-      id: randomUUID(),
+      id: createRuntimeUUID(),
       createdAt: Date.now(),
       isSummary: false,
       isSummaryMessage: false,
@@ -2348,7 +2348,7 @@ export class CheckpointHistory {
     }
 
     const summaryMessage: CheckpointMessage = {
-      id: randomUUID(),
+      id: createRuntimeUUID(),
       createdAt: Date.now(),
       isSummary: true,
       isSummaryMessage: true,
@@ -2543,7 +2543,7 @@ export class CheckpointHistory {
     originalContent?: string
   ): CheckpointMessage {
     return {
-      id: randomUUID(),
+      id: createRuntimeUUID(),
       createdAt: Date.now(),
       isSummary: false,
       isSummaryMessage: false,

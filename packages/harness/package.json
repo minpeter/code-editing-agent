@@ -54,6 +54,11 @@
       "@ai-sdk-tool/source": "./src/subpath/utils.ts",
       "import": "./dist/subpath/utils.js",
       "types": "./dist/subpath/utils.d.ts"
+    },
+    "./env-node": {
+      "@ai-sdk-tool/source": "./src/env-node.ts",
+      "import": "./dist/env-node.js",
+      "types": "./dist/env-node.d.ts"
     }
   },
   "files": [

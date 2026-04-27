@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createRuntimeUUID } from "./uuid";
 
 export class SessionManager {
   private sessionId: string | null = null;
@@ -9,7 +9,7 @@ export class SessionManager {
   }
 
   initialize(): string {
-    this.sessionId = `${this.prefix}-${randomUUID()}`;
+    this.sessionId = `${this.prefix}-${createRuntimeUUID()}`;
     return this.sessionId;
   }
 
