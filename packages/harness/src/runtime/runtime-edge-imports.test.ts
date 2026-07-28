@@ -72,7 +72,10 @@ describe("runtime edge import graph", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("imports the runtime through browser conditions without process globals", () => {
+  it("runs the runtime under browser conditions without process globals", () => {
+    // tsx 4.21+ resolves tsconfig via process during the import hook, so the
+    // module graph must load with process present. Runtime APIs must still work
+    // after process is removed (edge / browser-condition smoke).
     const output = execFileSync(
       process.execPath,
       [
@@ -83,8 +86,8 @@ describe("runtime edge import graph", () => {
         "--eval",
         `
 const originalProcess = globalThis.process;
-Reflect.deleteProperty(globalThis, "process");
 const mod = await import("@ai-sdk-tool/harness/runtime");
+Reflect.deleteProperty(globalThis, "process");
 const runtime = await mod.createAgentRuntime({
   name: "edge-smoke",
   cwd: "/",
