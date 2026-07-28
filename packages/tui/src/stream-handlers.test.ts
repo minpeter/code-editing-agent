@@ -421,14 +421,13 @@ const FLAGS_ALL_OFF: PiTuiRenderFlags = {
 describe("isVisibleStreamPart — reasoning parts must never trigger first-visible", () => {
   // Regression: if reasoning parts become visible, clearStreamingLoader fires
   // on reasoning-start and the "Thinking..." spinner label is lost.
-  it.each([
-    "reasoning-start",
-    "reasoning-delta",
-    "reasoning-end",
-  ] as const)("%s is invisible regardless of flags", (type) => {
-    expect(isVisibleStreamPart({ type } as never, FLAGS_ALL_ON)).toBe(false);
-    expect(isVisibleStreamPart({ type } as never, FLAGS_ALL_OFF)).toBe(false);
-  });
+  it.each(["reasoning-start", "reasoning-delta", "reasoning-end"] as const)(
+    "%s is invisible regardless of flags",
+    (type) => {
+      expect(isVisibleStreamPart({ type } as never, FLAGS_ALL_ON)).toBe(false);
+      expect(isVisibleStreamPart({ type } as never, FLAGS_ALL_OFF)).toBe(false);
+    }
+  );
 
   it("tool-input-end is always invisible", () => {
     expect(

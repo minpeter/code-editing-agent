@@ -1472,8 +1472,7 @@ export class CheckpointHistory {
     message: CheckpointMessage | undefined
   ): boolean {
     if (
-      !message ||
-      message.message.role !== "assistant" ||
+      message?.message.role !== "assistant" ||
       typeof message.message.content !== "string"
     ) {
       return false;
@@ -2594,7 +2593,7 @@ export class CheckpointHistory {
       if (current && hasToolCalls(current.message)) {
         const nextIndex = index + 1;
         const next = messages[nextIndex];
-        if (!next || next.message.role !== "tool") {
+        if (next?.message.role !== "tool") {
           messages.splice(index, 1);
           continue;
         }

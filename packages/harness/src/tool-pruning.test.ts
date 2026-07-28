@@ -374,8 +374,11 @@ describe("pruneToolOutputs", () => {
         const nextMessage = result.messages[i + 1]?.message;
         expect(nextMessage?.role).toBe("tool");
         expect(Array.isArray(nextMessage?.content)).toBe(true);
+        if (!(nextMessage && Array.isArray(nextMessage.content))) {
+          continue;
+        }
 
-        const matchingResult = (nextMessage?.content as any[]).find(
+        const matchingResult = (nextMessage.content as any[]).find(
           (part) =>
             part.type === "tool-result" &&
             part.toolCallId === toolCall.toolCallId

@@ -209,8 +209,7 @@ const collectReadCallPathMap = (
     for (const part of content) {
       const record = toRecord(part);
       if (
-        !record ||
-        record.type !== "tool-call" ||
+        record?.type !== "tool-call" ||
         record.toolName !== "read_file" ||
         typeof record.toolCallId !== "string"
       ) {
@@ -233,7 +232,7 @@ const trackReadResultPart = (
   readCallPaths: Map<string, string>
 ): void => {
   const record = toRecord(part);
-  if (!record || record.type !== "tool-result") {
+  if (record?.type !== "tool-result") {
     return;
   }
 

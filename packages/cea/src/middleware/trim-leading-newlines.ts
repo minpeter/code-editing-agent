@@ -1,14 +1,14 @@
 import type {
-  LanguageModelV3Content,
-  LanguageModelV3Middleware,
-  LanguageModelV3StreamPart,
+  LanguageModelV4Content,
+  LanguageModelV4Middleware,
+  LanguageModelV4StreamPart,
 } from "@ai-sdk/provider";
 
 const LEADING_NEWLINES = /^\n+/;
 
 function trimContentLeadingNewlines(
-  content: LanguageModelV3Content[]
-): LanguageModelV3Content[] {
+  content: LanguageModelV4Content[]
+): LanguageModelV4Content[] {
   if (content.length === 0) {
     return content;
   }
@@ -24,8 +24,8 @@ function trimContentLeadingNewlines(
   return content;
 }
 
-export const trimLeadingNewlinesMiddleware: LanguageModelV3Middleware = {
-  specificationVersion: "v3",
+export const trimLeadingNewlinesMiddleware: LanguageModelV4Middleware = {
+  specificationVersion: "v4",
   wrapGenerate: async ({ doGenerate }) => {
     const result = await doGenerate();
     return {
@@ -40,8 +40,8 @@ export const trimLeadingNewlinesMiddleware: LanguageModelV3Middleware = {
     let hasTrimmed = false;
 
     const transformStream = new TransformStream<
-      LanguageModelV3StreamPart,
-      LanguageModelV3StreamPart
+      LanguageModelV4StreamPart,
+      LanguageModelV4StreamPart
     >({
       transform(chunk, controller) {
         if (chunk.type === "text-delta" && !hasTrimmed) {

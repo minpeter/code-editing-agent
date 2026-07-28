@@ -179,7 +179,7 @@ try {
       },
       preprocessCommand: async (input, hooks) => {
         const parsed = parseCommand(input);
-        if (!parsed || parsed.name !== "reasoning" || parsed.args.length > 0) {
+        if (parsed?.name !== "reasoning" || parsed.args.length > 0) {
           return input;
         }
         const selected = await showReasoningSelector(hooks);
