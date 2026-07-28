@@ -48,8 +48,8 @@ importers:
         specifier: workspace:*
         version: link:../headless
       '@ai-sdk-tool/parser':
-        specifier: ^4.1.21
-        version: 4.1.21(zod@4.3.6)
+        specifier: ^5.0.0
+        version: 5.0.0(@ai-sdk/provider-utils@4.0.23(zod@4.3.6))(@ai-sdk/provider@3.0.8)
       '@ai-sdk-tool/tui':
         specifier: workspace:*
         version: link:../tui
@@ -257,9 +257,12 @@ importers:
 
 packages:
 
-  '@ai-sdk-tool/parser@4.1.21':
-    resolution: {integrity: sha512-IjxfsJ2XPu5LjZAQ3MnRI3tzy5gsmgN8lXzJEEo8XSHpPhpbjEtC6nh1klaXQfYLbyssdy92dQ863whH3P8OvQ==}
-    engines: {node: '>=18'}
+  '@ai-sdk-tool/parser@5.0.0':
+    resolution: {integrity: sha512-VsMZ6tjilnhAUAT/fH24VJpM4bsEAczrnfrOijhbmmZFngoB1YhvXSfvQmxUr5Z3Pg3du5OfaHZPtYN5NnORpg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@ai-sdk/provider': ^4.0.0
+      '@ai-sdk/provider-utils': ^5.0.0
 
   '@ai-sdk/gateway@3.0.132':
     resolution: {integrity: sha512-sFZFGk6aVSNKmgDrb14efaAbvM71AB3UUvaTsU+bvhWP9jrkRrwix/jFX8IoOAJk0/X7Xf7p3m0J2O2G6ljZbA==}
@@ -2260,6 +2263,11 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
+  yaml@2.9.0:
+    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   youch-core@0.3.3:
     resolution: {integrity: sha512-ho7XuGjLaJ2hWHoK8yFnsUGy2Y5uDpqSTq1FkHLK4/oqKtyUU1AFbOOxY4IpC9f0fTLjwYbslUz0Po5BpD1wrA==}
 
@@ -2274,16 +2282,14 @@ packages:
 
 snapshots:
 
-  '@ai-sdk-tool/parser@4.1.21(zod@4.3.6)':
+  '@ai-sdk-tool/parser@5.0.0(@ai-sdk/provider-utils@4.0.23(zod@4.3.6))(@ai-sdk/provider@3.0.8)':
     dependencies:
-      '@ai-sdk/openai': 3.0.53(zod@4.3.6)
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.23(zod@4.3.6)
       dedent: 1.7.2
-      yaml: 2.8.3
+      yaml: 2.9.0
     transitivePeerDependencies:
       - babel-plugin-macros
-      - zod
 
   '@ai-sdk/gateway@3.0.132(zod@4.3.6)':
     dependencies:
@@ -4207,6 +4213,8 @@ snapshots:
   ws@8.20.1: {}
 
   yaml@2.8.3: {}
+
+  yaml@2.9.0: {}
 
   youch-core@0.3.3:
     dependencies:
