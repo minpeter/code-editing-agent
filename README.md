@@ -19,7 +19,7 @@ A barebone AI agent harness built on the [Vercel AI SDK](https://sdk.vercel.ai).
 > [!WARNING]
 > **This repository is no longer maintained.**
 >
-> Development has moved to **[pss-runtime / apps/coding-agent](https://github.com/minpeter/pss-runtime/tree/main/apps/coding-agent)** — that is the new version and the only one receiving updates.
+> Development has moved to **[pss-runtime - apps/coding-agent](https://github.com/minpeter/pss-runtime/tree/main/apps/coding-agent)** — that is the new version and the only one receiving updates.
 >
 > plugsuits is kept here for reference only. No new features, no bug fixes, no releases.
 
